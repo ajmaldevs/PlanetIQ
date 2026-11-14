@@ -1,0 +1,71 @@
+# ==============================================================================
+# CodeRabbit Configuration for TerraLens (PlanetIQ)
+# Reference: https://docs.coderabbit.ai/guides/configure-coderabbit
+# ==============================================================================
+
+language: "en-US"
+tone_instructions: "You are a senior planetary science software architect and staff security engineer reviewing TerraLens (NASA Space Apps Challenge 2026). Prioritize physical correctness, unit fidelity, security of credentials, asynchronous performance, and clean component architecture."
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "main"
+      - "development"
+
+  # Path inclusion and exclusion rules
+  path_filters:
+    - "!node_modules/**"
+    - "!frontend/node_modules/**"
+    - "!frontend/dist/**"
+    - "!.venv/**"
+    - "!backend/.venv/**"
+    - "!data/raw/**"
+    - "!data/cache/**"
+    - "!*.lock"
+    - "!package-lock.json"
+    - "!uv.lock"
+
+  # Domain-specific path instructions
+  path_instructions:
+    - path: "backend/app/services/atmosphere_service.py"
+      instructions: |
+        CRITICAL SCIENTIFIC RULE: Verify that precipitation rate (mm/hr) is strictly differentiated from monthly accumulated precipitation (mm). Monthly accumulation MUST be calculated as rate (mm/hr) * 24 hrs * days in month. Flag any conflation of rate and accumulated depth as a critical scientific error.
+
+    - path: "backend/app/services/ocean_service.py"
+      instructions: |
+        Ensure that SWOT KaRIn Sea Surface Height (SSH) and Sea Surface Height Anomaly (SSHA) are expressed in meters (m). Verify that vortex classifications (cyclonic vs anticyclonic) adhere to physical signs (positive anomalies for warm-core anticyclonic eddies, negative for cold-core cyclonic upwelling).
+
+    - path: "backend/app/services/land_service.py"
+      instructions: |
+        Ensure NDVI and EVI remain strictly within the dimensionless radiometric range [-0.2000, 1.0000]. Confirm that NASA scaling factors (0.0001) are applied and Vegetation Condition Index (VCI) boundaries [0, 100%] are enforced.
+
+    - path: "backend/app/services/cross_system_service.py"
+      instructions: |
+        CRITICAL SCIENTIFIC PRINCIPLE: Never allow claims that correlation equals causation. All coupled teleconnections (e.g. ENSO Walker Circulation, Indian Ocean Dipole) must include explicit caveats explaining that planetary atmospheric wave correlations are modulated by local topography, soil moisture memory, and human land management.
+
+    - path: "backend/app/core/**"
+      instructions: |
+        Check that zero credentials, database passwords, or Gemini API keys are hardcoded. Ensure settings are loaded via pydantic-settings from environment variables. Verify that database connection handlers fail gracefully without crashing the server.
+
+    - path: "backend/app/api/**"
+      instructions: |
+        Verify FastAPI endpoint query parameters, Pydantic response models, HTTP status codes, and input validation bounds (e.g., latitude between -90 and 90, longitude between -180 and 180).
+
+    - path: "frontend/src/**"
+      instructions: |
+        Ensure strict TypeScript typing (avoid 'any' where typed models exist). Verify that WebGL map resources (MapLibre GL) are properly disposed on component unmount. Ensure all scientific charts clearly display measurement units on axes and tooltips. Never allow API keys to be embedded in client-side code.
+
+    - path: "scripts/**"
+      instructions: |
+        Confirm that raw satellite data files are kept strictly isolated in data/raw/ and only cleaned, validated outputs are saved to data/processed/. Check for proper error handling and logging.
+
+chat:
+  auto_reply: true

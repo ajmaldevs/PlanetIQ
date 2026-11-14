@@ -8,6 +8,8 @@ This directory contains the integration policies, registers, and configuration g
 
 1. [**Integration Inventory & Register (`integration_inventory.md`)**](file:///C:/Users/ajumu/Downloads/PlanetIQ/docs/integrations/integration_inventory.md):
    Detailed matrix of all installed and configured tools, MCP servers, APIs, required credentials, usage phases, and operational limits.
+2. [**CodeRabbit Automated Review Integration (`coderabbit.md`)**](file:///C:/Users/ajumu/Downloads/PlanetIQ/docs/integrations/coderabbit.md):
+   Official configuration guidelines, GitHub App authorization, path-specific scientific instructions, and autonomous fix protocols.
 
 ---
 
