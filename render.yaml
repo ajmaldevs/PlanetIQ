@@ -6,7 +6,7 @@ services:
     region: oregon
     plan: standard
     rootDir: backend
-    buildCommand: pip install -r <(python -c "import tomli; f=open('pyproject.toml', 'rb'); data=tomli.load(f); print('\n'.join(data['project']['dependencies']))" 2>/dev/null || cat pyproject.toml | grep -E '^\s+"[a-zA-Z0-9_-]+' | sed 's/[" ,]//g') alembic
+    buildCommand: pip install --no-build-isolation .
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/v1/health
     envVars:
@@ -44,11 +44,8 @@ services:
         value: gemini-1.5-flash
 
   # TerraLens React Frontend (Static Site)
-  - type: web
+  - type: static
     name: terralens-frontend
-    env: static
-    region: oregon
-    plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
@@ -62,7 +59,6 @@ services:
           type: web
           name: terralens-backend
           property: host
-          envVarKey: VITE_API_BASE_URL
           transform: https://${VALUE}/api/v1
 
 databases:
