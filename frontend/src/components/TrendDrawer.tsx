@@ -113,7 +113,10 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
       </div>
 
       {/* Drawer Body: Responsive Charts & Teleconnection Details */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
+      <div
+        className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 touch-pan-y"
+        style={{ touchAction: 'pan-y' }}
+      >
         {loading ? (
           <div className="h-48 flex items-center justify-center">
             <div className="flex items-center space-x-2 text-xs font-mono text-slate-400">

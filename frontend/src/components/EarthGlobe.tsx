@@ -34,6 +34,7 @@ interface EarthGlobeProps {
   center?: { lat: number; lon: number };
   sidePanelOpen?: boolean;
   trendsOpen?: boolean;
+  trendsExpanded?: boolean;
 }
 
 // Convert (Lat, Lon) in degrees to 3D Cartesian coordinates on sphere
@@ -202,6 +203,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   center,
   sidePanelOpen = false,
   trendsOpen = false,
+  trendsExpanded = false,
 }) => {
   // Leaf container specifically for Three.js canvas (isolated from React children)
   const canvasMountRef = useRef<HTMLDivElement>(null);
@@ -215,6 +217,10 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   onSelectPlaceRef.current = onSelectPlace;
   const sidePanelOpenRef = useRef(sidePanelOpen);
   sidePanelOpenRef.current = sidePanelOpen;
+  const trendsOpenRef = useRef(trendsOpen);
+  trendsOpenRef.current = trendsOpen;
+  const trendsExpandedRef = useRef(trendsExpanded);
+  trendsExpandedRef.current = trendsExpanded;
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
   const prevVisibleRef = useRef(visible);
@@ -739,6 +745,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
 
     // Non-passive Native Wheel Handler (Altitude-Scaled Zoom Sensitivity)
     const onWindowWheel = (e: WheelEvent) => {
+      if (!visibleRef.current) return;
+
       // Allow native scrolling when pointer is over any interactive UI container (aside, nav, drawer, dialog, etc.)
       const target = e.target as HTMLElement | null;
       if (
@@ -747,6 +755,15 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
           'aside, header, nav, button, input, select, textarea, [role="dialog"], [role="region"], .overflow-y-auto, .overflow-x-auto, .overflow-auto'
         )
       ) {
+        return;
+      }
+
+      // Explicit screen-coordinate guards for open panels to ensure 100% independent scrolling
+      if (sidePanelOpenRef.current && e.clientX > window.innerWidth - 390) {
+        return;
+      }
+      const trendDrawerHeight = trendsExpandedRef.current ? 520 : (typeof window !== 'undefined' && window.innerWidth >= 640 ? 390 : 330);
+      if (trendsOpenRef.current && e.clientY > window.innerHeight - trendDrawerHeight) {
         return;
       }
 
@@ -914,6 +931,14 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     selectedHaloRef.current = hitHalo || null;
   }, [selectedFeature]);
 
+  // Clear any active drag/pinch/pointer state on view or module transition
+  useEffect(() => {
+    activePointersRef.current.clear();
+    isDraggingRef.current = false;
+    pinchStartDistanceRef.current = null;
+    interactionStateRef.current = 'idle';
+  }, [visible, activeModule]);
+
   // Mouse / Pointer Drag & Multi-Touch Pinch Handlers with Altitude-Scaled Sensitivity
   const handlePointerDown = (e: React.PointerEvent) => {
     // Avoid capturing pointers if clicking on interactive child elements
@@ -927,7 +952,14 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       return;
     }
 
-    if (!isPointerOverEarth(e.clientX, e.clientY)) return;
+    // Do not initiate globe gestures if pointer down occurs over docked panels
+    if (sidePanelOpenRef.current && e.clientX > window.innerWidth - 390) {
+      return;
+    }
+    const trendDrawerHeight = trendsExpandedRef.current ? 520 : (typeof window !== 'undefined' && window.innerWidth >= 640 ? 390 : 330);
+    if (trendsOpenRef.current && e.clientY > window.innerHeight - trendDrawerHeight) {
+      return;
+    }
 
     // Seamless interruption: cancel any active camera transition without snapping
     if (interactionStateRef.current === 'transitioning') {
@@ -1220,7 +1252,11 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       {/* Precision Navigation Controls & Resolution Scale Bar (Bottom-Left) */}
       <div
         className={`fixed left-4 sm:left-6 z-30 flex items-center space-x-2.5 pointer-events-auto transition-all duration-300 ease-out ${
-          trendsOpen ? 'bottom-[335px] sm:bottom-[395px]' : 'bottom-4 sm:bottom-6'
+          trendsOpen
+            ? trendsExpanded
+              ? 'bottom-[min(535px,calc(100vh-120px))]'
+              : 'bottom-[335px] sm:bottom-[395px]'
+            : 'bottom-4 sm:bottom-6'
         }`}
       >
         <div className="flex flex-col space-y-1 bg-[#090d16]/90 p-1.5 rounded-xl border border-slate-800/80 backdrop-blur-md shadow-2xl">

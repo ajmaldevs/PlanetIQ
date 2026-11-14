@@ -342,6 +342,7 @@ export const App: React.FC = () => {
         center={centerCoords}
         sidePanelOpen={sidePanelOpen}
         trendsOpen={showTrends}
+        trendsExpanded={trendsExpanded}
       />
 
       {/* 2D Planar Map Canvas */}
@@ -355,7 +356,13 @@ export const App: React.FC = () => {
           top: activeModule !== null ? '116px' : '64px',
           left: '0px',
           right: sidePanelOpen && typeof window !== 'undefined' && window.innerWidth >= 768 ? '390px' : '0px',
-          bottom: showTrends ? (trendsExpanded ? '480px' : '320px') : '0px',
+          bottom: showTrends
+            ? trendsExpanded
+              ? '520px'
+              : typeof window !== 'undefined' && window.innerWidth >= 640
+              ? '384px'
+              : '320px'
+            : '0px',
         }}
       >
         <MapView
@@ -569,9 +576,9 @@ export const App: React.FC = () => {
           </div>
         ) : (
           /* ================= EXPLORE WORKSPACE STATE ================= */
-          <div className="flex-1 flex flex-col overflow-hidden relative">
+          <div className="flex-1 flex flex-col overflow-hidden relative pointer-events-none">
             {/* Dedicated Workspace Sub-Header Bar (Toolbar) */}
-            <div className="h-13 bg-[#080c16]/95 border-b border-slate-800/80 px-3 sm:px-4 flex items-center justify-between gap-2 z-30 shrink-0 backdrop-blur-md">
+            <div className="h-13 bg-[#080c16]/95 border-b border-slate-800/80 px-3 sm:px-4 flex items-center justify-between gap-2 z-30 shrink-0 backdrop-blur-md pointer-events-auto">
               {/* Left: Overview back + Module switcher pills */}
               <div className="flex items-center space-x-2 shrink-0">
                 <button
@@ -704,9 +711,9 @@ export const App: React.FC = () => {
             </div>
 
             {/* Workspace Body: Viewport Canvas + Side-by-Side Context Panel */}
-            <div className="flex-1 relative flex overflow-hidden">
+            <div className="flex-1 relative flex overflow-hidden pointer-events-none">
               {/* Viewport Area: Globe or 2D Map + Bottom TrendDrawer */}
-              <div className="flex-1 h-full relative overflow-hidden">
+              <div className="flex-1 h-full relative overflow-hidden pointer-events-none">
                 {/* Expandable Bottom Analysis Drawer (Trends & Teleconnections) */}
                 <TrendDrawer
                   activeModule={activeModule}

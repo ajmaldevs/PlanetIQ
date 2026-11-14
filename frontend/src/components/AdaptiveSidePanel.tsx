@@ -279,7 +279,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
       {isOpen && (
         <div
           onClick={onClose}
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-35 lg:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-35 lg:hidden pointer-events-auto"
           aria-hidden="true"
         />
       )}
@@ -360,7 +360,10 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
           </div>
         ) : (
           /* Scrollable Content Body */
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 text-slate-100">
+          <div
+            className="flex-1 overflow-y-auto p-4 space-y-4 text-slate-100 touch-pan-y"
+            style={{ touchAction: 'pan-y' }}
+          >
             {/* ================= 2. ACTIVE SCIENTIFIC SYSTEM & SENSOR ================= */}
             <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
               <div className="flex items-center space-x-2">
