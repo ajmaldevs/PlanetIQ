@@ -1,0 +1,214 @@
+export type ZoomLevel = 'global' | 'continental' | 'country' | 'regional';
+
+export interface GeographicContext {
+  level: ZoomLevel;
+  title: string;
+  subtitle: string;
+  continent: string;
+  country?: string;
+  region?: string;
+  lat: number;
+  lon: number;
+  spatialResolution: string;
+  coverageNote: string;
+}
+
+interface PlaceNode {
+  name: string;
+  lat: number;
+  lon: number;
+  type: 'continent' | 'basin' | 'country' | 'sea' | 'region' | 'city';
+  parentContinent: string;
+  parentCountry?: string;
+}
+
+const PLACES_DB: PlaceNode[] = [
+  // Continents & Ocean Basins (Level 1-2)
+  { name: 'North America', lat: 46.0, lon: -100.0, type: 'continent', parentContinent: 'North America' },
+  { name: 'South America', lat: -16.0, lon: -60.0, type: 'continent', parentContinent: 'South America' },
+  { name: 'Europe', lat: 52.0, lon: 16.0, type: 'continent', parentContinent: 'Europe' },
+  { name: 'Africa', lat: 4.0, lon: 20.0, type: 'continent', parentContinent: 'Africa' },
+  { name: 'Asia', lat: 46.0, lon: 95.0, type: 'continent', parentContinent: 'Asia' },
+  { name: 'Australia & Oceania', lat: -25.0, lon: 135.0, type: 'continent', parentContinent: 'Australia & Oceania' },
+  { name: 'Pacific Ocean Basin', lat: 0.0, lon: -160.0, type: 'basin', parentContinent: 'Pacific Ocean' },
+  { name: 'Atlantic Ocean Basin', lat: 18.0, lon: -38.0, type: 'basin', parentContinent: 'Atlantic Ocean' },
+  { name: 'Indian Ocean Basin', lat: -16.0, lon: 78.0, type: 'basin', parentContinent: 'Indian Ocean' },
+  { name: 'Southern Ocean', lat: -60.0, lon: 0.0, type: 'basin', parentContinent: 'Southern Ocean' },
+
+  // Countries & Major Seas (Level 3)
+  { name: 'United States', lat: 39.0, lon: -98.0, type: 'country', parentContinent: 'North America' },
+  { name: 'Canada', lat: 56.0, lon: -106.0, type: 'country', parentContinent: 'North America' },
+  { name: 'Mexico', lat: 23.0, lon: -102.0, type: 'country', parentContinent: 'North America' },
+  { name: 'Brazil', lat: -10.0, lon: -53.0, type: 'country', parentContinent: 'South America' },
+  { name: 'Argentina', lat: -34.0, lon: -64.0, type: 'country', parentContinent: 'South America' },
+  { name: 'Colombia', lat: 4.5, lon: -73.0, type: 'country', parentContinent: 'South America' },
+  { name: 'United Kingdom', lat: 54.5, lon: -2.5, type: 'country', parentContinent: 'Europe' },
+  { name: 'France', lat: 46.5, lon: 2.5, type: 'country', parentContinent: 'Europe' },
+  { name: 'Germany', lat: 51.0, lon: 10.0, type: 'country', parentContinent: 'Europe' },
+  { name: 'Spain', lat: 40.0, lon: -3.7, type: 'country', parentContinent: 'Europe' },
+  { name: 'Italy', lat: 42.5, lon: 12.5, type: 'country', parentContinent: 'Europe' },
+  { name: 'Norway', lat: 62.0, lon: 10.0, type: 'country', parentContinent: 'Europe' },
+  { name: 'Egypt', lat: 26.5, lon: 30.0, type: 'country', parentContinent: 'Africa' },
+  { name: 'Nigeria', lat: 9.0, lon: 7.5, type: 'country', parentContinent: 'Africa' },
+  { name: 'Kenya', lat: 0.5, lon: 37.5, type: 'country', parentContinent: 'Africa' },
+  { name: 'South Africa', lat: -29.0, lon: 24.0, type: 'country', parentContinent: 'Africa' },
+  { name: 'China', lat: 35.0, lon: 104.0, type: 'country', parentContinent: 'Asia' },
+  { name: 'India', lat: 21.0, lon: 78.0, type: 'country', parentContinent: 'Asia' },
+  { name: 'Japan', lat: 36.5, lon: 138.0, type: 'country', parentContinent: 'Asia' },
+  { name: 'Indonesia', lat: -1.0, lon: 118.0, type: 'country', parentContinent: 'Asia' },
+  { name: 'Saudi Arabia', lat: 24.0, lon: 45.0, type: 'country', parentContinent: 'Asia' },
+  { name: 'Australia', lat: -25.0, lon: 135.0, type: 'country', parentContinent: 'Australia & Oceania' },
+  { name: 'New Zealand', lat: -41.0, lon: 174.0, type: 'country', parentContinent: 'Australia & Oceania' },
+  { name: 'Mediterranean Sea', lat: 35.0, lon: 18.0, type: 'sea', parentContinent: 'Europe' },
+  { name: 'Caribbean Sea', lat: 15.0, lon: -75.0, type: 'sea', parentContinent: 'North America' },
+  { name: 'Arabian Sea', lat: 15.0, lon: 65.0, type: 'sea', parentContinent: 'Asia' },
+  { name: 'Bay of Bengal', lat: 14.0, lon: 87.0, type: 'sea', parentContinent: 'Asia' },
+
+  // Regions, Ocean Features, Cities (Level 4)
+  { name: 'Gulf Stream Boundary Current', lat: 36.0, lon: -68.0, type: 'region', parentContinent: 'Atlantic Ocean', parentCountry: 'United States Offshore' },
+  { name: 'Kuroshio Extension Meander', lat: 35.0, lon: 143.0, type: 'region', parentContinent: 'Pacific Ocean', parentCountry: 'Japan Offshore' },
+  { name: 'Equatorial Pacific (Niño 3.4)', lat: 0.0, lon: -140.0, type: 'region', parentContinent: 'Pacific Ocean' },
+  { name: 'Agulhas Retroflection Rings', lat: -38.0, lon: 20.0, type: 'region', parentContinent: 'Indian Ocean', parentCountry: 'South Africa Offshore' },
+  { name: 'Drake Passage ACC Jet', lat: -58.0, lon: -65.0, type: 'region', parentContinent: 'Southern Ocean' },
+  { name: 'Intertropical Convergence Zone', lat: 6.5, lon: -150.0, type: 'region', parentContinent: 'Pacific Ocean' },
+  { name: 'South Asian Monsoon (Bay of Bengal)', lat: 21.0, lon: 88.5, type: 'region', parentContinent: 'Asia', parentCountry: 'India / Bangladesh' },
+  { name: 'Amazon Evergreen Rainforest', lat: -3.5, lon: -62.0, type: 'region', parentContinent: 'South America', parentCountry: 'Brazil' },
+  { name: 'US Corn Belt Croplands', lat: 41.5, lon: -93.5, type: 'region', parentContinent: 'North America', parentCountry: 'United States' },
+  { name: 'Sahelian Acacia Savanna', lat: 14.0, lon: 5.0, type: 'region', parentContinent: 'Africa', parentCountry: 'Niger / Nigeria' },
+  { name: 'Siberian Boreal Taiga', lat: 62.0, lon: 129.0, type: 'region', parentContinent: 'Asia', parentCountry: 'Russia' },
+  { name: 'Sahara Hyper-Arid Basin', lat: 23.0, lon: 12.0, type: 'region', parentContinent: 'Africa', parentCountry: 'Libya / Chad' },
+  { name: 'Tokyo Metropolis', lat: 35.68, lon: 139.76, type: 'city', parentContinent: 'Asia', parentCountry: 'Japan' },
+  { name: 'New York Urban Corridor', lat: 40.71, lon: -74.00, type: 'city', parentContinent: 'North America', parentCountry: 'United States' },
+  { name: 'London Metropolitan Area', lat: 51.51, lon: -0.12, type: 'city', parentContinent: 'Europe', parentCountry: 'United Kingdom' },
+  { name: 'Cairo Nile Delta Basin', lat: 30.04, lon: 31.23, type: 'city', parentContinent: 'Africa', parentCountry: 'Egypt' },
+  { name: 'Mumbai Arabian Coastal Zone', lat: 19.07, lon: 72.87, type: 'city', parentContinent: 'Asia', parentCountry: 'India' },
+  { name: 'São Paulo Highland Plateau', lat: -23.55, lon: -46.63, type: 'city', parentContinent: 'South America', parentCountry: 'Brazil' },
+  { name: 'Sydney Pacific Coastal Hub', lat: -33.86, lon: 151.20, type: 'city', parentContinent: 'Australia & Oceania', parentCountry: 'Australia' },
+  { name: 'Nairobi Rift Valley Highland', lat: -1.29, lon: 36.82, type: 'city', parentContinent: 'Africa', parentCountry: 'Kenya' },
+];
+
+function calcDistSq(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const dLat = lat1 - lat2;
+  let dLon = lon1 - lon2;
+  if (dLon > 180) dLon -= 360;
+  if (dLon < -180) dLon += 360;
+  return dLat * dLat + dLon * dLon;
+}
+
+export function resolveGeographicContext(
+  lat: number,
+  lon: number,
+  zoomLevel: ZoomLevel,
+  moduleType: 'ocean' | 'atmosphere' | 'land' | null,
+  explicitLocationName?: string
+): GeographicContext {
+  // 1. Level 1: Global View
+  if (zoomLevel === 'global') {
+    return {
+      level: 'global',
+      title: 'Global Earth System',
+      subtitle: 'Synoptic Planetary View',
+      continent: 'Global',
+      lat,
+      lon,
+      spatialResolution: 'Global Planetary Grid',
+      coverageNote: 'Full planetary observation coverage. Regional and sub-mesoscale features are aggregated at synoptic scale.',
+    };
+  }
+
+  // Find nearest continent or ocean basin
+  const continentsAndBasins = PLACES_DB.filter((p) => p.type === 'continent' || p.type === 'basin');
+  let nearestContinent = continentsAndBasins[0];
+  let minContDist = Infinity;
+  for (const c of continentsAndBasins) {
+    const dist = calcDistSq(lat, lon, c.lat, c.lon);
+    if (dist < minContDist) {
+      minContDist = dist;
+      nearestContinent = c;
+    }
+  }
+
+  // 2. Level 2: Continental View
+  if (zoomLevel === 'continental') {
+    return {
+      level: 'continental',
+      title: nearestContinent.name,
+      subtitle: nearestContinent.type === 'basin' ? 'Ocean Basin Synoptic Scale' : 'Continental Scale Overview',
+      continent: nearestContinent.name,
+      lat,
+      lon,
+      spatialResolution: 'Basin / Continental Multi-Sensor Synthesis',
+      coverageNote:
+        'Observations are aggregated across the continental landmass or ocean basin to highlight broad-scale teleconnections and climate anomalies.',
+    };
+  }
+
+  // Find nearest country / sea
+  const countriesAndSeas = PLACES_DB.filter((p) => p.type === 'country' || p.type === 'sea');
+  let nearestCountry = countriesAndSeas[0];
+  let minCountryDist = Infinity;
+  for (const c of countriesAndSeas) {
+    const dist = calcDistSq(lat, lon, c.lat, c.lon);
+    if (dist < minCountryDist) {
+      minCountryDist = dist;
+      nearestCountry = c;
+    }
+  }
+
+  // 3. Level 3: Country View
+  if (zoomLevel === 'country') {
+    const title = explicitLocationName || nearestCountry.name;
+    return {
+      level: 'country',
+      title,
+      subtitle: `${nearestCountry.parentContinent} • Country Scale`,
+      continent: nearestCountry.parentContinent,
+      country: nearestCountry.name,
+      lat,
+      lon,
+      spatialResolution: 'National / Regional Footprint (~50–100 km)',
+      coverageNote:
+        'Country-level statistics reflect authentic satellite observations aggregated across borders. Topographic radar shadow or cloud obstruction is flagged where present.',
+    };
+  }
+
+  // 4. Level 4: Regional and City View
+  const regionsAndCities = PLACES_DB.filter((p) => p.type === 'region' || p.type === 'city');
+  let nearestRegion = regionsAndCities[0];
+  let minRegionDist = Infinity;
+  for (const r of regionsAndCities) {
+    const dist = calcDistSq(lat, lon, r.lat, r.lon);
+    if (dist < minRegionDist) {
+      minRegionDist = dist;
+      nearestRegion = r;
+    }
+  }
+
+  const regionTitle = explicitLocationName || (minRegionDist < 120 ? nearestRegion.name : `${nearestCountry.name} Region`);
+  let resolutionStr = 'High-Resolution Satellite Swath';
+  let limitationStr = 'Observations rendered at native satellite sensor resolution.';
+
+  if (moduleType === 'ocean') {
+    resolutionStr = 'SWOT KaRIn 2 km Swath / 120 km Swath Width';
+    limitationStr = 'Precision: ±2.4 cm. Sub-mesoscale eddies resolved down to 15 km. Nadir gap (~20 km) directly beneath nadir track is excluded.';
+  } else if (moduleType === 'atmosphere') {
+    resolutionStr = 'GPM IMERG 0.1° × 0.1° (~10 km) Calibrated Grid';
+    limitationStr = 'Monthly accumulation depth calibrated against GPCC rain gauges. Micro-scale convective cells (<10 km) are integrated into cell totals.';
+  } else if (moduleType === 'land') {
+    resolutionStr = 'MODIS 0.05° (~5.5 km) Climate Modeling Grid';
+    limitationStr = 'Vegetation canopy indices (NDVI/EVI) with cloud and aerosol filtering. Sub-hectare field boundaries are averaged into composite pixels.';
+  }
+
+  return {
+    level: 'regional',
+    title: regionTitle,
+    subtitle: `${nearestCountry.name} • ${nearestCountry.parentContinent}`,
+    continent: nearestCountry.parentContinent,
+    country: nearestCountry.name,
+    region: regionTitle,
+    lat,
+    lon,
+    spatialResolution: resolutionStr,
+    coverageNote: limitationStr,
+  };
+}

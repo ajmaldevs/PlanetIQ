@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Navbar, MainView } from './components/Navbar';
-import { EarthGlobe, EarthModule } from './components/EarthGlobe';
+import { EarthGlobe, EarthModule, ZoomLevel } from './components/EarthGlobe';
 import { ModuleSelector } from './components/ModuleSelector';
-import { ExplorationPanel } from './components/ExplorationPanel';
+import { AdaptiveSidePanel } from './components/AdaptiveSidePanel';
 import { TrendDrawer } from './components/TrendDrawer';
 import { AssistantView } from './components/AssistantView';
 import { AboutView } from './components/AboutView';
 import { SearchBar } from './components/SearchBar';
 import { DatasetInfoModal } from './components/DatasetInfoModal';
+import { resolveGeographicContext } from './services/geography';
 import {
   fetchSystemHealth,
   fetchAtmosphereGrid,
@@ -25,7 +26,7 @@ import {
   LandTimeSeriesResponse,
   CrossSystemResponse,
 } from './services/api';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Compass } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<MainView>('explore');
@@ -40,6 +41,11 @@ export const App: React.FC = () => {
   const [dataLoading, setDataLoading] = useState<boolean>(false);
   const [showDatasetInfo, setShowDatasetInfo] = useState<boolean>(false);
   const [pendingAiPrompt, setPendingAiPrompt] = useState<string | undefined>(undefined);
+
+  // Adaptive Zoom and Contextual Side Panel States
+  const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('global');
+  const [centerCoords, setCenterCoords] = useState<{ lat: number; lon: number }>({ lat: 20, lon: 0 });
+  const [sidePanelOpen, setSidePanelOpen] = useState<boolean>(false);
 
   // Scientific data states
   const [atmosphereGrid, setAtmosphereGrid] = useState<GeoJSONFeatureCollection | null>(null);
@@ -64,9 +70,22 @@ export const App: React.FC = () => {
   const handleSelectModule = (mod: EarthModule) => {
     setActiveModule(mod);
     setSelectedFeature(null);
+    setSidePanelOpen(true);
     if (mod === 'atmosphere') setMetricType('accumulated');
     if (mod === 'ocean') setMetricType('ssha');
     if (mod === 'land') setMetricType('ndvi');
+  };
+
+  // Adaptive Zoom and Center Coordinate handlers
+  const handleZoomChange = (newZoom: ZoomLevel, _dist: number) => {
+    setZoomLevel(newZoom);
+    if (newZoom !== 'global') {
+      setSidePanelOpen(true);
+    }
+  };
+
+  const handleCenterCoordinatesChange = (lat: number, lon: number) => {
+    setCenterCoords({ lat, lon });
   };
 
   // Fetch data when module or date changes
@@ -133,6 +152,7 @@ export const App: React.FC = () => {
   // Handle Point click on the 3D globe
   const handleFeatureSelect = (feat: GeoJSONFeature) => {
     setSelectedFeature(feat);
+    setSidePanelOpen(true);
     const lat = feat.properties.latitude;
     const lon = feat.properties.longitude;
 
@@ -216,6 +236,21 @@ export const App: React.FC = () => {
     return null;
   };
 
+  const explicitLocationName =
+    selectedFeature?.properties.location_name ||
+    selectedFeature?.properties.region_name;
+
+  const currentLat = selectedFeature?.properties.latitude ?? centerCoords.lat;
+  const currentLon = selectedFeature?.properties.longitude ?? centerCoords.lon;
+
+  const geographicContext = resolveGeographicContext(
+    currentLat,
+    currentLon,
+    zoomLevel,
+    activeModule,
+    explicitLocationName
+  );
+
   return (
     <div className="min-h-screen bg-[#05070b] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black overflow-x-hidden relative">
       {/* Immersive Boundless 3D Earth Globe Canvas (Persistent full viewport, zero rectangular clipping) */}
@@ -227,6 +262,8 @@ export const App: React.FC = () => {
         selectedFeature={selectedFeature}
         metricType={metricType}
         visible={currentView === 'explore'}
+        onZoomChange={handleZoomChange}
+        onCenterCoordinatesChange={handleCenterCoordinatesChange}
       />
 
       {/* Minimal Top Header */}
@@ -234,8 +271,49 @@ export const App: React.FC = () => {
         currentView={currentView}
         setCurrentView={setCurrentView}
         health={health}
-        onResetExplore={() => setActiveModule(null)}
+        onResetExplore={() => {
+          setActiveModule(null);
+          setSelectedFeature(null);
+          setSidePanelOpen(false);
+        }}
       />
+
+      {/* Floating Reopen Pill when contextual side panel is closed */}
+      {currentView === 'explore' && !sidePanelOpen && (zoomLevel !== 'global' || activeModule !== null || selectedFeature !== null) && (
+        <button
+          onClick={() => setSidePanelOpen(true)}
+          className="fixed top-20 right-4 sm:right-6 z-30 flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-[#090d16]/90 border border-slate-700/80 text-xs font-semibold text-cyan-300 shadow-2xl backdrop-blur-md hover:bg-slate-800 transition-all pointer-events-auto"
+        >
+          <Compass className="h-3.5 w-3.5 text-cyan-400" />
+          <span>Context Panel • <span className="capitalize">{zoomLevel}</span></span>
+        </button>
+      )}
+
+      {/* Adaptive Contextual Side Panel (Desktop: Right slide-in, Mobile: Bottom sheet) */}
+      {currentView === 'explore' && (
+        <AdaptiveSidePanel
+          activeModule={activeModule}
+          onSelectModule={handleSelectModule}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          selectedFeature={selectedFeature}
+          metricType={metricType}
+          setMetricType={setMetricType}
+          onSelectPreset={handleSelectPreset}
+          showTrends={showTrends}
+          setShowTrends={setShowTrends}
+          dataLoading={dataLoading}
+          onExplainWithAI={(prompt) => {
+            setPendingAiPrompt(prompt);
+            setCurrentView('assistant');
+          }}
+          onOpenDatasetInfo={() => setShowDatasetInfo(true)}
+          zoomLevel={zoomLevel}
+          geographicContext={geographicContext}
+          isOpen={sidePanelOpen}
+          onClose={() => setSidePanelOpen(false)}
+        />
+      )}
 
       {/* Main Container */}
       <main className="flex-1 flex flex-col max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-3 sm:py-6 overflow-x-hidden relative z-10 pointer-events-none">
@@ -271,13 +349,17 @@ export const App: React.FC = () => {
                 </div>
               </div>
             ) : (
-              /* EXPLORATION EXPERIENCE STATE: Expansive Orbit Viewport + Floating Panel + Expandable Trends */
+              /* EXPLORATION EXPERIENCE STATE: Expansive Viewport + Expandable Trends */
               <div className="flex-1 flex flex-col justify-between min-h-[calc(100vh-8.5rem)] py-2 sm:py-4 space-y-4 pointer-events-none">
                 {/* Top Bar Controls */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-1 pointer-events-auto">
                   <div className="flex items-center space-x-2">
                     <button
-                      onClick={() => setActiveModule(null)}
+                      onClick={() => {
+                        setActiveModule(null);
+                        setSelectedFeature(null);
+                        setSidePanelOpen(false);
+                      }}
                       className="flex items-center space-x-1.5 text-xs text-slate-300 hover:text-cyan-300 bg-slate-900/85 px-3 py-1.5 rounded-full border border-slate-800/80 backdrop-blur-md transition-colors"
                     >
                       <ArrowLeft className="h-4 w-4" />
@@ -289,31 +371,9 @@ export const App: React.FC = () => {
                     </span>
                   </div>
 
-                  <div className="w-full sm:w-80">
+                  <div className="w-full sm:w-80 sm:mr-96 lg:sm:mr-[430px] transition-all">
                     <SearchBar onSelectLocation={handleSearchSelect} />
                   </div>
-                </div>
-
-                {/* Floating Exploration Panel */}
-                <div className="w-full sm:max-w-sm pointer-events-auto">
-                  <ExplorationPanel
-                    activeModule={activeModule}
-                    onSelectModule={handleSelectModule}
-                    selectedDate={selectedDate}
-                    setSelectedDate={setSelectedDate}
-                    selectedFeature={selectedFeature}
-                    metricType={metricType}
-                    setMetricType={setMetricType}
-                    onSelectPreset={handleSelectPreset}
-                    showTrends={showTrends}
-                    setShowTrends={setShowTrends}
-                    dataLoading={dataLoading}
-                    onExplainWithAI={(prompt) => {
-                      setPendingAiPrompt(prompt);
-                      setCurrentView('assistant');
-                    }}
-                    onOpenDatasetInfo={() => setShowDatasetInfo(true)}
-                  />
                 </div>
 
                 {/* Open Space for Earth Exploration */}

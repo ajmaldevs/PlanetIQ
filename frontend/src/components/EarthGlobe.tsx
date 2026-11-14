@@ -4,6 +4,7 @@ import { GeoJSONFeatureCollection, GeoJSONFeature } from '../services/api';
 import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 
 export type EarthModule = 'ocean' | 'atmosphere' | 'land' | null;
+export type ZoomLevel = 'global' | 'continental' | 'country' | 'regional';
 
 interface EarthGlobeProps {
   activeModule: EarthModule;
@@ -14,6 +15,8 @@ interface EarthGlobeProps {
   metricType?: string;
   className?: string;
   visible?: boolean;
+  onZoomChange?: (zoom: ZoomLevel, distance: number) => void;
+  onCenterCoordinatesChange?: (lat: number, lon: number) => void;
 }
 
 // Geographic Places Database for authentic global orientation & education
@@ -181,9 +184,21 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   metricType = 'default',
   className = '',
   visible = true,
+  onZoomChange,
+  onCenterCoordinatesChange,
 }) => {
   // Leaf container specifically for Three.js canvas (isolated from React children)
   const canvasMountRef = useRef<HTMLDivElement>(null);
+
+  // Zoom and center callbacks refs to avoid stale animation closures
+  const onZoomChangeRef = useRef(onZoomChange);
+  onZoomChangeRef.current = onZoomChange;
+  const onCenterCoordsRef = useRef(onCenterCoordinatesChange);
+  onCenterCoordsRef.current = onCenterCoordinatesChange;
+
+  const currentZoomRef = useRef<ZoomLevel>('continental');
+  const [currentZoomLevel, setCurrentZoomLevel] = useState<ZoomLevel>('continental');
+  const lastCenterCalcRef = useRef(Date.now());
 
   // Three.js internal references
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -445,6 +460,33 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         cameraRef.current.position.z = currentCameraDistance.current;
       }
 
+      // Adaptive Zoom Level Calculation
+      const distNow = currentCameraDistance.current;
+      let newLevel: ZoomLevel = 'global';
+      if (distNow < 3.1) newLevel = 'regional';
+      else if (distNow < 3.9) newLevel = 'country';
+      else if (distNow < 5.2) newLevel = 'continental';
+      else newLevel = 'global';
+
+      if (newLevel !== currentZoomRef.current) {
+        currentZoomRef.current = newLevel;
+        setCurrentZoomLevel(newLevel);
+        if (onZoomChangeRef.current) {
+          onZoomChangeRef.current(newLevel, distNow);
+        }
+      }
+
+      // Facing Center Coordinates Calculation (throttled every 300ms)
+      if (now - lastCenterCalcRef.current > 300) {
+        lastCenterCalcRef.current = now;
+        const centerLat = currentRotation.current.x * (180 / Math.PI);
+        let centerLon = -currentRotation.current.y * (180 / Math.PI) - 90;
+        centerLon = ((((centerLon + 180) % 360) + 360) % 360) - 180;
+        if (onCenterCoordsRef.current) {
+          onCenterCoordsRef.current(centerLat, centerLon);
+        }
+      }
+
       // 14. Geographic Labels Backface Culling & Zoom LOD Updates
       if (labelsGroupRef.current && cameraRef.current && earthMeshRef.current) {
         const cameraPos = cameraRef.current.position;
@@ -609,6 +651,11 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     };
     isFlyingToRef.current = true;
     lastInteractionTime.current = Date.now();
+
+    // Zoom into country/regional view if currently pulled far back
+    if (targetCameraDistance.current > 3.8) {
+      targetCameraDistance.current = 3.3;
+    }
   }, [selectedFeature]);
 
   // Mouse / Pointer Drag Handlers (Only active when starting over Earth or dragging)
@@ -710,38 +757,46 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         </div>
       )}
 
-      {/* Minimal Unobtrusive Camera Navigation Controls */}
-      <div className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-30 flex flex-col space-y-1.5 bg-[#090d16]/85 p-1.5 rounded-xl border border-slate-800/80 backdrop-blur-md shadow-2xl pointer-events-auto">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            zoomIn();
-          }}
-          title="Zoom In"
-          className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
-        >
-          <ZoomIn className="h-4 w-4" />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            zoomOut();
-          }}
-          title="Zoom Out"
-          className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
-        >
-          <ZoomOut className="h-4 w-4" />
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            resetOrientation();
-          }}
-          title="Reset View"
-          className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-cyan-400 transition-colors"
-        >
-          <RotateCcw className="h-4 w-4" />
-        </button>
+      {/* Minimal Unobtrusive Camera Navigation Controls (Bottom-Left to avoid side panel collision) */}
+      <div className="fixed bottom-5 left-5 sm:bottom-6 sm:left-6 z-30 flex items-center space-x-2 pointer-events-auto">
+        <div className="flex flex-col space-y-1 bg-[#090d16]/90 p-1.5 rounded-xl border border-slate-800/80 backdrop-blur-md shadow-2xl">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              zoomIn();
+            }}
+            title="Zoom In"
+            className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              zoomOut();
+            }}
+            title="Zoom Out"
+            className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              resetOrientation();
+            }}
+            title="Reset View"
+            className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-cyan-400 transition-colors"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Subtle Scale & Zoom Level Pill */}
+        <div className="hidden sm:flex flex-col justify-center px-2.5 py-1.5 rounded-xl bg-[#090d16]/90 border border-slate-800/80 text-[10px] font-mono backdrop-blur-md shadow-2xl text-slate-400">
+          <span className="text-slate-500 uppercase tracking-widest text-[8px]">Scale</span>
+          <span className="text-cyan-400 font-semibold capitalize">{currentZoomLevel}</span>
+        </div>
       </div>
     </>
   );
