@@ -28,9 +28,13 @@ This document records the official datasets used by TerraLens, their sources, sp
 ---
 
 ## 3. Land MVP: Terrestrial System
-* **Dataset**: Under Decision & Approval
-* **Proposed Candidates**:
-  * MODIS/VIIRS Normalized Difference Vegetation Index (NDVI)
-  * SMAP Global Soil Moisture (`SPL3SMP`)
-  * MODIS Land Surface Temperature (LST)
-* **Status**: Awaiting confirmation of approved planning dataset.
+* **Dataset**: MODIS Vegetation Indices Monthly Global (NDVI / EVI)
+* **Dataset Identifier**: `MOD13C2` (Version 6.1)
+* **Agency**: NASA LP DAAC / USGS
+* **Temporal Resolution**: Monthly (Calendar Month composite)
+* **Spatial Resolution**: 0.05° × 0.05° Climate Modeling Grid (~5.6 km at equator)
+* **Measurement Units**: Dimensionless vegetation index (Valid range: -0.2000 to +1.0000; scale factor 0.0001)
+* **Variables**: `CMG 0.05 Deg Monthly NDVI`, `CMG 0.05 Deg Monthly EVI`, pixel reliability metrics
+* **Scientific Purpose**: Quantify terrestrial photosynthetic activity, global vegetation canopy dynamics, seasonal phenology, agricultural drought stress, and post-wildfire ecological recovery.
+* **Limitations**: Cloud cover contamination in tropical wet seasons; atmospheric aerosol attenuation; saturation over extremely dense tropical rainforests (alleviated via complementary EVI).
+* **Data Access Method**: NASA Earthdata CMR, LP DAAC HTTP/OPeNDAP repository, Earthdata Search.

@@ -15,6 +15,7 @@ async def test_health_endpoint():
         assert "scientific_modules" in data
         assert data["scientific_modules"]["ocean"] == "SWOT KaRIn Sea Surface Height (Option A)"
         assert data["scientific_modules"]["atmosphere"] == "GPM IMERG Final Monthly (GPM_3IMERGM)"
+        assert data["scientific_modules"]["land"] == "MODIS Monthly Global NDVI/EVI (MOD13C2)"
 
 
 @pytest.mark.asyncio

@@ -33,9 +33,10 @@ TerraLens/
    * **Focus**: Global precipitation, rainfall patterns, extreme weather trends.
    * **Dataset Identifier**: `GPM_3IMERGM` (Final Monthly Precipitation).
    * **Source**: NASA GES DISC.
-3. **Land MVP**:
-   * **Focus**: Terrestrial dynamics (e.g. vegetation indices, soil moisture, land surface temperature).
-   * **Status**: Awaiting confirmation of approved dataset scope.
+3. **Land MVP – MODIS Vegetation Indices**:
+   * **Focus**: Terrestrial photosynthetic activity, canopy phenology, drought impact, and vegetation dynamics.
+   * **Dataset Identifier**: `MOD13C2` (Version 6.1, 0.05° Monthly Global NDVI/EVI).
+   * **Source**: NASA LP DAAC / USGS.
 
 ---
 

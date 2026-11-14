@@ -20,7 +20,7 @@ class SystemHealthResponse(BaseModel):
         default_factory=lambda: {
             "ocean": "SWOT KaRIn Sea Surface Height (Option A)",
             "atmosphere": "GPM IMERG Final Monthly (GPM_3IMERGM)",
-            "land": "Decision Pending Approval",
+            "land": "MODIS Monthly Global NDVI/EVI (MOD13C2)",
         }
     )
 
