@@ -25,7 +25,18 @@ import {
   Minimize2,
   X,
   ChevronUp,
+  RefreshCw,
+  AlertCircle,
+  HelpCircle,
 } from 'lucide-react';
+
+export type TrendDrawerStatus =
+  | 'idle'
+  | 'loading'
+  | 'success'
+  | 'no_data'
+  | 'backend_unavailable'
+  | 'error';
 
 interface TrendDrawerProps {
   activeModule: EarthModule;
@@ -34,6 +45,10 @@ interface TrendDrawerProps {
   landData: LandTimeSeriesResponse | null;
   crossSystemData: CrossSystemResponse | null;
   loading: boolean;
+  status?: TrendDrawerStatus;
+  errorMessage?: string | null;
+  selectedLocationName?: string | null;
+  onRetry?: () => void;
   isOpen: boolean;
   onClose: () => void;
   onToggleOpen: () => void;
@@ -49,6 +64,10 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
   landData,
   crossSystemData,
   loading,
+  status = 'idle',
+  errorMessage = null,
+  selectedLocationName = null,
+  onRetry,
   isOpen,
   onClose,
   onToggleOpen,
@@ -117,14 +136,85 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
         className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5 touch-pan-y"
         style={{ touchAction: 'pan-y' }}
       >
-        {loading ? (
-          <div className="h-48 flex items-center justify-center">
-            <div className="flex items-center space-x-2 text-xs font-mono text-slate-400">
-              <div className="h-4 w-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-              <span>Streaming Historical Satellite Timeseries...</span>
+        {/* State 1: Active Loading */}
+        {(loading || status === 'loading') && (
+          <div className="h-56 flex flex-col items-center justify-center space-y-3 bg-slate-900/30 rounded-2xl border border-slate-800/60 p-6">
+            <div className="flex items-center space-x-2 text-xs font-mono text-cyan-400">
+              <div className="h-5 w-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+              <span>Streaming Historical Satellite Timeseries (2024–2026)...</span>
+            </div>
+            {selectedLocationName && (
+              <span className="text-[11px] font-mono text-slate-400">
+                Target: <strong className="text-white">{selectedLocationName}</strong>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* State 2: Backend Unavailable (Network or Server Offline) */}
+        {!loading && status === 'backend_unavailable' && (
+          <div className="p-5 rounded-2xl bg-amber-950/30 border border-amber-600/50 space-y-3">
+            <div className="flex items-center space-x-2 text-amber-400 font-semibold text-xs sm:text-sm">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>Scientific Backend Unavailable</span>
+            </div>
+            <p className="text-xs text-amber-200/90 leading-relaxed font-sans">
+              {errorMessage || 'Could not connect to the scientific API backend. Ensure the backend server is running and accessible over your network.'}
+            </p>
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/50 transition-colors"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Retry Connection</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* State 3: Generic Error State */}
+        {!loading && status === 'error' && (
+          <div className="p-5 rounded-2xl bg-rose-950/30 border border-rose-600/50 space-y-3">
+            <div className="flex items-center space-x-2 text-rose-400 font-semibold text-xs sm:text-sm">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>Time-Series Request Failed</span>
+            </div>
+            <p className="text-xs text-rose-200/90 leading-relaxed font-sans">
+              {errorMessage || 'Failed to retrieve historical observations for the selected coordinates.'}
+            </p>
+            {onRetry && (
+              <button
+                onClick={onRetry}
+                className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-rose-600/30 hover:bg-rose-600/50 text-rose-200 border border-rose-500/50 transition-colors"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Retry Analysis</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* State 4: No Observations for Chosen Coordinate */}
+        {!loading && (status === 'no_data' || (status === 'idle' && !atmosphereData && !oceanData && !landData)) && (
+          <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-3">
+            <div className="flex items-center space-x-2 text-cyan-400 font-semibold text-xs sm:text-sm">
+              <HelpCircle className="h-4 w-4 shrink-0" />
+              <span>No Satellite Track Observations at Chosen Coordinate</span>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed font-sans">
+              {selectedLocationName ? `Target location: ${selectedLocationName}. ` : ''}
+              NASA SWOT KaRIn swath orbits (120 km width) and MODIS vegetation records track specific geographical passes. Select an observation marker on the globe or pick a planetary preset from the Context panel to inspect continuous observations.
+            </p>
+            <div className="flex items-center space-x-2 text-[11px] font-mono text-slate-400">
+              <span>Scientific dataset:</span>
+              <strong className="text-cyan-300 uppercase">{activeModule || 'Earth Systems'} Baseline</strong>
             </div>
           </div>
-        ) : (
+        )}
+
+        {/* State 5: Data Available (Render Scientific Time Series) */}
+        {!loading && status !== 'loading' && (atmosphereData || oceanData || landData) && (
           <>
             {/* ================= ATMOSPHERE HISTORICAL TRENDS ================= */}
             {activeModule === 'atmosphere' && atmosphereData && (
@@ -149,9 +239,9 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                   </div>
                 </div>
 
-                <div className="h-56 sm:h-64 w-full bg-slate-900/40 rounded-xl p-2 border border-slate-800/60">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={atmosphereData.timeseries} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                <div className="h-56 sm:h-64 w-full min-w-0 bg-slate-900/40 rounded-xl p-2 border border-slate-800/60">
+                  <ResponsiveContainer key={`atm-${isExpanded ? 'exp' : 'norm'}`} width="100%" height="100%">
+                    <LineChart data={atmosphereData.timeseries} margin={{ top: 10, right: 15, left: -15, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                       <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
                       <YAxis stroke="#64748b" tick={{ fontSize: 10 }} unit=" mm" />
@@ -189,9 +279,9 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                   </div>
                 </div>
 
-                <div className="h-56 sm:h-64 w-full bg-slate-900/40 rounded-xl p-2 border border-slate-800/60">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={oceanData.timeseries} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                <div className="h-56 sm:h-64 w-full min-w-0 bg-slate-900/40 rounded-xl p-2 border border-slate-800/60">
+                  <ResponsiveContainer key={`ocn-${isExpanded ? 'exp' : 'norm'}`} width="100%" height="100%">
+                    <LineChart data={oceanData.timeseries} margin={{ top: 10, right: 15, left: -15, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                       <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
                       <YAxis stroke="#64748b" tick={{ fontSize: 10 }} unit=" m" domain={[-0.5, 0.5]} />
@@ -235,9 +325,9 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                   </div>
                 </div>
 
-                <div className="h-56 sm:h-64 w-full bg-slate-900/40 rounded-xl p-2 border border-slate-800/60">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={landData.timeseries} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                <div className="h-56 sm:h-64 w-full min-w-0 bg-slate-900/40 rounded-xl p-2 border border-slate-800/60">
+                  <ResponsiveContainer key={`lnd-${isExpanded ? 'exp' : 'norm'}`} width="100%" height="100%">
+                    <LineChart data={landData.timeseries} margin={{ top: 10, right: 15, left: -15, bottom: 0 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                       <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />
                       <YAxis stroke="#64748b" tick={{ fontSize: 10 }} domain={[0, 1]} />
@@ -277,14 +367,14 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                   </div>
                 </div>
 
-                <div className="h-52 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-52 w-full min-w-0">
+                  <ResponsiveContainer key={`tele-${isExpanded ? 'exp' : 'norm'}`} width="100%" height="100%">
                     <LineChart
                       data={crossSystemData.timeseries.map((pt) => ({
                         ...pt,
                         ndvi_scaled: Number((pt.land_ndvi_anomaly * 10).toFixed(2)),
                       }))}
-                      margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+                      margin={{ top: 10, right: 15, left: -15, bottom: 0 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
                       <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 10 }} />

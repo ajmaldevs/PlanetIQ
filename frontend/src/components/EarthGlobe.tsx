@@ -6,6 +6,7 @@ import { ImageryLODManager } from '../services/imageryLOD';
 import { createCinematicSpaceEnvironment, SpaceEnvironment } from '../services/spaceEnvironment';
 import { createEarthDayNightShader, EarthDayNightShaderBundle } from '../services/earthShader';
 import { loadVectorBoundaries, VectorBoundariesMeshGroup } from '../services/vectorBoundaries';
+import { adaptiveQuality, QualityTier, QualityMode, QualityProfile } from '../services/adaptiveQuality';
 import {
   ZoomIn,
   ZoomOut,
@@ -13,6 +14,7 @@ import {
   Compass,
   Layers,
   Globe as GlobeIcon,
+  Cpu,
 } from 'lucide-react';
 
 export type EarthModule = 'ocean' | 'atmosphere' | 'land' | null;
@@ -228,8 +230,23 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const currentZoomRef = useRef<ZoomLevel>('continental');
   const [currentZoomLevel, setCurrentZoomLevel] = useState<ZoomLevel>('continental');
   const [imageryResolution, setImageryResolution] = useState<string>('NASA Blue Marble (1km Base)');
+  const currentResolutionBadgeRef = useRef<string>('NASA Blue Marble (1km Base)');
   const lastCenterCalcRef = useRef(Date.now());
   const lastReportedDistRef = useRef(4.6);
+
+  // Device-adaptive quality state & profile refs
+  const [qualityTier, setQualityTier] = useState<QualityTier>(adaptiveQuality.getProfile().tier);
+  const [qualityMode, setQualityMode] = useState<QualityMode>(adaptiveQuality.getMode());
+  const qualityProfileRef = useRef<QualityProfile>(adaptiveQuality.getProfile());
+
+  // Throttled label collision and horizon check refs to eliminate per-frame CPU spikes
+  const lastLabelUpdateCheckRef = useRef<number>(0);
+  const lastLabelUpdateDistRef = useRef<number>(4.6);
+  const lastLabelUpdateRotRef = useRef<{ x: number; y: number }>({ x: 0.12, y: -0.6 });
+
+  // Shared geometry instances for markers to eliminate memory fragmentation
+  const sharedSphereGeomRef = useRef<THREE.SphereGeometry | null>(null);
+  const sharedHaloGeomRef = useRef<THREE.RingGeometry | null>(null);
 
   // Camera horizontal glide & layer cross-fade refs
   const targetCameraX = useRef(0);
@@ -252,6 +269,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const spaceEnvRef = useRef<SpaceEnvironment | null>(null);
   const earthShadersRef = useRef<EarthDayNightShaderBundle | null>(null);
   const animFrameIdRef = useRef<number | null>(null);
+  const animateRef = useRef<((ts: number) => void) | null>(null);
+  const lastTimestampRef = useRef<number>(performance.now());
 
   // Interaction state machine ('idle' | 'dragging' | 'transitioning' | 'pinching')
   type InteractionState = 'idle' | 'dragging' | 'transitioning' | 'pinching';
@@ -307,6 +326,22 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     return hits.length > 0;
   };
 
+  // Subscribe to device-adaptive quality profile
+  useEffect(() => {
+    return adaptiveQuality.subscribe((profile, mode) => {
+      qualityProfileRef.current = profile;
+      setQualityTier(profile.tier);
+      setQualityMode(mode);
+
+      // Dynamically adapt renderer pixel ratio without recreating WebGL context
+      if (rendererRef.current) {
+        rendererRef.current.setPixelRatio(
+          Math.min(window.devicePixelRatio || 1, profile.maxPixelRatio)
+        );
+      }
+    });
+  }, []);
+
   // Initialize Three.js Realistic Cinematic Earth Scene
   useEffect(() => {
     const mount = canvasMountRef.current;
@@ -324,14 +359,15 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     camera.position.set(0, 0, currentCameraDistance.current);
     cameraRef.current = camera;
 
-    // 3. WebGL Renderer sized to entire viewport
+    // 3. WebGL Renderer sized to entire viewport with device-adaptive settings
+    const profile = qualityProfileRef.current;
     const renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: profile.antialias,
       alpha: true,
       powerPreference: 'high-performance',
     });
     renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, profile.maxPixelRatio));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
 
@@ -427,8 +463,14 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     earthGroup.add(labelsGroup);
     labelsGroupRef.current = labelsGroup;
 
-    // Populate Comprehensive GIS Labels onto the Globe
-    GIS_PLACES.forEach((place) => {
+    // Populate Comprehensive GIS Labels onto the Globe:
+    // All sovereign nations and territories (Level 2), continents & oceans (Level 1),
+    // states/provinces (Level 3), and major world capitals and metropolises (Level 4)
+    const activeLabelPlaces = GIS_PLACES.filter(
+      (p) => p.level <= 3 || p.priority >= 67
+    );
+
+    activeLabelPlaces.forEach((place) => {
       const pos = latLonToVector3(place.lat, place.lon, earthRadius * 1.011);
       const sprite = createGISLabelSprite(place);
       sprite.position.copy(pos);
@@ -441,18 +483,18 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     setIsReady(true);
 
     // 15. Render Animation Loop with Serene Rotation & Multi-Resolution Tile Streamer
-    let lastTimestamp = performance.now();
+    lastTimestampRef.current = performance.now();
     const tempWorldPos = new THREE.Vector3();
     const tempNormal = new THREE.Vector3();
     const tempViewDir = new THREE.Vector3();
     const earthWorldPos = new THREE.Vector3();
 
     const animate = (timestamp: number) => {
-      const delta = Math.min((timestamp - lastTimestamp) / 1000, 0.1);
-      lastTimestamp = timestamp;
+      const delta = Math.min((timestamp - lastTimestampRef.current) / 1000, 0.1);
+      lastTimestampRef.current = timestamp;
 
       if (!visibleRef.current) {
-        animFrameIdRef.current = requestAnimationFrame(animate);
+        animFrameIdRef.current = null;
         return;
       }
 
@@ -517,6 +559,9 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         cameraRef.current.position.x = currentCameraX.current;
       }
 
+      // Report frame delta to Adaptive Quality manager for dynamic tiering
+      adaptiveQuality.reportFrameDelta(delta);
+
       // Adaptive Zoom Level & Resolution Scale Calculation
       const distNow = currentCameraDistance.current;
       let newLevel: ZoomLevel = 'global';
@@ -539,7 +584,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         resBadge = 'NASA Blue Marble (1km Base)';
       }
 
-      if (newLevel !== currentZoomRef.current || Math.abs(distNow - lastReportedDistRef.current) > 0.04) {
+      if (newLevel !== currentZoomRef.current || Math.abs(distNow - lastReportedDistRef.current) > 0.08) {
         currentZoomRef.current = newLevel;
         lastReportedDistRef.current = distNow;
         setCurrentZoomLevel(newLevel);
@@ -547,7 +592,12 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
           onZoomChangeRef.current(newLevel, distNow);
         }
       }
-      setImageryResolution(resBadge);
+
+      // Eliminate per-frame React rerenders: update state only when resolution text changes
+      if (resBadge !== currentResolutionBadgeRef.current) {
+        currentResolutionBadgeRef.current = resBadge;
+        setImageryResolution(resBadge);
+      }
 
       // Facing Center Coordinates Calculation (throttled every 250ms)
       const centerLat = currentRotation.current.x * (180 / Math.PI);
@@ -566,13 +616,29 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         vectorBoundariesRef.current.updateLOD(distNow);
       }
 
-      // 17. Stream Spherical Satellite Imagery LOD Tiles Based on Viewpoint
+      // 17. Stream Spherical Satellite Imagery LOD Tiles (Centralized delta-time stepping)
       if (imageryLODRef.current) {
-        imageryLODRef.current.update(distNow, centerLat, centerLon);
+        imageryLODRef.current.update(delta, distNow, centerLat, centerLon);
       }
 
-      // 18. Scalable GIS Labels: True Spherical Horizon Culling, LOD Cross-Fade & 2D Screen-Space Collision Detection
-      if (labelsGroupRef.current && cameraRef.current && earthMeshRef.current) {
+      // 18. Scalable GIS Labels: Throttled Dirty-Flag Collision Detection
+      // Eliminates expensive per-frame CPU screen projections when viewpoint is stable
+      const labelInterval = qualityProfileRef.current.labelUpdateIntervalMs;
+      const distDelta = Math.abs(distNow - lastLabelUpdateDistRef.current);
+      const rotDelta = Math.hypot(
+        currentRotation.current.x - lastLabelUpdateRotRef.current.x,
+        currentRotation.current.y - lastLabelUpdateRotRef.current.y
+      );
+
+      const shouldRecalculateLabels =
+        (now - lastLabelUpdateCheckRef.current >= labelInterval && (distDelta > 0.02 || rotDelta > 0.012)) ||
+        lastLabelUpdateCheckRef.current === 0;
+
+      if (shouldRecalculateLabels && labelsGroupRef.current && cameraRef.current && earthMeshRef.current) {
+        lastLabelUpdateCheckRef.current = now;
+        lastLabelUpdateDistRef.current = distNow;
+        lastLabelUpdateRotRef.current = { x: currentRotation.current.x, y: currentRotation.current.y };
+
         const camera = cameraRef.current;
         const cameraPos = camera.position;
         earthMeshRef.current.getWorldPosition(earthWorldPos);
@@ -663,7 +729,11 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
             screenY,
             width: boxWidth,
             height: boxHeight,
-            priority: place.priority || 50,
+            // Small-country prioritization at continental/country zoom to prevent suppression by geographic giants
+            priority:
+              dist < 4.8 && place.level === 2 && (place.population || 0) < 15000000
+                ? (place.priority || 50) + 12
+                : place.priority || 50,
             alpha: finalAlpha,
           });
         });
@@ -729,6 +799,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       animFrameIdRef.current = requestAnimationFrame(animate);
     };
 
+    animateRef.current = animate;
     animFrameIdRef.current = requestAnimationFrame(animate);
 
     // Full Viewport Window Resize Handler
@@ -794,10 +865,50 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
 
     window.addEventListener('wheel', onWindowWheel, { passive: false });
 
+    // WebGL Context Loss & Restoration Handling
+    const canvasElem = renderer.domElement;
+    const onContextLost = (e: Event) => {
+      e.preventDefault();
+      console.warn('[EarthGlobe] WebGL context lost. Suspending Three.js render loop.');
+      if (animFrameIdRef.current) {
+        cancelAnimationFrame(animFrameIdRef.current);
+        animFrameIdRef.current = null;
+      }
+    };
+    const onContextRestored = () => {
+      console.info('[EarthGlobe] WebGL context restored. Rebuilding rendering state.');
+      if (rendererRef.current && cameraRef.current) {
+        rendererRef.current.setSize(window.innerWidth, window.innerHeight);
+      }
+      lastTimestampRef.current = performance.now();
+      animFrameIdRef.current = requestAnimationFrame(animate);
+    };
+    canvasElem.addEventListener('webglcontextlost', onContextLost, false);
+    canvasElem.addEventListener('webglcontextrestored', onContextRestored, false);
+
+    // Page Visibility State Management (reduce GPU battery consumption when tab is hidden)
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        if (animFrameIdRef.current) {
+          cancelAnimationFrame(animFrameIdRef.current);
+          animFrameIdRef.current = null;
+        }
+      } else {
+        if (!animFrameIdRef.current && visibleRef.current) {
+          lastTimestampRef.current = performance.now();
+          animFrameIdRef.current = requestAnimationFrame(animate);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     // Cleanup resources on unmount
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('wheel', onWindowWheel);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      canvasElem.removeEventListener('webglcontextlost', onContextLost);
+      canvasElem.removeEventListener('webglcontextrestored', onContextRestored);
       if (animFrameIdRef.current) cancelAnimationFrame(animFrameIdRef.current);
       if (rendererRef.current) {
         if (rendererRef.current.domElement.parentNode === mount) {
@@ -813,10 +924,28 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       cloudsGeometry.dispose();
       cloudsMaterial.dispose();
       atmosphereGeometry.dispose();
+      if (sharedSphereGeomRef.current) sharedSphereGeomRef.current.dispose();
+      if (sharedHaloGeomRef.current) sharedHaloGeomRef.current.dispose();
     };
   }, []);
 
-  // Update Observation Markers when data or module changes
+  // Pause render loop when 3D globe is hidden (e.g. 2D Map view active)
+  useEffect(() => {
+    if (!visible) {
+      if (animFrameIdRef.current) {
+        cancelAnimationFrame(animFrameIdRef.current);
+        animFrameIdRef.current = null;
+      }
+    } else {
+      if (!animFrameIdRef.current && isReady && animateRef.current && document.visibilityState !== 'hidden') {
+        lastReportedDistRef.current = currentCameraDistance.current;
+        lastTimestampRef.current = performance.now();
+        animFrameIdRef.current = requestAnimationFrame(animateRef.current);
+      }
+    }
+  }, [visible, isReady]);
+
+  // Update Observation Markers when data or module changes (Geometry reuse across all features)
   useEffect(() => {
     if (!isReady || !markersGroupRef.current) return;
     const markersGroup = markersGroupRef.current;
@@ -826,16 +955,26 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     while (markersGroup.children.length > 0) {
       const child = markersGroup.children[0] as THREE.Mesh;
       markersGroup.remove(child);
-      if (child.geometry) child.geometry.dispose();
-      if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
-      else if (child.material) child.material.dispose();
+      if (child.material) {
+        if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
+        else child.material.dispose();
+      }
     }
 
     if (!data || !activeModule || !data.features || data.features.length === 0) return;
 
     const earthRadius = 1.9;
     const markerRadius = earthRadius * 1.008;
-    const sphereGeom = new THREE.SphereGeometry(0.024, 12, 12);
+
+    // Reuse single geometry instances to eliminate hundreds of allocations/garbage collections
+    if (!sharedSphereGeomRef.current) {
+      sharedSphereGeomRef.current = new THREE.SphereGeometry(0.024, 12, 12);
+    }
+    if (!sharedHaloGeomRef.current) {
+      sharedHaloGeomRef.current = new THREE.RingGeometry(0.028, 0.048, 16);
+    }
+    const sphereGeom = sharedSphereGeomRef.current;
+    const haloGeom = sharedHaloGeomRef.current;
 
     data.features.forEach((feature) => {
       const coords = feature.geometry.coordinates;
@@ -844,11 +983,6 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
 
       const pos = latLonToVector3(lat, lon, markerRadius);
       const color = getObservationColor(feature, activeModule, metricType);
-
-      const isSelected =
-        selectedFeature &&
-        selectedFeature.geometry.coordinates[0] === lon &&
-        selectedFeature.geometry.coordinates[1] === lat;
 
       const markerMat = new THREE.MeshBasicMaterial({
         color,
@@ -861,9 +995,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       marker.userData = { feature, baseOpacity: 0.95 };
       markersGroup.add(marker);
 
-      const haloGeom = new THREE.RingGeometry(0.028, 0.048, 16);
       const haloMat = new THREE.MeshBasicMaterial({
-        color: isSelected ? new THREE.Color(0x38bdf8) : color,
+        color,
         transparent: true,
         opacity: 0.0,
         side: THREE.DoubleSide,
@@ -871,14 +1004,47 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       const halo = new THREE.Mesh(haloGeom, haloMat);
       halo.position.copy(pos);
       halo.lookAt(0, 0, 0);
-      halo.userData = { feature, baseOpacity: isSelected ? 0.75 : 0.45 };
+      halo.userData = { feature, baseOpacity: 0.45 };
       markersGroup.add(halo);
-
-      if (isSelected) {
-        selectedHaloRef.current = halo;
-      }
     });
   }, [data, activeModule, metricType, isReady]);
+
+  // Lightweight synchronization of selected observation halo without scene reconstruction
+  useEffect(() => {
+    if (!markersGroupRef.current) return;
+    const group = markersGroupRef.current;
+
+    if (!selectedFeature) {
+      selectedHaloRef.current = null;
+      return;
+    }
+
+    const [selLon, selLat] = selectedFeature.geometry.coordinates;
+    let foundHalo: THREE.Mesh | null = null;
+
+    group.children.forEach((child) => {
+      const mesh = child as THREE.Mesh;
+      const feat = mesh.userData?.feature as GeoJSONFeature | undefined;
+      if (!feat) return;
+
+      const isThisPoint =
+        feat.geometry.coordinates[0] === selLon && feat.geometry.coordinates[1] === selLat;
+
+      if (mesh.geometry instanceof THREE.RingGeometry) {
+        if (isThisPoint) {
+          foundHalo = mesh;
+          mesh.userData.baseOpacity = 0.85;
+          (mesh.material as THREE.MeshBasicMaterial).color.setHex(0x38bdf8);
+        } else {
+          mesh.userData.baseOpacity = 0.45;
+          const origColor = getObservationColor(feat, activeModule, metricType);
+          (mesh.material as THREE.MeshBasicMaterial).color.copy(origColor);
+        }
+      }
+    });
+
+    selectedHaloRef.current = foundHalo;
+  }, [selectedFeature, activeModule, metricType]);
 
   // Handle fly-to when selectedFeature changes
   useEffect(() => {
@@ -1312,20 +1478,39 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
           </button>
         </div>
 
-        {/* Imagery & Science Resolution Information Pill */}
-        <div className="hidden sm:flex flex-col justify-center px-3 py-2 rounded-xl bg-[#090d16]/90 border border-slate-800/80 text-[10px] font-mono backdrop-blur-md shadow-2xl text-slate-300 space-y-0.5">
+        {/* Imagery & Science Resolution Information Pill with Adaptive Quality Indicator */}
+        <div className="hidden sm:flex flex-col justify-center px-3 py-2 rounded-xl bg-[#090d16]/90 border border-slate-800/80 text-[10px] font-mono backdrop-blur-md shadow-2xl text-slate-300 space-y-1">
           <div className="flex items-center space-x-1.5 text-slate-400">
             <Layers className="h-3 w-3 text-cyan-400" />
             <span className="text-slate-500 uppercase tracking-wider text-[8px]">Imagery LOD:</span>
             <span className="text-cyan-300 font-medium">{imageryResolution}</span>
           </div>
-          <div className="flex items-center space-x-2 text-[9px] text-slate-400">
-            <span>Scale: <strong className="text-white capitalize">{currentZoomLevel}</strong></span>
-            {activeModule && (
-              <span className="text-slate-500">
-                • {activeModule === 'ocean' ? 'SWOT: ±2.4cm' : activeModule === 'atmosphere' ? 'GPM: 0.1°' : 'MODIS: 0.05°'}
-              </span>
-            )}
+          <div className="flex items-center justify-between gap-3 text-[9px] text-slate-400">
+            <div className="flex items-center space-x-1">
+              <span>Scale: <strong className="text-white capitalize">{currentZoomLevel}</strong></span>
+              {activeModule && (
+                <span className="text-slate-500 hidden md:inline">
+                  • {activeModule === 'ocean' ? 'SWOT: ±2.4cm' : activeModule === 'atmosphere' ? 'GPM: 0.1°' : 'MODIS: 0.05°'}
+                </span>
+              )}
+            </div>
+
+            {/* Device-Adaptive Quality Switcher Pill */}
+            <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-slate-900/90 border border-slate-800">
+              <Cpu className="h-2.5 w-2.5 text-cyan-400" />
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const modes: QualityMode[] = ['auto', 'high', 'standard', 'low'];
+                  const nextIdx = (modes.indexOf(qualityMode) + 1) % modes.length;
+                  adaptiveQuality.setMode(modes[nextIdx]);
+                }}
+                className="hover:text-cyan-300 uppercase tracking-wider text-[8px] font-semibold transition-colors"
+                title={`Rendering Quality: ${qualityMode} (Active Tier: ${qualityTier}) - Click to toggle Auto/High/Standard/Low`}
+              >
+                {qualityMode === 'auto' ? `Auto (${qualityTier[0].toUpperCase()})` : qualityMode}
+              </button>
+            </div>
           </div>
         </div>
       </div>

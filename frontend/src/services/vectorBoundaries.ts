@@ -34,6 +34,8 @@ function createLineSegmentsFromGeoJSON(geojson: any, radius: number): THREE.Buff
 
       // Discard invalid points or antimeridian wraparound discontinuities (>180 deg jump)
       if (Math.abs(p1[0] - p2[0]) > 180) continue;
+      // Discard polar cap artifacts
+      if (Math.abs(p1[1]) > 89.0 && Math.abs(p2[1]) > 89.0 && Math.abs(p1[0] - p2[0]) > 60) continue;
 
       const v1 = latLonToVector3(p1[1], p1[0], radius);
       const v2 = latLonToVector3(p2[1], p2[0], radius);
@@ -85,8 +87,12 @@ export async function loadVectorBoundaries(earthRadius = 1.9): Promise<VectorBou
   let stateLines: THREE.LineSegments | null = null;
 
   try {
-    // 1. Fetch Country Boundaries (ne_110m_admin_0_boundary_lines_land.geojson)
-    const countryRes = await fetch('/data/geo/ne_110m_admin_0_boundary_lines_land.geojson');
+    // 1. Fetch Authoritative Country Boundaries (all sovereign countries and island territories)
+    let countryRes = await fetch('/data/geo/ne_country_boundaries.geojson');
+    if (!countryRes.ok) {
+      // Fallback to 110m land lines
+      countryRes = await fetch('/data/geo/ne_110m_admin_0_boundary_lines_land.geojson');
+    }
     if (countryRes.ok) {
       const countryData = await countryRes.json();
       const countryGeom = createLineSegmentsFromGeoJSON(countryData, vectorRadius);
@@ -94,6 +100,7 @@ export async function loadVectorBoundaries(earthRadius = 1.9): Promise<VectorBou
         color: 0xe2e8f0, // Crisp silver-white for sovereign borders
         transparent: true,
         opacity: 0.55,
+        depthTest: true,
         depthWrite: false,
         polygonOffset: true,
         polygonOffsetFactor: -1,
@@ -113,6 +120,7 @@ export async function loadVectorBoundaries(earthRadius = 1.9): Promise<VectorBou
         color: 0x38bdf8, // Subtle ocean-cyan for coastlines
         transparent: true,
         opacity: 0.40,
+        depthTest: true,
         depthWrite: false,
         polygonOffset: true,
         polygonOffsetFactor: -1,
@@ -132,6 +140,7 @@ export async function loadVectorBoundaries(earthRadius = 1.9): Promise<VectorBou
         color: 0xf59e0b, // Warm amber for first-level administrative divisions
         transparent: true,
         opacity: 0.0, // Fades in when camera zooms closer than 4.5
+        depthTest: true,
         depthWrite: false,
         polygonOffset: true,
         polygonOffsetFactor: -1,

@@ -4,6 +4,9 @@ import { GIS_PLACES } from '../services/gisDatabase';
 
 export interface SearchResult {
   name: string;
+  formal_name?: string;
+  iso_a2?: string;
+  iso_a3?: string;
   category: 'Country' | 'State / Province' | 'City' | 'Ocean System' | 'Climate Region' | 'Continent' | 'Natural Feature';
   lat: number;
   lon: number;
@@ -64,6 +67,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
       else if (p.category === 'natural_feature') cat = 'Natural Feature';
 
       const detailParts: string[] = [];
+      if (p.iso_a3) detailParts.push(p.iso_a3);
       if (p.parentState) detailParts.push(p.parentState);
       if (p.parentCountry) detailParts.push(p.parentCountry);
       if (p.parentContinent) detailParts.push(p.parentContinent);
@@ -71,6 +75,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
 
       items.push({
         name: p.name,
+        formal_name: p.formal_name,
+        iso_a2: p.iso_a2,
+        iso_a3: p.iso_a3,
         category: cat,
         lat: p.lat,
         lon: p.lon,
@@ -91,16 +98,24 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
       .filter(
         (item) =>
           item.name.toLowerCase().includes(q) ||
+          (item.formal_name && item.formal_name.toLowerCase().includes(q)) ||
+          (item.iso_a2 && item.iso_a2.toLowerCase() === q) ||
+          (item.iso_a3 && item.iso_a3.toLowerCase() === q) ||
           (item.detail && item.detail.toLowerCase().includes(q)) ||
           item.category.toLowerCase().includes(q)
       )
       .sort((a, b) => {
-        // Prioritize exact or prefix matches on name
-        const aStarts = a.name.toLowerCase().startsWith(q) ? 1 : 0;
-        const bStarts = b.name.toLowerCase().startsWith(q) ? 1 : 0;
+        // Prioritize exact match on name or ISO code
+        const aExact = a.name.toLowerCase() === q || a.iso_a2?.toLowerCase() === q || a.iso_a3?.toLowerCase() === q ? 2 : 0;
+        const bExact = b.name.toLowerCase() === q || b.iso_a2?.toLowerCase() === q || b.iso_a3?.toLowerCase() === q ? 2 : 0;
+        if (aExact !== bExact) return bExact - aExact;
+
+        // Prioritize prefix match
+        const aStarts = a.name.toLowerCase().startsWith(q) || a.iso_a3?.toLowerCase().startsWith(q) ? 1 : 0;
+        const bStarts = b.name.toLowerCase().startsWith(q) || b.iso_a3?.toLowerCase().startsWith(q) ? 1 : 0;
         return bStarts - aStarts;
       })
-      .slice(0, 8);
+      .slice(0, 10);
   }, [query, searchDatabase]);
 
   // Close dropdown on click outside

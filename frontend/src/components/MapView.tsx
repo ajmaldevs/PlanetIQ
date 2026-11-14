@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { GeoJSONFeatureCollection, GeoJSONFeature } from '../services/api';
-import { GISPlace } from '../services/gisDatabase';
+import { GISPlace, findPlaceById } from '../services/gisDatabase';
 import { Calendar, Navigation, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export interface MapViewProps {
@@ -18,6 +18,7 @@ export interface MapViewProps {
   center?: { lat: number; lon: number };
   onCenterChange?: (lat: number, lon: number) => void;
   selectedPlace?: GISPlace | null;
+  onSelectPlace?: (place: GISPlace) => void;
   sidePanelOpen?: boolean;
   trendsOpen?: boolean;
   trendsExpanded?: boolean;
@@ -30,13 +31,17 @@ const CARTO_DARK_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/
 const OFFLINE_FALLBACK_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
+    countries_poly: {
+      type: 'geojson',
+      data: '/data/geo/ne_countries.geojson',
+    },
+    country_boundaries: {
+      type: 'geojson',
+      data: '/data/geo/ne_country_boundaries.geojson',
+    },
     coastline: {
       type: 'geojson',
       data: '/data/geo/ne_110m_coastline.geojson',
-    },
-    countries: {
-      type: 'geojson',
-      data: '/data/geo/ne_110m_admin_0_boundary_lines_land.geojson',
     },
     states: {
       type: 'geojson',
@@ -47,7 +52,16 @@ const OFFLINE_FALLBACK_STYLE: maplibregl.StyleSpecification = {
     {
       id: 'background',
       type: 'background',
-      paint: { 'background-color': '#060912' },
+      paint: { 'background-color': '#05070b' },
+    },
+    {
+      id: 'country-fills-offline',
+      type: 'fill',
+      source: 'countries_poly',
+      paint: {
+        'fill-color': '#09101e',
+        'fill-opacity': 0.85,
+      },
     },
     {
       id: 'coastline-layer',
@@ -58,14 +72,14 @@ const OFFLINE_FALLBACK_STYLE: maplibregl.StyleSpecification = {
     {
       id: 'country-boundaries',
       type: 'line',
-      source: 'countries',
-      paint: { 'line-color': '#64748b', 'line-width': 0.8, 'line-opacity': 0.5 },
+      source: 'country_boundaries',
+      paint: { 'line-color': '#cbd5e1', 'line-width': 0.9, 'line-opacity': 0.75 },
     },
     {
       id: 'state-boundaries',
       type: 'line',
       source: 'states',
-      paint: { 'line-color': '#475569', 'line-width': 0.5, 'line-opacity': 0.35 },
+      paint: { 'line-color': '#f59e0b', 'line-width': 0.6, 'line-opacity': 0.45 },
     },
   ],
 };
@@ -83,6 +97,7 @@ export const MapView: React.FC<MapViewProps> = ({
   center,
   onCenterChange,
   selectedPlace,
+  onSelectPlace,
   sidePanelOpen = false,
   trendsOpen = false,
   trendsExpanded = false,
@@ -244,6 +259,164 @@ export const MapView: React.FC<MapViewProps> = ({
     return () => clearTimeout(timer);
   }, [selectedPlace, mapLoaded]);
 
+  // Attach Authoritative Global Natural Earth Country Boundaries & Interactivity
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+    const m = map.current;
+
+    const countryPolySource = 'terralens-countries-poly';
+    const countryLineSource = 'terralens-country-lines';
+    const stateLineSource = 'terralens-state-lines';
+
+    // Add sources if not already present
+    if (!m.getSource(countryPolySource)) {
+      m.addSource(countryPolySource, {
+        type: 'geojson',
+        data: '/data/geo/ne_countries.geojson',
+      });
+    }
+
+    if (!m.getSource(countryLineSource)) {
+      m.addSource(countryLineSource, {
+        type: 'geojson',
+        data: '/data/geo/ne_country_boundaries.geojson',
+      });
+    }
+
+    if (!m.getSource(stateLineSource)) {
+      m.addSource(stateLineSource, {
+        type: 'geojson',
+        data: '/data/geo/ne_50m_admin_1_states_provinces_lines.geojson',
+      });
+    }
+
+    // Add Country Fills for hover/selection
+    if (!m.getLayer('terralens-country-fills')) {
+      m.addLayer(
+        {
+          id: 'terralens-country-fills',
+          type: 'fill',
+          source: countryPolySource,
+          paint: {
+            'fill-color': '#38bdf8',
+            'fill-opacity': [
+              'case',
+              ['boolean', ['feature-state', 'hover'], false],
+              0.14,
+              0.0,
+            ],
+          },
+        },
+        m.getLayer('observation-points') ? 'observation-points' : undefined
+      );
+    }
+
+    // Add Sovereign Country Boundaries (visible across all zoom levels)
+    if (!m.getLayer('terralens-country-boundaries-line')) {
+      m.addLayer(
+        {
+          id: 'terralens-country-boundaries-line',
+          type: 'line',
+          source: countryLineSource,
+          paint: {
+            'line-color': '#cbd5e1',
+            'line-width': ['interpolate', ['linear'], ['zoom'], 1, 0.8, 4, 1.3, 8, 2.0],
+            'line-opacity': 0.70,
+          },
+        },
+        m.getLayer('observation-points') ? 'observation-points' : undefined
+      );
+    }
+
+    // Add First-Level Administrative States/Provinces (fade in at zoom >= 3.2)
+    if (!m.getLayer('terralens-state-boundaries-line')) {
+      m.addLayer(
+        {
+          id: 'terralens-state-boundaries-line',
+          type: 'line',
+          source: stateLineSource,
+          minzoom: 3.2,
+          paint: {
+            'line-color': '#f59e0b',
+            'line-width': ['interpolate', ['linear'], ['zoom'], 3.2, 0.4, 6, 1.0],
+            'line-opacity': ['interpolate', ['linear'], ['zoom'], 3.2, 0.0, 4.5, 0.55],
+            'line-dasharray': [2, 2],
+          },
+        },
+        m.getLayer('observation-points') ? 'observation-points' : undefined
+      );
+    }
+
+    // Country hover popup & selection
+    const countryPopup = new maplibregl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      offset: 10,
+      className: 'terralens-country-popup',
+    });
+
+    const onCountryMouseMove = (e: maplibregl.MapMouseEvent) => {
+      if (m.getCanvas().style.cursor === 'pointer') return; // Observation points take precedence
+      const features = m.queryRenderedFeatures(e.point, { layers: ['terralens-country-fills'] });
+      if (features.length > 0) {
+        const feat = features[0];
+        const props = feat.properties || {};
+        const name = props.name || props.formal_name || 'Country';
+        const iso = props.iso_a3 || props.iso_a2 || '';
+        const cont = props.continent || '';
+
+        countryPopup
+          .setLngLat(e.lngLat)
+          .setHTML(
+            `<div style="background:#090d16; color:#f8fafc; font-family:monospace; padding:4px 8px; border-radius:6px; border:1px solid #334155; font-size:10px;">
+              <span style="color:#38bdf8; font-weight:600;">${name}</span>
+              ${iso ? `<span style="color:#64748b; margin-left:4px;">[${iso}]</span>` : ''}
+              ${cont ? `<div style="color:#94a3b8; font-size:9px;">${cont}</div>` : ''}
+            </div>`
+          )
+          .addTo(m);
+      } else {
+        countryPopup.remove();
+      }
+    };
+
+    const onCountryMouseLeave = () => {
+      countryPopup.remove();
+    };
+
+    const onCountryClick = (e: maplibregl.MapMouseEvent) => {
+      const features = m.queryRenderedFeatures(e.point, { layers: ['terralens-country-fills'] });
+      if (features.length > 0) {
+        const props = features[0].properties || {};
+        const iso = props.iso_a3 || props.iso_a2 || '';
+        const place = findPlaceById(props.id || iso) || {
+          id: props.id || `cntry-${iso.toLowerCase()}`,
+          name: props.name || 'Country',
+          category: 'country' as const,
+          lat: Number(props.center_lat) || e.lngLat.lat,
+          lon: Number(props.center_lon) || e.lngLat.lng,
+          level: 2 as const,
+          priority: 85,
+          parentContinent: props.continent,
+        };
+        if (onSelectPlace) {
+          onSelectPlace(place);
+        }
+      }
+    };
+
+    m.on('mousemove', 'terralens-country-fills', onCountryMouseMove);
+    m.on('mouseleave', 'terralens-country-fills', onCountryMouseLeave);
+    m.on('click', 'terralens-country-fills', onCountryClick);
+
+    return () => {
+      m.off('mousemove', 'terralens-country-fills', onCountryMouseMove);
+      m.off('mouseleave', 'terralens-country-fills', onCountryMouseLeave);
+      m.off('click', 'terralens-country-fills', onCountryClick);
+      countryPopup.remove();
+    };
+  }, [mapLoaded, onSelectPlace]);
+
   // Update Data Layers & Highlight Ring
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
@@ -253,19 +426,15 @@ export const MapView: React.FC<MapViewProps> = ({
     const highlightSourceId = 'terralens-selected-highlight';
     const highlightLayerId = 'selected-point-highlight';
 
-    // Remove existing layers if present
-    if (map.current.getLayer(highlightLayerId)) map.current.removeLayer(highlightLayerId);
-    if (map.current.getSource(highlightSourceId)) map.current.removeSource(highlightSourceId);
-    if (map.current.getLayer(layerId)) map.current.removeLayer(layerId);
-    if (map.current.getSource(sourceId)) map.current.removeSource(sourceId);
-
-    if (!data || !data.features || data.features.length === 0) return;
-
-    // Add GeoJSON Source
-    map.current.addSource(sourceId, {
-      type: 'geojson',
-      data: data as any,
-    });
+    if (!data || !data.features || data.features.length === 0) {
+      if (map.current.getSource(sourceId)) {
+        (map.current.getSource(sourceId) as maplibregl.GeoJSONSource).setData({
+          type: 'FeatureCollection',
+          features: [],
+        });
+      }
+      return;
+    }
 
     // Dynamic color expression based on active module & metric
     let circleColor: any = '#38bdf8';
@@ -314,21 +483,40 @@ export const MapView: React.FC<MapViewProps> = ({
       circleRadius = 8;
     }
 
-    map.current.addLayer({
-      id: layerId,
-      type: 'circle',
-      source: sourceId,
-      paint: {
-        'circle-radius': circleRadius,
-        'circle-color': circleColor,
-        'circle-stroke-width': 1.5,
-        'circle-stroke-color': '#080c16',
-        'circle-opacity': 0.88,
-      },
-    });
+    if (map.current.getSource(sourceId)) {
+      (map.current.getSource(sourceId) as maplibregl.GeoJSONSource).setData(data as any);
+      if (map.current.getLayer(layerId)) {
+        map.current.setPaintProperty(layerId, 'circle-color', circleColor);
+        map.current.setPaintProperty(layerId, 'circle-radius', circleRadius);
+      }
+    } else {
+      // Add GeoJSON Source and Layer
+      map.current.addSource(sourceId, {
+        type: 'geojson',
+        data: data as any,
+      });
 
-    // Selected Feature Highlight Ring
-    if (selectedFeature) {
+      map.current.addLayer({
+        id: layerId,
+        type: 'circle',
+        source: sourceId,
+        paint: {
+          'circle-radius': circleRadius,
+          'circle-color': circleColor,
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#080c16',
+          'circle-opacity': 0.88,
+        },
+      });
+    }
+
+    // Selected Feature Highlight Ring with setData updates
+    if (map.current.getSource(highlightSourceId)) {
+      (map.current.getSource(highlightSourceId) as maplibregl.GeoJSONSource).setData({
+        type: 'FeatureCollection',
+        features: selectedFeature ? [selectedFeature as any] : [],
+      });
+    } else if (selectedFeature) {
       map.current.addSource(highlightSourceId, {
         type: 'geojson',
         data: {

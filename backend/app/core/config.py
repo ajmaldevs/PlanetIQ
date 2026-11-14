@@ -1,5 +1,6 @@
 from functools import lru_cache
-from typing import List
+from typing import List, Optional, Union
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,7 +32,31 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
+        "http://0.0.0.0:5173",
     ]
+    CORS_ORIGIN_REGEX: Optional[str] = (
+        r"^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|"
+        r"192\.168\.\d{1,3}\.\d{1,3}|"
+        r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+        r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})"
+        r"(:\d+)?$"
+    )
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str):
+            v_stripped = v.strip()
+            if not v_stripped.startswith("["):
+                return [i.strip() for i in v_stripped.split(",") if i.strip()]
+            import json
+            try:
+                parsed = json.loads(v_stripped)
+                if isinstance(parsed, list):
+                    return [str(i).strip() for i in parsed if str(i).strip()]
+            except Exception:
+                pass
+        return v
 
     # Database Configuration (PostgreSQL + PostGIS)
     POSTGRES_SERVER: str = "localhost"

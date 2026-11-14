@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { Navbar, MainView } from './components/Navbar';
 import { EarthGlobe, EarthModule, ZoomLevel } from './components/EarthGlobe';
 import { MapView } from './components/MapView';
 import { ModuleSelector } from './components/ModuleSelector';
 import { AdaptiveSidePanel, TimeseriesDataPoint } from './components/AdaptiveSidePanel';
-import { TrendDrawer } from './components/TrendDrawer';
+import { TrendDrawer, TrendDrawerStatus } from './components/TrendDrawer';
 import { AssistantView } from './components/AssistantView';
 import { AboutView } from './components/AboutView';
 import { SearchBar } from './components/SearchBar';
@@ -58,7 +58,7 @@ export const App: React.FC = () => {
 
   // Adaptive Zoom and Contextual Side Panel States
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('global');
-  const [_cameraDistance, setCameraDistance] = useState<number>(4.6);
+  const cameraDistanceRef = useRef<number>(4.6);
   const [isIntroVisible, setIsIntroVisible] = useState<boolean>(true);
   const [sidePanelOpen, setSidePanelOpen] = useState<boolean>(false);
   const [centerCoords, setCenterCoords] = useState<{ lat: number; lon: number }>({
@@ -78,6 +78,44 @@ export const App: React.FC = () => {
 
   const [crossSystemData, setCrossSystemData] = useState<CrossSystemResponse | null>(null);
   const dataReqIdRef = useRef(0);
+
+  // Trend drawer state tracking
+  const [trendStatus, setTrendStatus] = useState<TrendDrawerStatus>('idle');
+  const [trendError, setTrendError] = useState<string | null>(null);
+  const trendAbortControllerRef = useRef<AbortController | null>(null);
+  const trendReqIdRef = useRef(0);
+
+  // Authoritative active location coordinates for satellite timeseries query
+  const activeLocation = useMemo(() => {
+    if (selectedFeature) {
+      return {
+        lat: selectedFeature.properties.latitude,
+        lon: selectedFeature.properties.longitude,
+        name:
+          selectedFeature.properties.location_name ||
+          selectedFeature.properties.region_name ||
+          'Selected Observation Point',
+      };
+    }
+    if (selectedPlace) {
+      return {
+        lat: selectedPlace.lat,
+        lon: selectedPlace.lon,
+        name: selectedPlace.name,
+      };
+    }
+    if (centerCoords.lat !== null && centerCoords.lon !== null) {
+      return {
+        lat: centerCoords.lat,
+        lon: centerCoords.lon,
+        name: 'Observed Geographic Center',
+      };
+    }
+    if (activeModule === 'ocean') return { lat: 36.0, lon: -68.0, name: 'North Atlantic Gyre' };
+    if (activeModule === 'atmosphere') return { lat: 6.5, lon: -150.0, name: 'Pacific ITCZ' };
+    if (activeModule === 'land') return { lat: -3.5, lon: -62.0, name: 'Amazon Basin' };
+    return { lat: 0, lon: 0, name: 'Global Equator' };
+  }, [selectedFeature, selectedPlace, centerCoords, activeModule]);
 
   const activeTimeseriesPoints = useMemo((): TimeseriesDataPoint[] | null => {
     if (activeModule === 'atmosphere' && atmosphereTimeseries) {
@@ -117,23 +155,111 @@ export const App: React.FC = () => {
     if (mod === 'land') setMetricType('ndvi');
   };
 
-  // Adaptive Zoom and Center Coordinate handlers with hysteresis
-  const handleZoomChange = (newZoom: ZoomLevel, dist: number) => {
-    setZoomLevel(newZoom);
-    setCameraDistance(dist);
+  // Adaptive Zoom and Center Coordinate handlers with hysteresis and render throttling
+  const handleZoomChange = useCallback((newZoom: ZoomLevel, dist: number) => {
+    cameraDistanceRef.current = dist;
+    setZoomLevel((prev) => (prev !== newZoom ? newZoom : prev));
     setIsIntroVisible((prev) => {
       // Hysteresis: fade out when zoomed below 4.25, restore when zoomed above 4.35
       if (prev && dist < 4.25) return false;
       if (!prev && dist > 4.35) return true;
       return prev;
     });
-  };
+  }, []);
 
-  const handleCenterCoordinatesChange = (lat: number, lon: number) => {
-    setCenterCoords({ lat, lon });
-  };
+  const handleCenterCoordinatesChange = useCallback((lat: number, lon: number) => {
+    setCenterCoords((prev) => {
+      if (Math.abs(prev.lat - lat) < 0.4 && Math.abs(prev.lon - lon) < 0.4) return prev;
+      return { lat, lon };
+    });
+  }, []);
 
-  // Fetch data when module or date changes with request ID sequence tracking to eliminate race conditions
+  // Dedicated Timeseries Loader with AbortController, request ID guard and error categorization
+  const loadTrendTimeseries = useCallback(
+    (lat: number, lon: number, _locationName?: string) => {
+      if (!activeModule) {
+        setTrendStatus('idle');
+        return;
+      }
+
+      // Cancel previous pending timeseries fetch
+      if (trendAbortControllerRef.current) {
+        trendAbortControllerRef.current.abort();
+      }
+      const abortController = new AbortController();
+      trendAbortControllerRef.current = abortController;
+      const reqId = ++trendReqIdRef.current;
+
+      setTrendStatus('loading');
+      setTrendError(null);
+
+      const handleSuccess = (hasData: boolean) => {
+        if (reqId !== trendReqIdRef.current) return;
+        if (!hasData) {
+          setTrendStatus('no_data');
+        } else {
+          setTrendStatus('success');
+        }
+      };
+
+      const handleError = (err: any) => {
+        if (reqId !== trendReqIdRef.current) return;
+        if (err?.name === 'AbortError') return;
+        console.error('Error fetching trend timeseries:', err);
+        const msg = err?.message || 'Failed to fetch satellite timeseries';
+        if (
+          msg.includes('Network') ||
+          msg.includes('Failed to fetch') ||
+          msg.includes('ECONNREFUSED') ||
+          msg.includes('Load failed')
+        ) {
+          setTrendStatus('backend_unavailable');
+          setTrendError('Cannot connect to the scientific backend server. Please verify backend service.');
+        } else {
+          setTrendStatus('error');
+          setTrendError(msg);
+        }
+      };
+
+      if (activeModule === 'atmosphere') {
+        fetchAtmosphereTimeseries(lat, lon, abortController.signal)
+          .then((ts) => {
+            if (reqId !== trendReqIdRef.current) return;
+            setAtmosphereTimeseries(ts);
+            handleSuccess(Boolean(ts && Array.isArray(ts.timeseries) && ts.timeseries.length > 0));
+          })
+          .catch(handleError);
+      } else if (activeModule === 'ocean') {
+        fetchOceanTimeseries(lat, lon, abortController.signal)
+          .then((ts) => {
+            if (reqId !== trendReqIdRef.current) return;
+            setOceanTimeseries(ts);
+            handleSuccess(Boolean(ts && Array.isArray(ts.timeseries) && ts.timeseries.length > 0));
+          })
+          .catch(handleError);
+      } else if (activeModule === 'land') {
+        fetchLandTimeseries(lat, lon, abortController.signal)
+          .then((ts) => {
+            if (reqId !== trendReqIdRef.current) return;
+            setLandTimeseries(ts);
+            handleSuccess(Boolean(ts && Array.isArray(ts.timeseries) && ts.timeseries.length > 0));
+          })
+          .catch(handleError);
+      }
+    },
+    [activeModule]
+  );
+
+  // Automatically synchronize satellite timeseries with active location and module
+  useEffect(() => {
+    if (activeModule) {
+      loadTrendTimeseries(activeLocation.lat, activeLocation.lon, activeLocation.name);
+    } else {
+      setTrendStatus('idle');
+    }
+  }, [activeLocation.lat, activeLocation.lon, activeModule, loadTrendTimeseries]);
+
+  // Fetch spatial observation grid when module or date changes
   useEffect(() => {
     if (!activeModule) return;
     setDataLoading(true);
@@ -144,18 +270,9 @@ export const App: React.FC = () => {
         .then((grid) => {
           if (reqId !== dataReqIdRef.current) return;
           setAtmosphereGrid(grid);
-          if (grid.features.length > 0 && !selectedFeature) {
+          if (grid.features.length > 0 && !selectedFeature && !selectedPlace) {
             setSelectedFeature(grid.features[0]);
           }
-        })
-        .catch(console.error);
-
-      const lat = selectedFeature?.properties.latitude ?? centerCoords.lat ?? 6.5;
-      const lon = selectedFeature?.properties.longitude ?? centerCoords.lon ?? -150.0;
-      fetchAtmosphereTimeseries(lat, lon)
-        .then((ts) => {
-          if (reqId !== dataReqIdRef.current) return;
-          setAtmosphereTimeseries(ts);
         })
         .catch(console.error)
         .finally(() => {
@@ -166,18 +283,9 @@ export const App: React.FC = () => {
         .then((grid) => {
           if (reqId !== dataReqIdRef.current) return;
           setOceanGrid(grid);
-          if (grid.features.length > 0 && !selectedFeature) {
+          if (grid.features.length > 0 && !selectedFeature && !selectedPlace) {
             setSelectedFeature(grid.features[0]);
           }
-        })
-        .catch(console.error);
-
-      const lat = selectedFeature?.properties.latitude ?? centerCoords.lat ?? 36.0;
-      const lon = selectedFeature?.properties.longitude ?? centerCoords.lon ?? -68.0;
-      fetchOceanTimeseries(lat, lon)
-        .then((ts) => {
-          if (reqId !== dataReqIdRef.current) return;
-          setOceanTimeseries(ts);
         })
         .catch(console.error)
         .finally(() => {
@@ -188,18 +296,9 @@ export const App: React.FC = () => {
         .then((grid) => {
           if (reqId !== dataReqIdRef.current) return;
           setLandGrid(grid);
-          if (grid.features.length > 0 && !selectedFeature) {
+          if (grid.features.length > 0 && !selectedFeature && !selectedPlace) {
             setSelectedFeature(grid.features[0]);
           }
-        })
-        .catch(console.error);
-
-      const lat = selectedFeature?.properties.latitude ?? centerCoords.lat ?? -3.5;
-      const lon = selectedFeature?.properties.longitude ?? centerCoords.lon ?? -62.0;
-      fetchLandTimeseries(lat, lon)
-        .then((ts) => {
-          if (reqId !== dataReqIdRef.current) return;
-          setLandTimeseries(ts);
         })
         .catch(console.error)
         .finally(() => {
@@ -219,28 +318,14 @@ export const App: React.FC = () => {
   // Handle Point click on the 3D globe or 2D map
   const handleFeatureSelect = (feat: GeoJSONFeature) => {
     setSelectedFeature(feat);
+    setSelectedPlace(null);
     setSidePanelOpen(true);
-    const lat = feat.properties.latitude;
-    const lon = feat.properties.longitude;
-
-    if (activeModule === 'atmosphere') {
-      fetchAtmosphereTimeseries(lat, lon)
-        .then(setAtmosphereTimeseries)
-        .catch(console.error);
-    } else if (activeModule === 'ocean') {
-      fetchOceanTimeseries(lat, lon)
-        .then(setOceanTimeseries)
-        .catch(console.error);
-    } else if (activeModule === 'land') {
-      fetchLandTimeseries(lat, lon)
-        .then(setLandTimeseries)
-        .catch(console.error);
-    }
   };
 
   // Handle GIS place label selection (cities, countries, states, oceans)
   const handlePlaceSelect = (place: GISPlace) => {
     setSelectedPlace(place);
+    setSelectedFeature(null);
     setSidePanelOpen(true);
   };
 
@@ -257,21 +342,8 @@ export const App: React.FC = () => {
       },
     };
     setSelectedFeature(dummyFeature);
+    setSelectedPlace(null);
     setSidePanelOpen(true);
-
-    if (activeModule === 'atmosphere') {
-      fetchAtmosphereTimeseries(lat, lon)
-        .then(setAtmosphereTimeseries)
-        .catch(console.error);
-    } else if (activeModule === 'ocean') {
-      fetchOceanTimeseries(lat, lon)
-        .then(setOceanTimeseries)
-        .catch(console.error);
-    } else if (activeModule === 'land') {
-      fetchLandTimeseries(lat, lon)
-        .then(setLandTimeseries)
-        .catch(console.error);
-    }
   };
 
   // Search selection handler
@@ -311,10 +383,11 @@ export const App: React.FC = () => {
 
   const explicitLocationName =
     selectedFeature?.properties.location_name ||
-    selectedFeature?.properties.region_name;
+    selectedFeature?.properties.region_name ||
+    selectedPlace?.name;
 
-  const currentLat = selectedFeature?.properties.latitude ?? centerCoords.lat;
-  const currentLon = selectedFeature?.properties.longitude ?? centerCoords.lon;
+  const currentLat = selectedFeature?.properties.latitude ?? selectedPlace?.lat ?? centerCoords.lat;
+  const currentLon = selectedFeature?.properties.longitude ?? selectedPlace?.lon ?? centerCoords.lon;
 
   const geographicContext = resolveGeographicContext(
     currentLat,
@@ -378,6 +451,7 @@ export const App: React.FC = () => {
           center={centerCoords}
           onCenterChange={handleCenterCoordinatesChange}
           selectedPlace={selectedPlace}
+          onSelectPlace={handlePlaceSelect}
           sidePanelOpen={sidePanelOpen}
           trendsOpen={showTrends}
           trendsExpanded={trendsExpanded}
@@ -721,7 +795,11 @@ export const App: React.FC = () => {
                   oceanData={oceanTimeseries}
                   landData={landTimeseries}
                   crossSystemData={crossSystemData}
-                  loading={dataLoading}
+                  loading={trendStatus === 'loading'}
+                  status={trendStatus}
+                  errorMessage={trendError}
+                  selectedLocationName={activeLocation.name}
+                  onRetry={() => loadTrendTimeseries(activeLocation.lat, activeLocation.lon, activeLocation.name)}
                   isOpen={showTrends}
                   onClose={() => setShowTrends(false)}
                   onToggleOpen={() => setShowTrends(!showTrends)}
