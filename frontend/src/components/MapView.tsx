@@ -241,13 +241,13 @@ export const MapView: React.FC<MapViewProps> = ({
       });
 
       const reportZoomState = () => {
-        if (!map.current || isInternalFlyRef.current) return;
+        if (!map.current) return;
         const c = map.current.getCenter();
         const z = map.current.getZoom();
         mapContainer.current?.setAttribute('data-map-zoom', z.toFixed(2));
         mapContainer.current?.setAttribute('data-map-detail-level', getMapDetailLevel(z));
         mapContainer.current?.setAttribute('data-map-center', `${c.lat.toFixed(3)},${c.lng.toFixed(3)}`);
-        if (onZoomChangeRef.current) {
+        if (!isInternalFlyRef.current && onZoomChangeRef.current) {
           const equivDist = mapZoomToDistance(z);
           const equivLevel: ZoomLevel =
             z < 2.3
@@ -262,10 +262,10 @@ export const MapView: React.FC<MapViewProps> = ({
       };
 
       const reportSettledCenter = () => {
-        if (!map.current || isInternalFlyRef.current) return;
+        if (!map.current) return;
         const { lat, lng } = map.current.getCenter();
         mapContainer.current?.setAttribute('data-map-center', `${lat.toFixed(3)},${lng.toFixed(3)}`);
-        onCenterChangeRef.current?.(lat, lng);
+        if (!isInternalFlyRef.current) onCenterChangeRef.current?.(lat, lng);
       };
 
       m.on('zoom', reportZoomState);
@@ -337,7 +337,7 @@ export const MapView: React.FC<MapViewProps> = ({
     if (!wasVisible && visible && map.current) {
       const targetZoom = distanceToMapZoom(cameraDistance ?? 4.6);
       map.current.resize();
-      if (center) {
+      if (center && !selectedPlace && !selectedFeature) {
         map.current.jumpTo({
           center: [center.lon, center.lat],
           zoom: targetZoom,
@@ -345,11 +345,11 @@ export const MapView: React.FC<MapViewProps> = ({
       }
       map.current.resize();
     }
-  }, [visible, mapLoaded, center, cameraDistance]);
+  }, [visible, mapLoaded, center, cameraDistance, selectedPlace, selectedFeature]);
 
   // Synchronize map center when selectedFeature changes
   useEffect(() => {
-    if (!map.current || !mapLoaded || !selectedFeature) return;
+    if (!map.current || !mapLoaded || !visible || !selectedFeature) return;
     const [lon, lat] = selectedFeature.geometry.coordinates;
     isInternalFlyRef.current = true;
     map.current.flyTo({
@@ -360,24 +360,28 @@ export const MapView: React.FC<MapViewProps> = ({
     const timer = setTimeout(() => {
       isInternalFlyRef.current = false;
     }, 700);
-    return () => clearTimeout(timer);
-  }, [selectedFeature, mapLoaded]);
+    return () => {
+      clearTimeout(timer);
+      if (map.current?.isMoving()) map.current.stop();
+      isInternalFlyRef.current = false;
+    };
+  }, [selectedFeature, mapLoaded, visible]);
 
   // Synchronize map center and bounds when selectedPlace changes
   useEffect(() => {
-    if (!map.current || !mapLoaded || !selectedPlace) return;
+    if (!map.current || !mapLoaded || !visible || !selectedPlace) return;
     isInternalFlyRef.current = true;
 
     // Google Maps-style fitBounds if bounding box is available
     if (selectedPlace.bbox && selectedPlace.bbox.length === 4) {
       const [minLon, minLat, maxLon, maxLat] = selectedPlace.bbox;
-      const isDocked =
-        sidePanelOpen && typeof window !== 'undefined' && window.innerWidth >= 1024;
       const padding = {
-        top: 90,
-        bottom: trendsOpen ? (trendsExpanded ? 460 : 320) : 80,
+        // App sizes the map canvas around docked panels and the trend drawer,
+        // so only a small visual gutter is needed here.
+        top: 50,
+        bottom: 50,
         left: 50,
-        right: isDocked ? 430 : 50,
+        right: 50,
       };
 
       const maxZoom =
@@ -423,8 +427,12 @@ export const MapView: React.FC<MapViewProps> = ({
     const timer = setTimeout(() => {
       isInternalFlyRef.current = false;
     }, 1300);
-    return () => clearTimeout(timer);
-  }, [selectedPlace, mapLoaded, sidePanelOpen, trendsOpen, trendsExpanded]);
+    return () => {
+      clearTimeout(timer);
+      if (map.current?.isMoving()) map.current.stop();
+      isInternalFlyRef.current = false;
+    };
+  }, [selectedPlace, mapLoaded, visible, sidePanelOpen, trendsOpen, trendsExpanded]);
 
   // Attach Authoritative Global Natural Earth Country Boundaries & Interactivity
   useEffect(() => {

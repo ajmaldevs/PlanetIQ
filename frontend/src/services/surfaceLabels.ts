@@ -3,6 +3,32 @@ import { GIS_PLACES, GISPlace } from './gisDatabase';
 
 export type ZoomRegime = 'global' | 'continental' | 'country' | 'regional';
 
+const PLACE_NAME_ACRONYMS: Record<string, string> = {
+  EU: 'EU',
+  UK: 'UK',
+  UAE: 'UAE',
+  UN: 'UN',
+  US: 'US',
+  USA: 'USA',
+};
+
+/** Convert source-style uppercase GIS names into readable map labels. */
+export function formatSurfacePlaceName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed !== trimmed.toLocaleUpperCase()) return trimmed;
+  if (PLACE_NAME_ACRONYMS[trimmed]) return PLACE_NAME_ACRONYMS[trimmed];
+
+  const smallWords = new Set(['and', 'of', 'the', '&']);
+  let isFirstWord = true;
+  return trimmed.toLocaleLowerCase().replace(/[^\s-]+/g, (word) => {
+    const formatted = isFirstWord || !smallWords.has(word)
+      ? word.charAt(0).toLocaleUpperCase() + word.slice(1)
+      : word;
+    isFirstWord = false;
+    return formatted;
+  });
+}
+
 export interface SurfaceLabelConfig {
   earthRadius: number;
   maxActivePoolSize?: number;
@@ -203,14 +229,11 @@ export class SurfaceLabelManager {
 
     let fontSize = 21;
     let textColor = '#ffffff';
-    let isUppercase = false;
     let letterSpacing = '0px';
 
     if (place.level === 1) {
       fontSize = place.category === 'ocean' ? 22 : 23;
       textColor = place.category === 'ocean' ? '#7dd3fc' : '#94a3b8';
-      isUppercase = true;
-      letterSpacing = '2px';
     } else if (place.level === 2) {
       fontSize = 20;
       textColor = place.category === 'natural_feature' ? '#38bdf8' : '#ffffff';
@@ -222,7 +245,7 @@ export class SurfaceLabelManager {
       textColor = '#f1f5f9';
     }
 
-    const displayName = isUppercase ? place.name.toUpperCase() : place.name;
+    const displayName = formatSurfacePlaceName(place.name);
 
     ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
     if ('letterSpacing' in ctx) {

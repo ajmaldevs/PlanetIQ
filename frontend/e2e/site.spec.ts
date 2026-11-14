@@ -36,8 +36,16 @@ test('landing page stays inside the viewport at required widths and orientations
 });
 
 test('2D map zoom crosses all geographic detail bands and supports panning', async ({ page }) => {
+  const mapBrowserIssues: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') mapBrowserIssues.push(`console: ${message.text()}`);
+  });
+  page.on('requestfailed', (request) => mapBrowserIssues.push(`request: ${request.url()} ${request.failure()?.errorText ?? ''}`));
+  page.on('response', (response) => {
+    if (response.status() >= 400) mapBrowserIssues.push(`http ${response.status()}: ${response.url()}`);
+  });
   await page.goto('/');
-  await page.getByRole('button', { name: 'Switch to 2D Planar Map View' }).first().click();
+  await page.locator('button[aria-label="Switch to 2D Planar Map View"]:visible').last().click();
   const map = page.locator('[data-map-detail-level]').first();
   await expect(map).toHaveAttribute('data-map-detail-level', 'global');
   const zoomButton = page.getByRole('button', { name: 'Zoom in', exact: true });
@@ -101,6 +109,7 @@ test('2D map zoom crosses all geographic detail bands and supports panning', asy
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, -900);
   await expect(map).toHaveAttribute('data-map-zoom', /[3-9]/);
+  console.log('2D map browser issues:', JSON.stringify(mapBrowserIssues.slice(0, 30)));
 });
 
 test('3D globe zoom updates the imagery scale progressively', async ({ page }) => {
@@ -137,6 +146,108 @@ test('primary pages and geographic search are reachable', async ({ page }) => {
   const search = page.getByRole('textbox', { name: 'Search geographic locations and features' }).first();
   await search.fill('New York');
   await expect(page.getByText('New York', { exact: false }).first()).toBeVisible();
+});
+
+test('geographic selections navigate in 2D and retain their destination across map modes', async ({ page }) => {
+  await page.goto('/');
+  const search = page.locator('input[aria-label="Search geographic locations and features"]:visible').last();
+  const map = page.locator('[data-map-detail-level]').first();
+
+  await search.fill('India');
+  await page.getByRole('button', { name: /^India\b.*Country/i }).first().click();
+  await expect(page.locator('[data-globe-target]')).toHaveAttribute('data-globe-target', 'India');
+  await page.locator('button[aria-label="Switch to 2D Planar Map View"]:visible').last().click();
+  await expect.poll(async () => {
+    const [lat, lon] = (await map.getAttribute('data-map-center') || '').split(',').map(Number);
+    return lat >= 6 && lat <= 36 && lon >= 68 && lon <= 98;
+  }).toBeTruthy();
+  await expect(page.locator('[data-selected-place]')).toHaveAttribute('data-selected-place', 'India');
+
+  // Select a second country before the first transition finishes; the latest
+  // destination must win and must be framed from its geographic bounds.
+  await page.locator('input[aria-label="Search geographic locations and features"]:visible').last().fill('Canada');
+  await page.getByRole('button', { name: /^Canada.*Country/i }).first().click();
+  await expect(page.locator('[data-selected-place]')).toHaveAttribute('data-selected-place', 'Canada');
+  await page.locator('input[aria-label="Search geographic locations and features"]:visible').last().fill('Australia');
+  await page.getByRole('button', { name: /^Australia.*Country/i }).first().click();
+  await expect(page.locator('[data-selected-place]')).toHaveAttribute('data-selected-place', 'Australia');
+  await expect.poll(async () => {
+    const [lat, lon] = (await map.getAttribute('data-map-center') || '').split(',').map(Number);
+    return lat < -5 && lat > -60 && lon > 110 && lon < 160;
+  }).toBeTruthy();
+
+  await page.locator('button[aria-label="Switch to 3D Globe View"]:visible').last().click();
+  await expect(page.locator('[data-globe-target]')).toHaveAttribute('data-globe-target', 'Australia');
+
+  await page.locator('button[aria-label="Switch to 2D Planar Map View"]:visible').last().click();
+  await expect.poll(async () => {
+    const [lat, lon] = (await map.getAttribute('data-map-center') || '').split(',').map(Number);
+    return lat < -5 && lat > -60 && lon > 110 && lon < 160;
+  }).toBeTruthy();
+  await page.locator('input[aria-label="Search geographic locations and features"]:visible').last().fill('Kerala');
+  await page.getByRole('button', { name: /Kerala.*State \/ Province/i }).first().click();
+  await expect.poll(async () => {
+    const [lat, lon] = (await map.getAttribute('data-map-center') || '').split(',').map(Number);
+    return lat >= 8 && lat <= 13 && lon >= 74 && lon <= 78;
+  }).toBeTruthy();
+
+  await page.locator('input[aria-label="Search geographic locations and features"]:visible').last().fill('Kozhikode');
+  await page.getByRole('button', { name: /Kozhikode.*City/i }).first().click();
+  await expect.poll(async () => {
+    const [lat, lon] = (await map.getAttribute('data-map-center') || '').split(',').map(Number);
+    return Math.abs(lat - 11.2524) < 2 && Math.abs(lon - 75.768) < 2;
+  }).toBeTruthy();
+
+  await page.locator('input[aria-label="Search geographic locations and features"]:visible').last().fill('Paris');
+  await page.getByRole('button', { name: /^Paris \(Texas\).*City/i }).first().click();
+  await expect(page.locator('[data-selected-place]')).toHaveAttribute('data-selected-place', 'Paris (Texas)');
+  await expect.poll(async () => {
+    const [lat, lon] = (await map.getAttribute('data-map-center') || '').split(',').map(Number);
+    return Math.abs(lat - 33.6609) < 2 && Math.abs(lon + 95.5555) < 2;
+  }).toBeTruthy();
+
+  await page.locator('input[aria-label="Search geographic locations and features"]:visible').last().fill('Pacific Ocean');
+  await page.getByRole('button', { name: /^PACIFIC OCEAN\s+Ocean System/i }).first().click();
+  await expect.poll(async () => {
+    const [lat, lon] = (await map.getAttribute('data-map-center') || '').split(',').map(Number);
+    const longitudeDelta = ((lon + 160 + 180) % 360 + 360) % 360 - 180;
+    return Math.abs(lat) < 10 && Math.abs(longitudeDelta) < 45;
+  }).toBeTruthy();
+
+  await page.locator('input[aria-label="Search geographic locations and features"]:visible').last().fill('Indian Ocean');
+  const indianOceanResult = page.getByRole('button', { name: /^INDIAN OCEAN\s+Ocean System/i }).first();
+  await expect(indianOceanResult).toBeVisible();
+  await indianOceanResult.press('Enter');
+  await expect(page.locator('[data-selected-place]')).toHaveAttribute('data-selected-place', 'INDIAN OCEAN');
+  await expect(page.locator('[data-globe-target]')).toHaveAttribute('data-globe-target', 'INDIAN OCEAN');
+
+  const displayNames = await page.evaluate(async () => {
+    const { formatSurfacePlaceName } = await import('/src/services/surfaceLabels.ts');
+    return ['INDIA', 'PACIFIC OCEAN', 'AUSTRALIA & OCEANIA', 'USA'].map(formatSurfacePlaceName);
+  });
+  expect(displayNames).toEqual(['India', 'Pacific Ocean', 'Australia & Oceania', 'USA']);
+});
+
+test('mobile touch can select a geographic search suggestion', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const search = page.locator('input[aria-label="Search geographic locations and features"]:visible').last();
+  await search.fill('Kozhikode');
+  const result = page.getByRole('button', { name: /^Kozhikode.*City/i }).first();
+  await expect(result).toBeVisible();
+  const bounds = await result.boundingBox();
+  if (!bounds) throw new Error('Geographic search suggestion is not on screen');
+  await page.touchscreen.tap(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await expect(page.locator('[data-selected-place]')).toHaveAttribute('data-selected-place', 'Kozhikode');
+  await expect(page.locator('[data-globe-target]')).toHaveAttribute('data-globe-target', 'Kozhikode');
+});
+
+test('returning to overview clears active system selections', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /OCEAN/ }).click();
+  await expect(page.getByTitle('Toggle Ocean (SWOT Altimetry)')).toBeVisible();
+  await page.getByTitle('Return to global overview').click();
+  await expect(page.locator('[data-active-modules]')).toHaveAttribute('data-active-modules', '');
 });
 
 test('introduction is remembered after entering exploration', async ({ page }) => {

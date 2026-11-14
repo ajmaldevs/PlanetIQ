@@ -621,7 +621,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
                 </div>
               ) : (
                 <>
-                  <p className="text-slate-300 font-medium">No places found matching "{query}"</p>
+                  <p role="status" className="text-slate-300 font-medium">No geographic places found matching "{query}"</p>
                   <p className="text-[11px] text-slate-500">
                     Try searching country (France), city (Kozhikode), mountain (Everest), river (Nile), or ocean.
                   </p>

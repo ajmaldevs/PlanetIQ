@@ -15,7 +15,7 @@ import { adaptiveQuality, QualityMode } from './services/adaptiveQuality';
 const EarthGlobe = lazy(() => import('./components/EarthGlobe').then((module) => ({ default: module.EarthGlobe })));
 const MapView = lazy(() => import('./components/MapView').then((module) => ({ default: module.MapView })));
 import { resolveGeographicContext } from './services/geography';
-import { GISPlace, searchGISPlaces } from './services/gisDatabase';
+import { findPlaceById, GISPlace, searchGISPlaces } from './services/gisDatabase';
 import {
   fetchSystemHealth,
   fetchAtmosphereGrid,
@@ -374,9 +374,6 @@ export const App: React.FC = () => {
         fetchAtmosphereGrid(selectedDate).then((grid) => {
           if (reqId !== dataReqIdRef.current) return;
           setAtmosphereGrid(grid);
-          if (grid.features.length > 0 && !selectedFeature && !selectedPlace) {
-            setSelectedFeature(grid.features[0]);
-          }
         })
       );
     }
@@ -385,9 +382,6 @@ export const App: React.FC = () => {
         fetchOceanObservations(selectedDate).then((grid) => {
           if (reqId !== dataReqIdRef.current) return;
           setOceanGrid(grid);
-          if (grid.features.length > 0 && !selectedFeature && !selectedPlace) {
-            setSelectedFeature(grid.features[0]);
-          }
         })
       );
     }
@@ -396,9 +390,6 @@ export const App: React.FC = () => {
         fetchLandGrid(selectedDate).then((grid) => {
           if (reqId !== dataReqIdRef.current) return;
           setLandGrid(grid);
-          if (grid.features.length > 0 && !selectedFeature && !selectedPlace) {
-            setSelectedFeature(grid.features[0]);
-          }
         })
       );
     }
@@ -421,6 +412,8 @@ export const App: React.FC = () => {
   const handleFeatureSelect = (feat: GeoJSONFeature) => {
     setSelectedFeature(feat);
     setSelectedPlace(null);
+    const [lon, lat] = feat.geometry.coordinates;
+    setCenterCoords({ lat, lon });
     setSidePanelOpen(true);
   };
 
@@ -428,6 +421,7 @@ export const App: React.FC = () => {
   const handlePlaceSelect = (place: GISPlace) => {
     setSelectedPlace(place);
     setSelectedFeature(null);
+    setCenterCoords({ lat: place.lat, lon: place.lon });
     setSidePanelOpen(true);
   };
 
@@ -497,30 +491,35 @@ export const App: React.FC = () => {
     let resolvedIsoA3 = (placeObj as any)?.iso_a3;
     let resolvedIsoA2 = (placeObj as any)?.iso_a2;
 
-    // If no bbox provided in placeObj, check client-side GIS database
-    if (!resolvedBbox) {
-      const gisMatches = searchGISPlaces(name);
-      if (gisMatches.length > 0) {
-        resolvedBbox = gisMatches[0].bbox;
-        resolvedIsoA3 = resolvedIsoA3 || gisMatches[0].iso_a3;
-        resolvedIsoA2 = resolvedIsoA2 || gisMatches[0].iso_a2;
-      }
-    }
+    // Match the exact result first; name-only matching can select a different
+    // place when several countries or cities share the same name.
+    const gisMatches = searchGISPlaces(name);
+    const localPlace = ((placeObj as any)?.id ? findPlaceById((placeObj as any).id) : undefined) ||
+      gisMatches.find((candidate) =>
+        Math.abs(candidate.lat - lat) < 0.5 && Math.abs(candidate.lon - lon) < 0.5
+      ) || gisMatches.find((candidate) =>
+        candidate.name.toLowerCase() === name.toLowerCase() &&
+        (!((placeObj as any)?.parentCountry || (placeObj as any)?.parent_country) ||
+          candidate.parentCountry?.toLowerCase() === String((placeObj as any)?.parentCountry || (placeObj as any)?.parent_country).toLowerCase())
+      );
+    resolvedBbox = resolvedBbox || localPlace?.bbox;
+    resolvedIsoA3 = resolvedIsoA3 || localPlace?.iso_a3;
+    resolvedIsoA2 = resolvedIsoA2 || localPlace?.iso_a2;
 
     const canonicalPlace: GISPlace = {
       id: (placeObj as any)?.id || `search-${lat}-${lon}`,
       name,
-      formal_name: (placeObj as any)?.formal_name,
+      formal_name: (placeObj as any)?.formal_name || localPlace?.formal_name,
       iso_a2: resolvedIsoA2,
       iso_a3: resolvedIsoA3,
       lat,
       lon,
-      category: mapPlaceCategory((placeObj as any)?.category),
+      category: mapPlaceCategory((placeObj as any)?.category || localPlace?.category),
       level: ((placeObj as any)?.level as 1 | 2 | 3 | 4) || 2,
-      priority: (placeObj as any)?.priority || 50,
-      parentCountry: (placeObj as any)?.parentCountry || (placeObj as any)?.parent_country,
+      priority: (placeObj as any)?.priority || localPlace?.priority || 50,
+      parentCountry: (placeObj as any)?.parentCountry || (placeObj as any)?.parent_country || localPlace?.parentCountry,
       parentState: (placeObj as any)?.parentState || (placeObj as any)?.parent_state,
-      parentContinent: (placeObj as any)?.parentContinent || (placeObj as any)?.parent_continent,
+      parentContinent: (placeObj as any)?.parentContinent || (placeObj as any)?.parent_continent || localPlace?.parentContinent,
       bbox: resolvedBbox,
       detail: (placeObj as any)?.detail,
     };
@@ -552,7 +551,11 @@ export const App: React.FC = () => {
   );
 
   return (
-    <div className="h-dvh w-full bg-[#05070b] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black overflow-hidden relative select-none">
+    <div
+      className="h-dvh w-full bg-[#05070b] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black overflow-hidden relative select-none"
+      data-selected-place={selectedPlace?.name || ''}
+      data-active-modules={activeModules.join(',')}
+    >
       {/* 3D Realistic Earth Globe Canvas */}
       <Suspense fallback={null}><EarthGlobe
         activeModule={activeModule}
@@ -825,10 +828,12 @@ export const App: React.FC = () => {
                 <button
                   onClick={() => {
                     setActiveModule(null);
+                    setActiveModules([]);
                     setSelectedFeature(null);
                     setSelectedPlace(null);
                     setSidePanelOpen(false);
                     setShowTrends(false);
+                    setTrendsExpanded(false);
                   }}
                   className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-800 transition-colors"
                   title="Return to global overview"

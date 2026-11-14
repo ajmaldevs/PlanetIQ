@@ -45,7 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               setCurrentView('explore');
               if (onResetExplore) onResetExplore();
             }}
-            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
+            className={`px-1.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
               currentView === 'explore'
                 ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
@@ -56,7 +56,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setCurrentView('catalog')}
-            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
+            className={`px-1.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
               currentView === 'catalog'
                 ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
@@ -67,7 +67,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setCurrentView('assistant')}
-            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
+            className={`px-1.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
               currentView === 'assistant'
                 ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
@@ -78,7 +78,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setCurrentView('about')}
-            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
+            className={`px-1.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
               currentView === 'about'
                 ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'

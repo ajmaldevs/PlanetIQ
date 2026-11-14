@@ -855,7 +855,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
 
   // Handle fly-to when selectedPlace changes with Google Earth-style dynamic altitude framing
   useEffect(() => {
-    if (!selectedPlace) return;
+    if (!selectedPlace || !visible || !isReady) return;
     let targetDist: number;
 
     if (selectedPlace.bbox && selectedPlace.bbox.length === 4) {
@@ -892,18 +892,18 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     }
 
     flyToCoordinates(selectedPlace.lat, selectedPlace.lon, targetDist, 1100);
-  }, [selectedPlace]);
+  }, [selectedPlace, visible, isReady]);
 
   // Synchronize 3D camera orientation with geographic center and distance when restoring from 2D mode
   useEffect(() => {
-    if (!prevVisibleRef.current && visible && center && isReady) {
+    if (!prevVisibleRef.current && visible && center && isReady && !selectedPlace && !selectedFeature) {
       const targetDist = cameraDistance
         ? Math.max(minDistance, Math.min(maxDistance, cameraDistance))
         : currentCameraDistance.current;
       flyToCoordinates(center.lat, center.lon, targetDist, 750);
     }
     prevVisibleRef.current = visible;
-  }, [visible, center, isReady, cameraDistance]);
+  }, [visible, center, isReady, cameraDistance, selectedPlace, selectedFeature]);
 
   // Synchronize selected observation marker halo for breathing pulse
   useEffect(() => {
@@ -1221,6 +1221,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       className={`transition-opacity duration-300 ${
         visible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
+      data-globe-target={selectedPlace?.name || selectedFeature?.properties.location_name || ''}
     >
       {/* Full-Viewport Unrestricted 3D Earth Canvas Mount */}
       <div

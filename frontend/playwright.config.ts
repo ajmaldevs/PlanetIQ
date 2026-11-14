@@ -8,6 +8,7 @@ export default defineConfig({
     baseURL: 'http://127.0.0.1:5173',
     channel: 'chrome',
     headless: true,
+    hasTouch: true,
     viewport: { width: 1280, height: 800 },
     trace: 'retain-on-failure',
   },
