@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { Navbar, MainView } from './components/Navbar';
 import { EarthGlobe, EarthModule, ZoomLevel } from './components/EarthGlobe';
 import { MapView } from './components/MapView';
 import { ModuleSelector } from './components/ModuleSelector';
-import { AdaptiveSidePanel } from './components/AdaptiveSidePanel';
+import { AdaptiveSidePanel, TimeseriesDataPoint } from './components/AdaptiveSidePanel';
 import { TrendDrawer } from './components/TrendDrawer';
 import { AssistantView } from './components/AssistantView';
 import { AboutView } from './components/AboutView';
@@ -62,6 +62,29 @@ export const App: React.FC = () => {
   const [landTimeseries, setLandTimeseries] = useState<LandTimeSeriesResponse | null>(null);
 
   const [crossSystemData, setCrossSystemData] = useState<CrossSystemResponse | null>(null);
+  const dataReqIdRef = useRef(0);
+
+  const activeTimeseriesPoints = useMemo((): TimeseriesDataPoint[] | null => {
+    if (activeModule === 'atmosphere' && atmosphereTimeseries) {
+      return atmosphereTimeseries.timeseries.map((pt) => ({
+        date: pt.date,
+        value: metricType === 'rate' ? pt.precipitation_rate_mm_hr : pt.precipitation_accumulated_mm,
+      }));
+    }
+    if (activeModule === 'ocean' && oceanTimeseries) {
+      return oceanTimeseries.timeseries.map((pt) => ({
+        date: pt.date,
+        value: pt.ssha_mean_m,
+      }));
+    }
+    if (activeModule === 'land' && landTimeseries) {
+      return landTimeseries.timeseries.map((pt) => ({
+        date: pt.date,
+        value: pt.ndvi,
+      }));
+    }
+    return null;
+  }, [activeModule, metricType, atmosphereTimeseries, oceanTimeseries, landTimeseries]);
 
   // Health check on mount
   useEffect(() => {
@@ -92,14 +115,16 @@ export const App: React.FC = () => {
     setCenterCoords({ lat, lon });
   };
 
-  // Fetch data when module or date changes
+  // Fetch data when module or date changes with request ID sequence tracking to eliminate race conditions
   useEffect(() => {
     if (!activeModule) return;
     setDataLoading(true);
+    const reqId = ++dataReqIdRef.current;
 
     if (activeModule === 'atmosphere') {
       fetchAtmosphereGrid(selectedDate)
         .then((grid) => {
+          if (reqId !== dataReqIdRef.current) return;
           setAtmosphereGrid(grid);
           if (grid.features.length > 0 && !selectedFeature) {
             setSelectedFeature(grid.features[0]);
@@ -110,12 +135,18 @@ export const App: React.FC = () => {
       const lat = selectedFeature?.properties.latitude ?? 6.5;
       const lon = selectedFeature?.properties.longitude ?? -150.0;
       fetchAtmosphereTimeseries(lat, lon)
-        .then(setAtmosphereTimeseries)
+        .then((ts) => {
+          if (reqId !== dataReqIdRef.current) return;
+          setAtmosphereTimeseries(ts);
+        })
         .catch(console.error)
-        .finally(() => setDataLoading(false));
+        .finally(() => {
+          if (reqId === dataReqIdRef.current) setDataLoading(false);
+        });
     } else if (activeModule === 'ocean') {
       fetchOceanObservations(selectedDate)
         .then((grid) => {
+          if (reqId !== dataReqIdRef.current) return;
           setOceanGrid(grid);
           if (grid.features.length > 0 && !selectedFeature) {
             setSelectedFeature(grid.features[0]);
@@ -126,12 +157,18 @@ export const App: React.FC = () => {
       const lat = selectedFeature?.properties.latitude ?? 36.0;
       const lon = selectedFeature?.properties.longitude ?? -68.0;
       fetchOceanTimeseries(lat, lon)
-        .then(setOceanTimeseries)
+        .then((ts) => {
+          if (reqId !== dataReqIdRef.current) return;
+          setOceanTimeseries(ts);
+        })
         .catch(console.error)
-        .finally(() => setDataLoading(false));
+        .finally(() => {
+          if (reqId === dataReqIdRef.current) setDataLoading(false);
+        });
     } else if (activeModule === 'land') {
       fetchLandGrid(selectedDate)
         .then((grid) => {
+          if (reqId !== dataReqIdRef.current) return;
           setLandGrid(grid);
           if (grid.features.length > 0 && !selectedFeature) {
             setSelectedFeature(grid.features[0]);
@@ -142,14 +179,22 @@ export const App: React.FC = () => {
       const lat = selectedFeature?.properties.latitude ?? -3.5;
       const lon = selectedFeature?.properties.longitude ?? -62.0;
       fetchLandTimeseries(lat, lon)
-        .then(setLandTimeseries)
+        .then((ts) => {
+          if (reqId !== dataReqIdRef.current) return;
+          setLandTimeseries(ts);
+        })
         .catch(console.error)
-        .finally(() => setDataLoading(false));
+        .finally(() => {
+          if (reqId === dataReqIdRef.current) setDataLoading(false);
+        });
     }
 
     // Also fetch cross system teleconnection data for trends
     fetchCrossSystemAnalysis('enso_walker')
-      .then(setCrossSystemData)
+      .then((data) => {
+        if (reqId !== dataReqIdRef.current) return;
+        setCrossSystemData(data);
+      })
       .catch(console.error);
   }, [activeModule, selectedDate]);
 
@@ -345,6 +390,7 @@ export const App: React.FC = () => {
           onOpenDatasetInfo={() => setShowDatasetInfo(true)}
           zoomLevel={zoomLevel}
           geographicContext={geographicContext}
+          timeseriesData={activeTimeseriesPoints}
           isOpen={sidePanelOpen}
           onClose={() => setSidePanelOpen(false)}
         />

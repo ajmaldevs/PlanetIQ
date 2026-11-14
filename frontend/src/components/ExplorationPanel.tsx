@@ -117,7 +117,7 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
     const sshVal = selectedFeature?.properties.ssh_karin_m;
     const val = metricType === 'ssh' ? sshVal : sshaVal;
 
-    observationValue = val !== undefined ? `${val > 0 && metricType !== 'ssh' ? '+' : ''}${val}` : '+0.25';
+    observationValue = val !== undefined ? `${val > 0 && metricType !== 'ssh' ? '+' : ''}${val}` : 'Unavailable';
     observationUnit = 'meters (m)';
 
     if (sshaVal !== undefined) {
@@ -140,11 +140,11 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
 
     if (metricType === 'rate') {
       observationLabel = 'Average Rainfall Rate';
-      observationValue = rateVal !== undefined ? `${rateVal}` : '0.35';
+      observationValue = rateVal !== undefined ? `${rateVal}` : 'Unavailable';
       observationUnit = 'mm/hr';
     } else {
       observationLabel = 'Total Monthly Rain Depth';
-      observationValue = accVal !== undefined ? `${accVal}` : '245.0';
+      observationValue = accVal !== undefined ? `${accVal}` : 'Unavailable';
       observationUnit = 'mm';
     }
 
@@ -169,7 +169,7 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
 
     observationLabel = metricType === 'evi' ? 'Enhanced Veg Index (EVI)' : 'Normalized Difference Veg Index (NDVI)';
     const val = metricType === 'evi' ? eviVal : ndviVal;
-    observationValue = val !== undefined ? `${val}` : '0.78';
+    observationValue = val !== undefined ? `${val}` : 'Unavailable';
     observationUnit = 'ratio (0 to 1)';
 
     if (vciVal !== undefined) {
@@ -178,19 +178,10 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
     }
   }
 
-  // Calculate synthetic date-to-date comparison delta for scientific exploration
+  // Calculate actual period-to-period delta
   let comparisonDelta = '';
   if (isCompareMode && selectedFeature) {
-    if (activeModule === 'ocean') {
-      const delta = Math.round(((selectedFeature.properties.ssha_karin_m ?? 0.25) - 0.12) * 100) / 100;
-      comparisonDelta = `Δ SSHA: ${delta > 0 ? '+' : ''}${delta} m vs ${compareDate}`;
-    } else if (activeModule === 'atmosphere') {
-      const delta = Math.round(((selectedFeature.properties.precipitation_accumulated_mm ?? 220) - 180) * 10) / 10;
-      comparisonDelta = `Δ Rain: ${delta > 0 ? '+' : ''}${delta} mm vs ${compareDate}`;
-    } else if (activeModule === 'land') {
-      const delta = Math.round(((selectedFeature.properties.ndvi ?? 0.75) - 0.62) * 100) / 100;
-      comparisonDelta = `Δ NDVI: ${delta > 0 ? '+' : ''}${delta} vs ${compareDate}`;
-    }
+    comparisonDelta = `Comparison available when historical sensor pass data exists for ${compareDate}`;
   }
 
   const handleTriggerAI = () => {

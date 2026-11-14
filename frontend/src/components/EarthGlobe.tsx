@@ -45,6 +45,30 @@ function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector
   );
 }
 
+// Smooth cubic ease-in-out easing function for time-based camera animations
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+// Calculate shortest angular difference on circle [-PI, PI] to avoid spinning the wrong way
+function getShortestAngleDelta(current: number, target: number): number {
+  let diff = (target - current) % (Math.PI * 2);
+  if (diff > Math.PI) diff -= Math.PI * 2;
+  if (diff < -Math.PI) diff += Math.PI * 2;
+  return diff;
+}
+
+interface CameraTransition {
+  startTime: number;
+  duration: number;
+  startX: number;
+  startY: number;
+  startDist: number;
+  targetX: number;
+  targetY: number;
+  targetDist: number;
+}
+
 // Generate high-resolution 2D canvas text sprites with dark contrast halos and category styling
 function createGISLabelSprite(place: GISPlace): THREE.Sprite {
   const canvas = document.createElement('canvas');
@@ -217,7 +241,11 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const earthShadersRef = useRef<EarthDayNightShaderBundle | null>(null);
   const animFrameIdRef = useRef<number | null>(null);
 
-  // Interaction & camera animation state
+  // Interaction state machine ('idle' | 'dragging' | 'transitioning')
+  type InteractionState = 'idle' | 'dragging' | 'transitioning';
+  const interactionStateRef = useRef<InteractionState>('idle');
+  const activeTransitionRef = useRef<CameraTransition | null>(null);
+
   const isDraggingRef = useRef(false);
   const prevMousePos = useRef({ x: 0, y: 0 });
   const targetRotation = useRef({ x: 0.12, y: -0.6 });
@@ -228,27 +256,26 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const minDistance = 2.15; // Camera can zoom in deep to close orbit (~250km) for high-res tile inspection
   const maxDistance = 6.8;  // Wide space perspective
 
-  // Fly-to camera animation
-  const isFlyingToRef = useRef(false);
-  const flyToTarget = useRef<{ x: number; y: number } | null>(null);
-
   const [isReady, setIsReady] = useState(false);
 
-  // Smoothly glide camera and rotate to center specific lat/lon
-  const flyToCoordinates = (lat: number, lon: number, targetDist?: number) => {
+  // Time-based camera fly-to with cubic easing and shortest angular arc
+  const flyToCoordinates = (lat: number, lon: number, targetDist?: number, duration: number = 1100) => {
     const targetY = -((lon + 90) * (Math.PI / 180));
-    const targetX = lat * (Math.PI / 180);
+    const targetX = Math.max(-1.15, Math.min(1.15, lat * (Math.PI / 180)));
+    const diffY = getShortestAngleDelta(currentRotation.current.y, targetY);
 
-    flyToTarget.current = {
-      x: Math.max(-1.15, Math.min(1.15, targetX)),
-      y: targetY,
+    activeTransitionRef.current = {
+      startTime: performance.now(),
+      duration,
+      startX: currentRotation.current.x,
+      startY: currentRotation.current.y,
+      startDist: currentCameraDistance.current,
+      targetX,
+      targetY: currentRotation.current.y + diffY,
+      targetDist: targetDist !== undefined ? Math.max(minDistance, Math.min(maxDistance, targetDist)) : currentCameraDistance.current,
     };
-    isFlyingToRef.current = true;
+    interactionStateRef.current = 'transitioning';
     lastInteractionTime.current = Date.now();
-
-    if (targetDist !== undefined) {
-      targetCameraDistance.current = targetDist;
-    }
   };
 
   // Check if cursor coordinates intersect the Earth sphere
@@ -419,32 +446,35 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       // Slower, serene rotation: 1 revolution every 9 minutes (~0.0116 rad/sec)
       const now = Date.now();
       const timeSinceInteraction = now - lastInteractionTime.current;
-      if (!isDraggingRef.current && !isFlyingToRef.current && timeSinceInteraction > 2500) {
+      if (interactionStateRef.current === 'idle' && timeSinceInteraction > 2500) {
         targetRotation.current.y += 0.0116 * delta;
       }
 
-      // Smooth orientation interpolation using shortest spherical angular arc
-      if (isFlyingToRef.current && flyToTarget.current) {
-        currentRotation.current.x += (flyToTarget.current.x - currentRotation.current.x) * 0.08;
+      // Time-based camera transitions vs frame-rate independent exponential smoothing
+      if (interactionStateRef.current === 'transitioning' && activeTransitionRef.current) {
+        const trans = activeTransitionRef.current;
+        const elapsed = (timestamp - trans.startTime) / trans.duration;
+        const progress = Math.min(1.0, Math.max(0.0, elapsed));
+        const ease = easeInOutCubic(progress);
 
-        let diffY = (flyToTarget.current.y - currentRotation.current.y) % (Math.PI * 2);
-        if (diffY > Math.PI) diffY -= Math.PI * 2;
-        if (diffY < -Math.PI) diffY += Math.PI * 2;
-        currentRotation.current.y += diffY * 0.08;
+        currentRotation.current.x = trans.startX + (trans.targetX - trans.startX) * ease;
+        currentRotation.current.y = trans.startY + (trans.targetY - trans.startY) * ease;
+        currentCameraDistance.current = trans.startDist + (trans.targetDist - trans.startDist) * ease;
 
         targetRotation.current.x = currentRotation.current.x;
         targetRotation.current.y = currentRotation.current.y;
-        if (
-          Math.abs(flyToTarget.current.x - currentRotation.current.x) < 0.002 &&
-          Math.abs(diffY) < 0.002
-        ) {
-          targetRotation.current.x = flyToTarget.current.x;
-          targetRotation.current.y = flyToTarget.current.y;
-          isFlyingToRef.current = false;
+        targetCameraDistance.current = currentCameraDistance.current;
+
+        if (progress >= 1.0) {
+          activeTransitionRef.current = null;
+          interactionStateRef.current = 'idle';
         }
       } else {
-        currentRotation.current.x += (targetRotation.current.x - currentRotation.current.x) * 0.12;
-        currentRotation.current.y += (targetRotation.current.y - currentRotation.current.y) * 0.12;
+        // Frame-rate independent exponential smoothing for dragging, wheel zoom, and idle rotation
+        const smoothFactor = 1.0 - Math.exp(-12.0 * delta);
+        currentRotation.current.x += (targetRotation.current.x - currentRotation.current.x) * smoothFactor;
+        currentRotation.current.y += (targetRotation.current.y - currentRotation.current.y) * smoothFactor;
+        currentCameraDistance.current += (targetCameraDistance.current - currentCameraDistance.current) * smoothFactor;
       }
 
       if (earthGroupRef.current) {
@@ -458,13 +488,11 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       }
 
       // Smooth camera position and zoom interpolation with desktop panel glide
-      currentCameraDistance.current +=
-        (targetCameraDistance.current - currentCameraDistance.current) * 0.12;
-
       const shouldShift =
         sidePanelOpenRef.current && window.innerWidth >= 1024 && window.innerWidth < 1536;
       targetCameraX.current = shouldShift ? -0.42 : 0;
-      currentCameraX.current += (targetCameraX.current - currentCameraX.current) * 0.08;
+      const xSmoothFactor = 1.0 - Math.exp(-8.0 * delta);
+      currentCameraX.current += (targetCameraX.current - currentCameraX.current) * xSmoothFactor;
 
       if (cameraRef.current) {
         cameraRef.current.position.z = currentCameraDistance.current;
@@ -524,7 +552,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         imageryLODRef.current.update(distNow, centerLat, centerLon);
       }
 
-      // 18. Scalable GIS Labels: Backface Culling, LOD Cross-Fade & 2D Screen-Space Collision Detection
+      // 18. Scalable GIS Labels: True Spherical Horizon Culling, LOD Cross-Fade & 2D Screen-Space Collision Detection
       if (labelsGroupRef.current && cameraRef.current && earthMeshRef.current) {
         const camera = cameraRef.current;
         const cameraPos = camera.position;
@@ -532,6 +560,11 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         const dist = currentCameraDistance.current;
         const screenWidth = window.innerWidth;
         const screenHeight = window.innerHeight;
+
+        // True geometric spherical horizon threshold: cos(theta_h) = R / d
+        const camDistToCenter = cameraPos.distanceTo(earthWorldPos);
+        const horizonThreshold = earthRadius / camDistToCenter;
+        tempViewDir.copy(cameraPos).sub(earthWorldPos).normalize(); // unit vector from Earth center to camera
 
         interface LabelCandidate {
           sprite: THREE.Sprite;
@@ -574,13 +607,14 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
             return;
           }
 
-          // Backface Culling: check angle between surface normal and view direction
+          // True Spherical Geometric Horizon Culling:
+          // A surface point is visible if and only if dot(P_norm, V_cam) > R / d
           sprite.getWorldPosition(tempWorldPos);
           tempNormal.copy(tempWorldPos).sub(earthWorldPos).normalize();
-          tempViewDir.copy(cameraPos).sub(tempWorldPos).normalize();
-          const dot = tempNormal.dot(tempViewDir);
+          const dotHorizon = tempNormal.dot(tempViewDir);
 
-          if (dot <= 0.20) {
+          const horizonCutoff = horizonThreshold + 0.015;
+          if (dotHorizon <= horizonCutoff) {
             sprite.visible = false;
             return;
           }
@@ -596,8 +630,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
             return;
           }
 
-          // Soften opacity near the planetary limb/horizon
-          const limbFade = Math.min(1.0, Math.max(0.0, (dot - 0.20) * 3.5));
+          // Soften opacity near the planetary limb/horizon to eliminate hard popping
+          const limbFade = Math.min(1.0, Math.max(0.0, (dotHorizon - horizonCutoff) / 0.14));
           const finalAlpha = limbFade * 0.94 * lodAlpha;
 
           // Bounding box approximation for 2D screen-space collision checks
@@ -695,6 +729,14 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       // Zoom ONLY when pointer is hovering over Earth sphere!
       if (isPointerOverEarth(e.clientX, e.clientY)) {
         e.preventDefault();
+        // Immediately cancel active transition if user initiates wheel zoom
+        if (interactionStateRef.current === 'transitioning') {
+          activeTransitionRef.current = null;
+          targetRotation.current.x = currentRotation.current.x;
+          targetRotation.current.y = currentRotation.current.y;
+          targetCameraDistance.current = currentCameraDistance.current;
+          interactionStateRef.current = 'idle';
+        }
         // Scale zoom increment by camera altitude above Earth surface
         const altitude = Math.max(0.18, currentCameraDistance.current - 1.9);
         const altitudeRatio = Math.min(1.0, altitude / 4.5);
@@ -843,8 +885,15 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   // Mouse / Pointer Drag Handlers with Altitude-Scaled Pan Sensitivity
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!isPointerOverEarth(e.clientX, e.clientY)) return;
+    // Seamless interruption: cancel any active camera transition without snapping
+    if (interactionStateRef.current === 'transitioning') {
+      activeTransitionRef.current = null;
+      targetRotation.current.x = currentRotation.current.x;
+      targetRotation.current.y = currentRotation.current.y;
+      targetCameraDistance.current = currentCameraDistance.current;
+    }
+    interactionStateRef.current = 'dragging';
     isDraggingRef.current = true;
-    isFlyingToRef.current = false;
     prevMousePos.current = { x: e.clientX, y: e.clientY };
     lastInteractionTime.current = Date.now();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
@@ -871,6 +920,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const handlePointerUp = (e: React.PointerEvent) => {
     if (isDraggingRef.current) {
       isDraggingRef.current = false;
+      interactionStateRef.current = 'idle';
       lastInteractionTime.current = Date.now();
       try {
         (e.target as HTMLElement).releasePointerCapture(e.pointerId);
@@ -898,8 +948,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       let lon = theta * (180 / Math.PI) - 180;
       lon = ((((lon + 180) % 360) + 360) % 360) - 180;
 
-      const newDist = Math.max(minDistance, targetCameraDistance.current - 1.25);
-      flyToCoordinates(lat, lon, newDist);
+      const newDist = Math.max(minDistance, currentCameraDistance.current - 1.25);
+      flyToCoordinates(lat, lon, newDist, 950);
     }
   };
 
@@ -944,7 +994,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
               : place.level === 2
               ? 3.8
               : 4.6;
-          flyToCoordinates(place.lat, place.lon, targetDist);
+          flyToCoordinates(place.lat, place.lon, targetDist, 1100);
           return;
         }
       }
@@ -955,28 +1005,74 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const zoomIn = () => {
     const altitude = Math.max(0.18, currentCameraDistance.current - 1.9);
     const altitudeRatio = Math.min(1.0, altitude / 4.5);
-    const step = Math.max(0.35, 0.85 * altitudeRatio);
-    targetCameraDistance.current = Math.max(minDistance, targetCameraDistance.current - step);
+    const step = Math.max(0.4, 0.85 * altitudeRatio);
+    const targetDist = Math.max(minDistance, currentCameraDistance.current - step);
+
+    activeTransitionRef.current = {
+      startTime: performance.now(),
+      duration: 500,
+      startX: currentRotation.current.x,
+      startY: currentRotation.current.y,
+      startDist: currentCameraDistance.current,
+      targetX: currentRotation.current.x,
+      targetY: currentRotation.current.y,
+      targetDist,
+    };
+    interactionStateRef.current = 'transitioning';
     lastInteractionTime.current = Date.now();
   };
 
   const zoomOut = () => {
     const altitude = Math.max(0.18, currentCameraDistance.current - 1.9);
     const altitudeRatio = Math.min(1.0, altitude / 4.5);
-    const step = Math.max(0.35, 0.85 * altitudeRatio);
-    targetCameraDistance.current = Math.min(maxDistance, targetCameraDistance.current + step);
+    const step = Math.max(0.4, 0.85 * altitudeRatio);
+    const targetDist = Math.min(maxDistance, currentCameraDistance.current + step);
+
+    activeTransitionRef.current = {
+      startTime: performance.now(),
+      duration: 500,
+      startX: currentRotation.current.x,
+      startY: currentRotation.current.y,
+      startDist: currentCameraDistance.current,
+      targetX: currentRotation.current.x,
+      targetY: currentRotation.current.y,
+      targetDist,
+    };
+    interactionStateRef.current = 'transitioning';
     lastInteractionTime.current = Date.now();
   };
 
   const resetOrientation = () => {
-    targetRotation.current = { x: 0.12, y: -0.6 };
-    targetCameraDistance.current = 4.6;
-    isFlyingToRef.current = false;
+    const targetX = 0.12;
+    const targetY = -0.6;
+    const diffY = getShortestAngleDelta(currentRotation.current.y, targetY);
+
+    activeTransitionRef.current = {
+      startTime: performance.now(),
+      duration: 1000,
+      startX: currentRotation.current.x,
+      startY: currentRotation.current.y,
+      startDist: currentCameraDistance.current,
+      targetX,
+      targetY: currentRotation.current.y + diffY,
+      targetDist: 4.6,
+    };
+    interactionStateRef.current = 'transitioning';
     lastInteractionTime.current = Date.now();
   };
 
   const orientNorthUp = () => {
-    targetRotation.current.x = 0; // Align equator directly with horizontal axis
+    activeTransitionRef.current = {
+      startTime: performance.now(),
+      duration: 700,
+      startX: currentRotation.current.x,
+      startY: currentRotation.current.y,
+      startDist: currentCameraDistance.current,
+      targetX: 0,
+      targetY: currentRotation.current.y,
+      targetDist: currentCameraDistance.current,
+    };
+    interactionStateRef.current = 'transitioning';
     lastInteractionTime.current = Date.now();
   };
 

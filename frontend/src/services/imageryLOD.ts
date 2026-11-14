@@ -93,14 +93,24 @@ function createSphericalTileGeometry(
   return geom;
 }
 
+interface TileRecord {
+  mesh: THREE.Mesh;
+  loaded: boolean;
+  opacity: number;
+  zoom: number;
+  key: string;
+  generation: number;
+}
+
 export class ImageryLODManager {
   private sphereRadius: number;
   private patchRadius: number;
   private containerGroup: THREE.Group;
-  private activeMeshes: Map<string, THREE.Mesh> = new Map();
+  private activeTiles: Map<string, TileRecord> = new Map();
   private textureCache: Map<string, THREE.Texture> = new Map();
   private textureLoader: THREE.TextureLoader = new THREE.TextureLoader();
   private lastUpdateCenter = { lat: 999, lon: 999, zoom: -1 };
+  private currentGeneration = 0;
   private maxCacheSize = 72;
 
   constructor(sphereRadius = 1.9, containerGroup: THREE.Group) {
@@ -126,14 +136,33 @@ export class ImageryLODManager {
   }
 
   /**
+   * Get authentic imagery resolution description for currently active tiles
+   */
+  public getResolutionBadge(cameraDistance: number): string {
+    const targetZoom = this.getTargetTileZoom(cameraDistance);
+    switch (targetZoom) {
+      case 8:
+        return 'High-Res Satellite (15m LOD)';
+      case 7:
+        return 'Regional Satellite (30m LOD)';
+      case 5:
+        return 'Country Satellite (60m LOD)';
+      case 3:
+        return 'Continental Satellite (250m LOD)';
+      default:
+        return 'NASA Blue Marble (1km Base)';
+    }
+  }
+
+  /**
    * Update LOD tiles based on current camera distance and facing center coordinates
    */
   public update(cameraDistance: number, centerLat: number, centerLon: number): void {
     const targetZoom = this.getTargetTileZoom(cameraDistance);
 
-    // If global view, clear all active sub-tiles and return
+    // If global view, smoothly clear sub-tiles
     if (targetZoom === 0) {
-      if (this.activeMeshes.size > 0) {
+      if (this.activeTiles.size > 0) {
         this.clearAllTiles();
       }
       return;
@@ -147,6 +176,8 @@ export class ImageryLODManager {
     }
 
     this.lastUpdateCenter = { lat: centerLat, lon: centerLon, zoom: targetZoom };
+    this.currentGeneration++;
+    const currentGen = this.currentGeneration;
 
     // Calculate center tile coordinates
     const centerTile = latLonToTileXY(centerLat, centerLon, targetZoom);
@@ -165,23 +196,25 @@ export class ImageryLODManager {
         const key = `${targetZoom}/${tileX}/${tileY}`;
         requiredTileKeys.add(key);
 
-        if (!this.activeMeshes.has(key)) {
-          this.loadTileMesh(targetZoom, tileX, tileY, key);
+        if (!this.activeTiles.has(key)) {
+          this.loadTileMesh(targetZoom, tileX, tileY, key, currentGen);
+        } else {
+          // Touch active tile to update its generation
+          const tile = this.activeTiles.get(key)!;
+          tile.generation = currentGen;
         }
       }
     }
 
-    // Remove tiles that are no longer required
-    for (const [key, mesh] of this.activeMeshes.entries()) {
+    // Clean up older tiles smoothly:
+    // Only remove tiles that are from completely obsolete viewports/generations
+    // and only if the newer tiles have begun loading/displaying
+    for (const [key, tile] of Array.from(this.activeTiles.entries())) {
       if (!requiredTileKeys.has(key)) {
-        this.containerGroup.remove(mesh);
-        if (mesh.geometry) mesh.geometry.dispose();
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach((m) => m.dispose());
-        } else if (mesh.material) {
-          mesh.material.dispose();
+        // If tile was never loaded or is from a much older generation, dispose it
+        if (!tile.loaded || currentGen - tile.generation > 1) {
+          this.removeTile(key, tile);
         }
-        this.activeMeshes.delete(key);
       }
     }
   }
@@ -189,7 +222,7 @@ export class ImageryLODManager {
   /**
    * Load and mount an individual spherical tile patch
    */
-  private loadTileMesh(z: number, x: number, y: number, key: string): void {
+  private loadTileMesh(z: number, x: number, y: number, key: string, generation: number): void {
     const bounds = tileXYToBounds(x, y, z);
     const geometry = createSphericalTileGeometry(
       bounds.minLat,
@@ -200,17 +233,29 @@ export class ImageryLODManager {
       8
     );
 
-    // Initial transparent placeholder material that smoothly fades in
+    // Initial placeholder material that smoothly cross-fades without z-fighting
     const material = new THREE.MeshBasicMaterial({
       transparent: true,
       opacity: 0.0,
       depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = `lod-tile-${key}`;
     this.containerGroup.add(mesh);
-    this.activeMeshes.set(key, mesh);
+
+    const record: TileRecord = {
+      mesh,
+      loaded: false,
+      opacity: 0.0,
+      zoom: z,
+      key,
+      generation,
+    };
+    this.activeTiles.set(key, record);
 
     const tileUrl = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
 
@@ -219,6 +264,8 @@ export class ImageryLODManager {
       const cachedTexture = this.textureCache.get(tileUrl)!;
       material.map = cachedTexture;
       material.needsUpdate = true;
+      record.loaded = true;
+      record.opacity = 0.98;
       material.opacity = 0.98;
       return;
     }
@@ -227,7 +274,8 @@ export class ImageryLODManager {
     this.textureLoader.load(
       tileUrl,
       (texture) => {
-        if (!this.activeMeshes.has(key)) {
+        // Discard if tile was removed while fetching
+        if (!this.activeTiles.has(key)) {
           texture.dispose();
           return;
         }
@@ -244,13 +292,15 @@ export class ImageryLODManager {
 
         material.map = texture;
         material.needsUpdate = true;
+        record.loaded = true;
 
-        // Smooth fluid fade-in over 240ms
+        // Smooth fluid cross-fade in over 200ms
         let currentOpacity = 0.0;
         const fadeInStep = () => {
-          if (!this.activeMeshes.has(key)) return;
+          if (!this.activeTiles.has(key)) return;
           currentOpacity = Math.min(0.98, currentOpacity + 0.14);
           material.opacity = currentOpacity;
+          record.opacity = currentOpacity;
           if (currentOpacity < 0.98) {
             requestAnimationFrame(fadeInStep);
           }
@@ -258,17 +308,24 @@ export class ImageryLODManager {
         requestAnimationFrame(fadeInStep);
       },
       undefined,
-      (err) => {
-        // Fallback gracefully to base NASA Blue Marble without breaking
-        console.warn(`LOD tile fetch notice for ${key}:`, err);
-        if (this.activeMeshes.has(key)) {
-          this.containerGroup.remove(mesh);
-          geometry.dispose();
-          material.dispose();
-          this.activeMeshes.delete(key);
+      () => {
+        // Graceful fallback to base NASA Blue Marble without breaking or popping
+        if (this.activeTiles.has(key)) {
+          this.removeTile(key, record);
         }
       }
     );
+  }
+
+  private removeTile(key: string, tile: TileRecord): void {
+    this.containerGroup.remove(tile.mesh);
+    if (tile.mesh.geometry) tile.mesh.geometry.dispose();
+    if (Array.isArray(tile.mesh.material)) {
+      tile.mesh.material.forEach((m) => m.dispose());
+    } else if (tile.mesh.material) {
+      tile.mesh.material.dispose();
+    }
+    this.activeTiles.delete(key);
   }
 
   /**
@@ -280,10 +337,9 @@ export class ImageryLODManager {
     const toRemoveCount = entries.length - this.maxCacheSize;
     for (let i = 0; i < toRemoveCount; i++) {
       const [url, texture] = entries[i];
-      // Only dispose if not actively mapped onto a visible mesh
       let isInUse = false;
-      for (const mesh of this.activeMeshes.values()) {
-        if ((mesh.material as THREE.MeshBasicMaterial).map === texture) {
+      for (const tile of this.activeTiles.values()) {
+        if ((tile.mesh.material as THREE.MeshBasicMaterial).map === texture) {
           isInUse = true;
           break;
         }
@@ -296,19 +352,13 @@ export class ImageryLODManager {
   }
 
   /**
-   * Clear all active tile meshes from scene
+   * Clear all active tile meshes from scene cleanly
    */
   public clearAllTiles(): void {
-    for (const mesh of this.activeMeshes.values()) {
-      this.containerGroup.remove(mesh);
-      if (mesh.geometry) mesh.geometry.dispose();
-      if (Array.isArray(mesh.material)) {
-        mesh.material.forEach((m) => m.dispose());
-      } else if (mesh.material) {
-        mesh.material.dispose();
-      }
+    for (const [key, tile] of Array.from(this.activeTiles.entries())) {
+      this.removeTile(key, tile);
     }
-    this.activeMeshes.clear();
+    this.activeTiles.clear();
     this.lastUpdateCenter = { lat: 999, lon: 999, zoom: -1 };
   }
 

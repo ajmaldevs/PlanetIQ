@@ -20,12 +20,18 @@ import {
   Info,
 } from 'lucide-react';
 
+export interface TimeseriesDataPoint {
+  date: string;
+  value: number;
+}
+
 interface AdaptiveSidePanelProps {
   activeModule: EarthModule;
   onSelectModule: (module: EarthModule) => void;
   selectedDate: string;
   setSelectedDate: React.Dispatch<React.SetStateAction<string>>;
   selectedFeature: GeoJSONFeature | null;
+  timeseriesData?: TimeseriesDataPoint[] | null;
   metricType: string;
   setMetricType: (metric: string) => void;
   onSelectPreset: (lat: number, lon: number, name: string) => void;
@@ -46,6 +52,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
   selectedDate,
   setSelectedDate,
   selectedFeature,
+  timeseriesData = null,
   metricType,
   setMetricType,
   onSelectPreset,
@@ -95,26 +102,31 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
   let observationLabel = 'Observation';
   let anomalySummary = '';
   let anomalySeverity: 'normal' | 'noticeable' | 'high' = 'normal';
+  let hasObservation = false;
+  let numericObsValue: number | undefined = undefined;
 
   if (activeModule === 'ocean') {
     observationLabel = metricType === 'ssh' ? 'Sea Surface Height' : 'Sea Surface Height Anomaly (SSHA)';
     const sshaVal = selectedFeature?.properties.ssha_karin_m;
     const sshVal = selectedFeature?.properties.ssh_karin_m;
-    const val = metricType === 'ssh' ? sshVal : sshaVal;
-
-    observationValue = val !== undefined ? `${val > 0 && metricType !== 'ssh' ? '+' : ''}${val}` : '+0.25';
+    numericObsValue = metricType === 'ssh' ? sshVal : sshaVal;
     observationUnit = 'meters (m)';
 
-    if (sshaVal !== undefined) {
-      if (sshaVal >= 0.15) {
-        anomalySummary = `Anticyclonic Warm Eddy (+${sshaVal}m above MSS)`;
-        anomalySeverity = 'high';
-      } else if (sshaVal <= -0.15) {
-        anomalySummary = `Cyclonic Cold Upwelling (${sshaVal}m below MSS)`;
-        anomalySeverity = 'high';
-      } else {
-        anomalySummary = `Normal Geostrophic Sea Height (${sshaVal > 0 ? '+' : ''}${sshaVal}m)`;
-        anomalySeverity = 'normal';
+    if (numericObsValue !== undefined) {
+      hasObservation = true;
+      observationValue = `${numericObsValue > 0 && metricType !== 'ssh' ? '+' : ''}${numericObsValue}`;
+
+      if (sshaVal !== undefined) {
+        if (sshaVal >= 0.15) {
+          anomalySummary = `Anticyclonic Warm Eddy (+${sshaVal}m above MSS)`;
+          anomalySeverity = 'high';
+        } else if (sshaVal <= -0.15) {
+          anomalySummary = `Cyclonic Cold Upwelling (${sshaVal}m below MSS)`;
+          anomalySeverity = 'high';
+        } else {
+          anomalySummary = `Normal Geostrophic Sea Height (${sshaVal > 0 ? '+' : ''}${sshaVal}m)`;
+          anomalySeverity = 'normal';
+        }
       }
     }
   } else if (activeModule === 'atmosphere') {
@@ -125,25 +137,30 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
 
     if (metricType === 'rate') {
       observationLabel = 'Average Rainfall Rate';
-      observationValue = rateVal !== undefined ? `${rateVal}` : '0.35';
+      numericObsValue = rateVal;
       observationUnit = 'mm/hr';
     } else {
       observationLabel = 'Total Monthly Rain Depth';
-      observationValue = accVal !== undefined ? `${accVal}` : '245.0';
+      numericObsValue = accVal;
       observationUnit = 'mm';
     }
 
-    if (anomalyVal !== undefined && normalVal !== undefined) {
-      const pct = Math.round((anomalyVal / Math.max(normalVal, 10)) * 100);
-      if (anomalyVal > 50) {
-        anomalySummary = `High Anomaly: +${anomalyVal}mm (+${pct}% above 1998-2020 normal)`;
-        anomalySeverity = 'high';
-      } else if (anomalyVal < -50) {
-        anomalySummary = `Deficit: ${anomalyVal}mm (${pct}% below 1998-2020 normal)`;
-        anomalySeverity = 'noticeable';
-      } else {
-        anomalySummary = `Within Normal Range (${anomalyVal > 0 ? '+' : ''}${anomalyVal}mm)`;
-        anomalySeverity = 'normal';
+    if (numericObsValue !== undefined) {
+      hasObservation = true;
+      observationValue = `${numericObsValue}`;
+
+      if (anomalyVal !== undefined && normalVal !== undefined) {
+        const pct = Math.round((anomalyVal / Math.max(normalVal, 10)) * 100);
+        if (anomalyVal > 50) {
+          anomalySummary = `High Anomaly: +${anomalyVal}mm (+${pct}% above 1998-2020 normal)`;
+          anomalySeverity = 'high';
+        } else if (anomalyVal < -50) {
+          anomalySummary = `Deficit: ${anomalyVal}mm (${pct}% below 1998-2020 normal)`;
+          anomalySeverity = 'noticeable';
+        } else {
+          anomalySummary = `Within Normal Range (${anomalyVal > 0 ? '+' : ''}${anomalyVal}mm)`;
+          anomalySeverity = 'normal';
+        }
       }
     }
   } else if (activeModule === 'land') {
@@ -153,34 +170,45 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
     const droughtCat = selectedFeature?.properties.drought_category;
 
     observationLabel = metricType === 'evi' ? 'Enhanced Veg Index (EVI)' : 'Normalized Difference Veg Index (NDVI)';
-    const val = metricType === 'evi' ? eviVal : ndviVal;
-    observationValue = val !== undefined ? `${val}` : '0.78';
+    numericObsValue = metricType === 'evi' ? eviVal : ndviVal;
     observationUnit = 'ratio (0 to 1)';
 
-    if (vciVal !== undefined) {
-      anomalySummary = `VCI ${vciVal}% • ${droughtCat || 'Normal Vegetation'}`;
-      anomalySeverity = vciVal < 30 ? 'high' : vciVal > 75 ? 'noticeable' : 'normal';
+    if (numericObsValue !== undefined) {
+      hasObservation = true;
+      observationValue = `${numericObsValue}`;
+
+      if (vciVal !== undefined) {
+        anomalySummary = `VCI ${vciVal}% • ${droughtCat || 'Normal Vegetation'}`;
+        anomalySeverity = vciVal < 30 ? 'high' : vciVal > 75 ? 'noticeable' : 'normal';
+      }
     }
   }
 
-  // Calculate synthetic date-to-date comparison delta
+  // Calculate actual period-to-period delta from real historical measurements
   let comparisonDelta = '';
-  if (isCompareMode && selectedFeature) {
-    if (activeModule === 'ocean') {
-      const delta = Math.round(((selectedFeature.properties.ssha_karin_m ?? 0.25) - 0.12) * 100) / 100;
-      comparisonDelta = `Δ SSHA: ${delta > 0 ? '+' : ''}${delta} m vs ${compareDate}`;
-    } else if (activeModule === 'atmosphere') {
-      const delta = Math.round(((selectedFeature.properties.precipitation_accumulated_mm ?? 220) - 180) * 10) / 10;
-      comparisonDelta = `Δ Rain: ${delta > 0 ? '+' : ''}${delta} mm vs ${compareDate}`;
-    } else if (activeModule === 'land') {
-      const delta = Math.round(((selectedFeature.properties.ndvi ?? 0.75) - 0.62) * 100) / 100;
-      comparisonDelta = `Δ NDVI: ${delta > 0 ? '+' : ''}${delta} vs ${compareDate}`;
+  if (isCompareMode) {
+    if (!hasObservation || numericObsValue === undefined) {
+      comparisonDelta = `Comparison unavailable: location outside satellite swath for ${selectedDate}`;
+    } else if (timeseriesData && timeseriesData.length > 0) {
+      const matchHistorical = timeseriesData.find((p) => p.date === compareDate);
+      if (matchHistorical !== undefined && typeof matchHistorical.value === 'number') {
+        const delta = Math.round((numericObsValue - matchHistorical.value) * 100) / 100;
+        const unitSymbol = activeModule === 'ocean' ? 'm' : activeModule === 'atmosphere' ? (metricType === 'rate' ? 'mm/hr' : 'mm') : '';
+        comparisonDelta = `Δ vs ${compareDate}: ${delta > 0 ? '+' : ''}${delta} ${unitSymbol} (Actual: ${matchHistorical.value})`;
+      } else {
+        comparisonDelta = `No validated historical pass data at this coordinate for ${compareDate}`;
+      }
+    } else {
+      comparisonDelta = `Timeseries data loading for ${compareDate}...`;
     }
   }
 
   const handleTriggerAI = () => {
     if (!onExplainWithAI) return;
-    const prompt = `Explain the scientific observations for ${locationName} (${geographicContext.subtitle}) during ${selectedDate}: observed ${observationLabel} is ${observationValue} ${observationUnit}. What causes this anomaly (${anomalySummary}) and how does it relate to broader Earth system dynamics?`;
+    const obsText = hasObservation
+      ? `observed ${observationLabel} is ${observationValue} ${observationUnit}`
+      : `selected location is outside the immediate swath for ${selectedDate}`;
+    const prompt = `Explain the scientific context for ${locationName} (${geographicContext.subtitle}) during ${selectedDate}: ${obsText}. What are the primary Earth system processes affecting this region?`;
     onExplainWithAI(prompt);
   };
 
@@ -210,6 +238,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
       { name: 'Bay of Bengal Monsoon', lat: 21.0, lon: 88.5 },
       { name: 'Kuroshio Extension', lat: 35.0, lon: 143.0 },
       { name: 'Siberian Taiga', lat: 62.0, lon: 129.0 },
+      { name: 'Kerala Malabar Coast', lat: 10.85, lon: 76.27 },
     ],
     'Australia & Oceania': [
       { name: 'Great Barrier Reef', lat: -18.0, lon: 147.0 },
@@ -293,7 +322,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
               <span className="h-2 w-2 rounded-full bg-cyan-400 shrink-0" />
               <span className="font-semibold text-white capitalize">{activeModule || 'Global Earth'}</span>
               <span className="text-cyan-300 truncate">
-                {observationValue} {observationUnit}
+                {hasObservation ? `${observationValue} ${observationUnit}` : 'No Pass Data'}
               </span>
             </div>
             <button
@@ -351,32 +380,46 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                 <span className="font-mono text-cyan-400">{selectedDate}</span>
               </div>
 
-              <div className="flex items-baseline space-x-2">
-                <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white font-mono">
-                  {dataLoading ? '--' : observationValue}
-                </span>
-                <span className="text-xs font-mono text-cyan-400">{observationUnit}</span>
-              </div>
+              {hasObservation ? (
+                <>
+                  <div className="flex items-baseline space-x-2">
+                    <span className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white font-mono">
+                      {dataLoading ? '--' : observationValue}
+                    </span>
+                    <span className="text-xs font-mono text-cyan-400">{observationUnit}</span>
+                  </div>
 
-              {/* Anomaly Callout Badge */}
-              {anomalySummary && (
-                <div
-                  className={`px-2.5 py-1.5 rounded-lg text-[11px] flex items-center space-x-1.5 border ${
-                    anomalySeverity === 'high'
-                      ? 'bg-amber-950/30 text-amber-300 border-amber-600/40'
-                      : anomalySeverity === 'noticeable'
-                      ? 'bg-blue-950/30 text-blue-300 border-blue-600/40'
-                      : 'bg-slate-900/80 text-slate-300 border-slate-800'
-                  }`}
-                >
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                  <span className="leading-snug">{anomalySummary}</span>
+                  {/* Anomaly Callout Badge */}
+                  {anomalySummary && (
+                    <div
+                      className={`px-2.5 py-1.5 rounded-lg text-[11px] flex items-center space-x-1.5 border ${
+                        anomalySeverity === 'high'
+                          ? 'bg-amber-950/30 text-amber-300 border-amber-600/40'
+                          : anomalySeverity === 'noticeable'
+                          ? 'bg-blue-950/30 text-blue-300 border-blue-600/40'
+                          : 'bg-slate-900/80 text-slate-300 border-slate-800'
+                      }`}
+                    >
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span className="leading-snug">{anomalySummary}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="py-1 space-y-1">
+                  <div className="text-sm font-semibold text-slate-300 font-mono flex items-center space-x-1.5">
+                    <span className="h-2 w-2 rounded-full bg-slate-500" />
+                    <span>Outside Orbital Swath</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed font-sans">
+                    No satellite observation at this coordinate for {selectedDate}. Click an illuminated observation point on the globe or adjust the date slider.
+                  </p>
                 </div>
               )}
 
-              {/* Native Spatial Resolution Callout (Level 4 requirement) */}
+              {/* Native Spatial Resolution Callout */}
               <div className="pt-1 border-t border-slate-800/60 flex items-center justify-between text-[10px] font-mono text-slate-400">
-                <span>Resolution:</span>
+                <span>Dataset Resolution:</span>
                 <span className="text-slate-300">{geographicContext.spatialResolution}</span>
               </div>
             </div>
@@ -466,7 +509,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
               </div>
 
               {isCompareMode && comparisonDelta && (
-                <div className="p-2 rounded-lg bg-cyan-950/20 border border-cyan-800/40 text-[11px] font-mono text-cyan-300">
+                <div className="p-2.5 rounded-lg bg-cyan-950/20 border border-cyan-800/40 text-[11px] font-mono text-cyan-300 leading-snug">
                   {comparisonDelta}
                 </div>
               )}
@@ -619,3 +662,5 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
     </aside>
   );
 };
+
+export default AdaptiveSidePanel;

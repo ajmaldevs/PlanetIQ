@@ -95,6 +95,9 @@ export async function loadVectorBoundaries(earthRadius = 1.9): Promise<VectorBou
         transparent: true,
         opacity: 0.55,
         depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
       });
       countryLines = new THREE.LineSegments(countryGeom, countryMat);
       countryLines.name = 'vector-country-boundaries';
@@ -111,6 +114,9 @@ export async function loadVectorBoundaries(earthRadius = 1.9): Promise<VectorBou
         transparent: true,
         opacity: 0.40,
         depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
       });
       coastlineLines = new THREE.LineSegments(coastGeom, coastMat);
       coastlineLines.name = 'vector-coastlines';
@@ -127,6 +133,9 @@ export async function loadVectorBoundaries(earthRadius = 1.9): Promise<VectorBou
         transparent: true,
         opacity: 0.0, // Fades in when camera zooms closer than 4.5
         depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -1,
+        polygonOffsetUnits: -1,
       });
       stateLines = new THREE.LineSegments(stateGeom, stateMat);
       stateLines.name = 'vector-state-boundaries';

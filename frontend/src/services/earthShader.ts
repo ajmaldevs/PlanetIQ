@@ -9,6 +9,7 @@ export interface EarthDayNightShaderBundle {
 
 /**
  * Creates a physically-inspired Earth Day/Night Shader and Rayleigh Atmospheric Limb
+ * where surface normals, camera vectors, and sun vectors are strictly computed in WORLD space.
  */
 export function createEarthDayNightShader(
   dayTexture: THREE.Texture,
@@ -16,7 +17,7 @@ export function createEarthDayNightShader(
   normalTexture: THREE.Texture,
   specularTexture: THREE.Texture
 ): EarthDayNightShaderBundle {
-  const sunDirUniform = { value: new THREE.Vector3(1.0, 0.4, 0.8).normalize() };
+  const sunDirUniform = { value: new THREE.Vector3(6.5, 2.8, 5.0).normalize() };
 
   // 1. Earth Surface Shader: Day/Night Blend + Ocean Specular Glint + City Night Lights
   const earthMaterial = new THREE.ShaderMaterial({
@@ -28,26 +29,23 @@ export function createEarthDayNightShader(
       sunDirection: sunDirUniform,
     },
     vertexShader: `
-      varying vec3 vNormal;
+      varying vec3 vWorldNormal;
       varying vec2 vUv;
       varying vec3 vWorldPosition;
-      varying vec3 vViewPosition;
 
       void main() {
         vUv = uv;
-        vNormal = normalize(normalMatrix * normal);
         vec4 worldPos = modelMatrix * vec4(position, 1.0);
         vWorldPosition = worldPos.xyz;
-        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        vViewPosition = -mvPosition.xyz;
-        gl_Position = projectionMatrix * mvPosition;
+        // True world-space normal incorporating Earth orientation and rotation
+        vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+        gl_Position = projectionMatrix * viewMatrix * worldPos;
       }
     `,
     fragmentShader: `
-      varying vec3 vNormal;
+      varying vec3 vWorldNormal;
       varying vec2 vUv;
       varying vec3 vWorldPosition;
-      varying vec3 vViewPosition;
 
       uniform sampler2D dayMap;
       uniform sampler2D nightMap;
@@ -56,27 +54,27 @@ export function createEarthDayNightShader(
       uniform vec3 sunDirection;
 
       void main() {
-        vec3 normal = normalize(vNormal);
+        vec3 worldNormal = normalize(vWorldNormal);
         vec3 sunDir = normalize(sunDirection);
-        vec3 viewDir = normalize(vViewPosition);
+        vec3 worldViewDir = normalize(cameraPosition - vWorldPosition);
 
-        // Dot product between surface normal and sun direction
-        float NdotL = dot(normal, sunDir);
+        // Dot product between surface normal and sunlight direction in unified WORLD space
+        float NdotL = dot(worldNormal, sunDir);
 
-        // Smooth physical twilight transition across the day-night terminator
-        float dayFactor = smoothstep(-0.18, 0.20, NdotL);
+        // Smooth physical twilight transition across the day-night terminator (-0.16 to +0.18)
+        float dayFactor = smoothstep(-0.16, 0.18, NdotL);
 
-        // Sample textures
+        // Sample day and night surface textures
         vec4 dayColor = texture2D(dayMap, vUv);
         vec4 nightColor = texture2D(nightMap, vUv);
         float specularIntensity = texture2D(specularMap, vUv).r;
 
-        // Specular sun glint on water (oceans produce natural sun reflection)
-        vec3 halfDir = normalize(sunDir + viewDir);
-        float specHighlight = pow(max(0.0, dot(normal, halfDir)), 32.0) * specularIntensity * 1.6;
+        // Specular sun glint on water (oceans produce natural sunlight glint in world space)
+        vec3 halfDir = normalize(sunDir + worldViewDir);
+        float specHighlight = pow(max(0.0, dot(worldNormal, halfDir)), 32.0) * specularIntensity * 1.5;
 
         // Night side city lights: warm amber/golden glow on dark landmasses
-        vec3 nightLights = nightColor.rgb * (1.0 - dayFactor) * 1.75;
+        vec3 nightLights = nightColor.rgb * (1.0 - dayFactor) * 1.70;
 
         // Space ambient earthshine: subtle dark navy/indigo fill on dark hemisphere
         vec3 spaceAmbient = vec3(0.015, 0.022, 0.040) * dayColor.rgb;
@@ -98,41 +96,38 @@ export function createEarthDayNightShader(
       sunDirection: sunDirUniform,
     },
     vertexShader: `
-      varying vec3 vNormal;
-      varying vec3 vViewPosition;
+      varying vec3 vWorldNormal;
       varying vec3 vWorldPosition;
 
       void main() {
-        vNormal = normalize(normalMatrix * normal);
-        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        vViewPosition = -mvPosition.xyz;
-        vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
-        gl_Position = projectionMatrix * mvPosition;
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPos.xyz;
+        vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+        gl_Position = projectionMatrix * viewMatrix * worldPos;
       }
     `,
     fragmentShader: `
-      varying vec3 vNormal;
-      varying vec3 vViewPosition;
+      varying vec3 vWorldNormal;
       varying vec3 vWorldPosition;
       uniform vec3 sunDirection;
 
       void main() {
-        vec3 normal = normalize(vNormal);
-        vec3 viewDir = normalize(vViewPosition);
+        vec3 worldNormal = normalize(vWorldNormal);
+        vec3 worldViewDir = normalize(cameraPosition - vWorldPosition);
         vec3 sunDir = normalize(sunDirection);
 
-        // Grazing view angle edge factor
-        float edge = pow(1.0 - max(0.0, dot(normal, viewDir)), 5.2);
+        // Grazing view angle edge factor in true world space
+        float edge = pow(1.0 - max(0.0, dot(worldNormal, worldViewDir)), 5.2);
 
         // Sun angle factor: atmospheric scattering is prominent on the sunlit hemisphere
-        float sunDot = dot(normal, sunDir);
+        float sunDot = dot(worldNormal, sunDir);
         float sunLit = smoothstep(-0.25, 0.45, sunDot);
 
         // Colors: cyan-blue daytime scattering + sunset warm twilight along the terminator
         vec3 blueSky = vec3(0.38, 0.68, 0.98);
         vec3 sunsetGlow = vec3(0.95, 0.48, 0.20);
 
-        // Blend sunset glow along the terminator (-0.1 to +0.2)
+        // Blend sunset glow along the terminator (-0.25 to +0.35)
         float twilight = smoothstep(-0.25, 0.0, sunDot) * (1.0 - smoothstep(0.0, 0.35, sunDot));
         vec3 atmosColor = mix(blueSky, sunsetGlow, twilight * 0.65);
 
