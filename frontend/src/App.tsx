@@ -264,6 +264,7 @@ export const App: React.FC = () => {
         visible={currentView === 'explore'}
         onZoomChange={handleZoomChange}
         onCenterCoordinatesChange={handleCenterCoordinatesChange}
+        sidePanelOpen={sidePanelOpen}
       />
 
       {/* Minimal Top Header */}

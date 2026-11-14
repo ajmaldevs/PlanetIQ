@@ -288,7 +288,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
 
         {/* Minimized Quick Pill State */}
         {isMinimized ? (
-          <div className="flex items-center justify-between py-1 text-xs font-mono text-slate-300">
+          <div className="flex items-center justify-between py-1 text-xs font-mono text-slate-300 animate-fade-scale">
             <div className="flex items-center space-x-2 truncate">
               <span className="h-2 w-2 rounded-full bg-cyan-400 shrink-0" />
               <span className="font-semibold text-white capitalize">{activeModule || 'Global Earth'}</span>
@@ -583,7 +583,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
               </button>
 
               {showAdvancedDetails && (
-                <div className="mt-1.5 p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[10px] text-slate-400 leading-relaxed space-y-1 font-mono">
+                <div className="mt-1.5 p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[10px] text-slate-400 leading-relaxed space-y-1 font-mono animate-slide-up">
                   <p>{geographicContext.coverageNote}</p>
                   <p className="text-cyan-400/90">
                     Scientific Safeguard: Observations reflect satellite orbital passes. Local sub-grid variability is bounded by instrument noise floor.

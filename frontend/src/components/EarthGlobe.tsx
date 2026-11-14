@@ -17,6 +17,7 @@ interface EarthGlobeProps {
   visible?: boolean;
   onZoomChange?: (zoom: ZoomLevel, distance: number) => void;
   onCenterCoordinatesChange?: (lat: number, lon: number) => void;
+  sidePanelOpen?: boolean;
 }
 
 // Geographic Places Database for authentic global orientation & education
@@ -186,19 +187,28 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   visible = true,
   onZoomChange,
   onCenterCoordinatesChange,
+  sidePanelOpen = false,
 }) => {
   // Leaf container specifically for Three.js canvas (isolated from React children)
   const canvasMountRef = useRef<HTMLDivElement>(null);
 
-  // Zoom and center callbacks refs to avoid stale animation closures
+  // Zoom, center, and sidePanel refs to avoid stale animation closures
   const onZoomChangeRef = useRef(onZoomChange);
   onZoomChangeRef.current = onZoomChange;
   const onCenterCoordsRef = useRef(onCenterCoordinatesChange);
   onCenterCoordsRef.current = onCenterCoordinatesChange;
+  const sidePanelOpenRef = useRef(sidePanelOpen);
+  sidePanelOpenRef.current = sidePanelOpen;
 
   const currentZoomRef = useRef<ZoomLevel>('continental');
   const [currentZoomLevel, setCurrentZoomLevel] = useState<ZoomLevel>('continental');
   const lastCenterCalcRef = useRef(Date.now());
+
+  // Camera horizontal glide & layer cross-fade refs
+  const targetCameraX = useRef(0);
+  const currentCameraX = useRef(0);
+  const layerOpacityRef = useRef(1.0);
+  const selectedHaloRef = useRef<THREE.Mesh | null>(null);
 
   // Three.js internal references
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -424,15 +434,20 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         targetRotation.current.y += 0.0116 * delta;
       }
 
-      // Smooth orientation interpolation
+      // Smooth orientation interpolation using shortest spherical angular arc
       if (isFlyingToRef.current && flyToTarget.current) {
         currentRotation.current.x += (flyToTarget.current.x - currentRotation.current.x) * 0.08;
-        currentRotation.current.y += (flyToTarget.current.y - currentRotation.current.y) * 0.08;
+
+        let diffY = (flyToTarget.current.y - currentRotation.current.y) % (Math.PI * 2);
+        if (diffY > Math.PI) diffY -= Math.PI * 2;
+        if (diffY < -Math.PI) diffY += Math.PI * 2;
+        currentRotation.current.y += diffY * 0.08;
+
         targetRotation.current.x = currentRotation.current.x;
         targetRotation.current.y = currentRotation.current.y;
         if (
           Math.abs(flyToTarget.current.x - currentRotation.current.x) < 0.002 &&
-          Math.abs(flyToTarget.current.y - currentRotation.current.y) < 0.002
+          Math.abs(diffY) < 0.002
         ) {
           targetRotation.current.x = flyToTarget.current.x;
           targetRotation.current.y = flyToTarget.current.y;
@@ -453,11 +468,18 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         cloudsMeshRef.current.rotation.y += 0.002 * delta;
       }
 
-      // Smooth camera zoom interpolation
+      // Smooth camera position and zoom interpolation with desktop panel glide
       currentCameraDistance.current +=
         (targetCameraDistance.current - currentCameraDistance.current) * 0.12;
+
+      const shouldShift =
+        sidePanelOpenRef.current && window.innerWidth >= 1024 && window.innerWidth < 1536;
+      targetCameraX.current = shouldShift ? -0.42 : 0;
+      currentCameraX.current += (targetCameraX.current - currentCameraX.current) * 0.08;
+
       if (cameraRef.current) {
         cameraRef.current.position.z = currentCameraDistance.current;
+        cameraRef.current.position.x = currentCameraX.current;
       }
 
       // Adaptive Zoom Level Calculation
@@ -487,7 +509,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         }
       }
 
-      // 14. Geographic Labels Backface Culling & Zoom LOD Updates
+      // 14. Geographic Labels Backface Culling & Zoom LOD Continuous Cross-Fade
       if (labelsGroupRef.current && cameraRef.current && earthMeshRef.current) {
         const cameraPos = cameraRef.current.position;
         earthMeshRef.current.getWorldPosition(earthWorldPos);
@@ -497,12 +519,17 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
           const sprite = child as THREE.Sprite;
           const data = sprite.userData as { level: number };
 
-          // Level of Detail (LOD) based on zoom depth
-          let lodVisible = true;
-          if (data.level === 2 && dist > 5.3) lodVisible = false;
-          if (data.level === 3 && dist > 3.9) lodVisible = false;
+          // Continuous Level of Detail (LOD) opacity cross-fading (no abrupt pop-in)
+          let lodAlpha = 1.0;
+          if (data.level === 1) {
+            lodAlpha = dist < 3.3 ? Math.max(0.15, (dist - 2.6) / 0.7) : 1.0;
+          } else if (data.level === 2) {
+            lodAlpha = Math.min(1.0, Math.max(0.0, (5.5 - dist) / 0.7));
+          } else if (data.level === 3) {
+            lodAlpha = Math.min(1.0, Math.max(0.0, (4.1 - dist) / 0.6));
+          }
 
-          if (!lodVisible) {
+          if (lodAlpha <= 0.01) {
             sprite.visible = false;
             return;
           }
@@ -516,13 +543,36 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
           // Visible only on front-facing hemisphere
           if (dot > 0.18) {
             sprite.visible = true;
-            // Smoothly soften opacity near the limb/horizon
+            // Smoothly soften opacity near the limb/horizon combined with zoom LOD
             const limbFade = Math.min(1.0, Math.max(0.0, (dot - 0.18) * 3.5));
-            sprite.material.opacity = limbFade * 0.94;
+            sprite.material.opacity = limbFade * 0.94 * lodAlpha;
           } else {
             sprite.visible = false;
           }
         });
+      }
+
+      // 15. Scientific Observation Layer Smooth Cross-Fade Animation
+      if (layerOpacityRef.current < 1.0 && markersGroupRef.current) {
+        layerOpacityRef.current = Math.min(1.0, layerOpacityRef.current + delta * 3.8);
+        markersGroupRef.current.children.forEach((child) => {
+          const m = child as THREE.Mesh;
+          if (m.material && 'opacity' in m.material) {
+            const baseOp = (m.userData.baseOpacity as number) || 0.95;
+            (m.material as THREE.Material & { opacity: number }).opacity =
+              baseOp * layerOpacityRef.current;
+          }
+        });
+      }
+
+      // 16. Selected Location Marker Subtle Organic Breathing Pulse
+      if (selectedHaloRef.current) {
+        const pulse = (Math.sin(timestamp * 0.004) + 1) * 0.5;
+        selectedHaloRef.current.scale.setScalar(1.0 + pulse * 0.45);
+        if (selectedHaloRef.current.material && 'opacity' in selectedHaloRef.current.material) {
+          (selectedHaloRef.current.material as THREE.Material & { opacity: number }).opacity =
+            0.35 + pulse * 0.55;
+        }
       }
 
       if (rendererRef.current && sceneRef.current && cameraRef.current) {
@@ -589,6 +639,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   useEffect(() => {
     if (!isReady || !markersGroupRef.current) return;
     const markersGroup = markersGroupRef.current;
+    selectedHaloRef.current = null;
+    layerOpacityRef.current = 0.0;
 
     while (markersGroup.children.length > 0) {
       const child = markersGroup.children[0] as THREE.Mesh;
@@ -612,28 +664,38 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       const pos = latLonToVector3(lat, lon, markerRadius);
       const color = getObservationColor(feature, activeModule, metricType);
 
+      const isSelected =
+        selectedFeature &&
+        selectedFeature.geometry.coordinates[0] === lon &&
+        selectedFeature.geometry.coordinates[1] === lat;
+
       const markerMat = new THREE.MeshBasicMaterial({
         color,
         transparent: true,
-        opacity: 0.95,
+        opacity: 0.0,
       });
 
       const marker = new THREE.Mesh(sphereGeom, markerMat);
       marker.position.copy(pos);
-      marker.userData = { feature };
+      marker.userData = { feature, baseOpacity: 0.95 };
       markersGroup.add(marker);
 
       const haloGeom = new THREE.RingGeometry(0.028, 0.048, 16);
       const haloMat = new THREE.MeshBasicMaterial({
-        color,
+        color: isSelected ? new THREE.Color(0x38bdf8) : color,
         transparent: true,
-        opacity: 0.45,
+        opacity: 0.0,
         side: THREE.DoubleSide,
       });
       const halo = new THREE.Mesh(haloGeom, haloMat);
       halo.position.copy(pos);
       halo.lookAt(0, 0, 0);
+      halo.userData = { feature, baseOpacity: isSelected ? 0.75 : 0.45 };
       markersGroup.add(halo);
+
+      if (isSelected) {
+        selectedHaloRef.current = halo;
+      }
     });
   }, [data, activeModule, metricType, isReady]);
 
@@ -656,6 +718,27 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     if (targetCameraDistance.current > 3.8) {
       targetCameraDistance.current = 3.3;
     }
+  }, [selectedFeature]);
+
+  // Synchronize selected observation marker halo for breathing pulse
+  useEffect(() => {
+    if (!selectedFeature || !markersGroupRef.current) {
+      selectedHaloRef.current = null;
+      return;
+    }
+    const [lon, lat] = selectedFeature.geometry.coordinates;
+    const hitHalo = markersGroupRef.current.children.find((child) => {
+      const feat = child.userData?.feature as GeoJSONFeature | undefined;
+      const mesh = child as THREE.Mesh;
+      return (
+        feat &&
+        feat.geometry.coordinates[0] === lon &&
+        feat.geometry.coordinates[1] === lat &&
+        mesh.geometry instanceof THREE.RingGeometry
+      );
+    }) as THREE.Mesh | undefined;
+
+    selectedHaloRef.current = hitHalo || null;
   }, [selectedFeature]);
 
   // Mouse / Pointer Drag Handlers (Only active when starting over Earth or dragging)

@@ -42,3 +42,54 @@
 .maplibregl-ctrl-icon {
   filter: invert(0.85);
 }
+
+/* TerraLens Unified Motion Design System */
+:root {
+  --ease-fluid: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 160ms;
+  --dur-normal: 280ms;
+  --dur-slow: 380ms;
+}
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-scale {
+  animation: fadeInScale 240ms var(--ease-fluid) forwards;
+}
+
+.animate-slide-up {
+  animation: slideUpFade 280ms var(--ease-fluid) forwards;
+}
+
+/* Respect user's OS reduced-motion accessibility preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

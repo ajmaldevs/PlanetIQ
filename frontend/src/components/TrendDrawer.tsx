@@ -48,7 +48,7 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
   }
 
   return (
-    <div className="space-y-6 pt-4 border-t border-slate-800/60 max-w-5xl mx-auto w-full">
+    <div className="space-y-6 pt-4 border-t border-slate-800/60 max-w-5xl mx-auto w-full animate-slide-up">
       {/* ================= ATMOSPHERE HISTORICAL TRENDS ================= */}
       {activeModule === 'atmosphere' && atmosphereData && (
         <div className="bg-[#090d16]/90 border border-slate-800/80 rounded-2xl p-5 sm:p-6 backdrop-blur-md space-y-4 shadow-xl">

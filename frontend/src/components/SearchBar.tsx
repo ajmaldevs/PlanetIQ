@@ -188,9 +188,9 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
         )}
       </div>
 
-      {/* Autocomplete Dropdown */}
+      {/* Autocomplete Dropdown with Smooth Fluid Fade-In */}
       {isOpen && matches.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1.5 bg-[#090d16]/95 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden z-50 py-1 divide-y divide-slate-800/60 max-h-80 overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 mt-1.5 bg-[#090d16]/95 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-xl overflow-hidden z-50 py-1 divide-y divide-slate-800/60 max-h-80 overflow-y-auto animate-fade-scale">
           {matches.map((item, idx) => (
             <button
               key={`${item.name}-${idx}`}
