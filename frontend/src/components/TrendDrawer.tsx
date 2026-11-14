@@ -313,7 +313,7 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
               <div className="h-56 flex flex-col items-center justify-center space-y-3 bg-slate-900/30 rounded-2xl border border-slate-800/60 p-6">
                 <div className="flex items-center space-x-2 text-xs font-mono text-cyan-400">
                   <div className="h-5 w-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                  <span>Harmonizing Multi-Sphere Time-Series Observations (2024–2026)...</span>
+                  <span>Loading modelled example time series (2024–2026)...</span>
                 </div>
                 {selectedLocationName && (
                   <span className="text-[11px] font-mono text-slate-400">
@@ -350,11 +350,11 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
               <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-3">
                 <div className="flex items-center space-x-2 text-cyan-400 font-semibold text-xs sm:text-sm">
                   <HelpCircle className="h-4 w-4 shrink-0" />
-                  <span>No Observation Records for Current Coordinate</span>
+                  <span>No Example Series for Current Coordinate</span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed font-sans">
                   {selectedLocationName ? `Target location: ${selectedLocationName}. ` : ''}
-                  Ocean SWOT radar altimetry tracks oceanic waters; terrestrial points have no altimetry coverage. Select a location on the 3D globe or 2D map to inspect its time-series profile.
+                  {selectedLocationName ? `No demonstration series is available for ${selectedLocationName}.` : 'No demonstration series is available for this location.'} Select a location on the map or globe and try another Earth system.
                 </p>
               </div>
             )}
@@ -415,7 +415,7 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                           <YAxis stroke="#64748b" tick={{ fontSize: 9 }} unit=" mm" />
                           <Tooltip contentStyle={{ backgroundColor: '#090d16', borderColor: '#334155', borderRadius: '8px', fontSize: '11px' }} />
                           <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '2px' }} />
-                          <Line type="monotone" dataKey="precipitation_accumulated_mm" name="Observed Rain Depth (mm)" stroke="#38bdf8" strokeWidth={2} dot={{ r: 2 }} />
+                          <Line type="monotone" dataKey="precipitation_accumulated_mm" name="Modelled Rain Depth (mm)" stroke="#38bdf8" strokeWidth={2} dot={{ r: 2 }} />
                           <Line type="monotone" dataKey="climatological_normal_mm" name="1998-2020 Normal (mm)" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
                           {selectedDate && <ReferenceLine x={selectedDate} stroke="#f59e0b" strokeWidth={1.5} label={{ value: 'Active', position: 'top', fill: '#f59e0b', fontSize: 9 }} />}
                         </LineChart>
@@ -477,7 +477,7 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                           <YAxis stroke="#64748b" tick={{ fontSize: 9 }} domain={[0, 1]} />
                           <Tooltip contentStyle={{ backgroundColor: '#090d16', borderColor: '#334155', borderRadius: '8px', fontSize: '11px' }} />
                           <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '2px' }} />
-                          <Line type="monotone" dataKey="ndvi" name="Observed NDVI Canopy" stroke="#10b981" strokeWidth={2} dot={{ r: 2 }} />
+                          <Line type="monotone" dataKey="ndvi" name="Modelled NDVI Example" stroke="#10b981" strokeWidth={2} dot={{ r: 2 }} />
                           <Line type="monotone" dataKey="historical_ndvi_median" name="Historical Median" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
                           {selectedDate && <ReferenceLine x={selectedDate} stroke="#f59e0b" strokeWidth={1.5} label={{ value: 'Active', position: 'top', fill: '#f59e0b', fontSize: 9 }} />}
                         </LineChart>

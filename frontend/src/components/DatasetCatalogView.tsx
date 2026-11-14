@@ -28,8 +28,7 @@ export const DatasetCatalogView: React.FC = () => {
           </h2>
         </div>
         <p className="text-xs text-slate-400 max-w-3xl leading-relaxed">
-          TerraLens strictly preserves approved NASA scientific datasets. Every observation, spatial resolution,
-          measurement unit, and known instrument limitation is fully documented below.
+          The catalog describes NASA products TerraLens is designed to use. This build has not ingested their observations; values shown in the explorer are modelled demonstrations.
         </p>
       </div>
 

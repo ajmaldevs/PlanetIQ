@@ -31,7 +31,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-slate-900 border border-slate-700/80 flex items-center justify-center text-cyan-400 group-hover:border-cyan-500/50 transition-colors">
             <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </div>
-          <div>
+          <div className="hidden sm:block">
             <span className="text-base sm:text-lg font-semibold tracking-tight text-white group-hover:text-cyan-300 transition-colors">
               Terra<span className="text-cyan-400">Lens</span>
             </span>

@@ -163,21 +163,18 @@ export class ImageryLODManager {
   }
 
   /**
-   * Get authentic imagery resolution description for currently active tiles
+   * Report the imagery source zoom level without implying a fixed ground resolution.
    */
   public getResolutionBadge(cameraDistance: number): string {
     const targetZoom = this.getTargetTileZoom(cameraDistance);
     switch (targetZoom) {
       case 8:
-        return 'High-Res Satellite (15m LOD)';
       case 7:
-        return 'Regional Satellite (30m LOD)';
       case 5:
-        return 'Country Satellite (60m LOD)';
       case 3:
-        return 'Continental Satellite (250m LOD)';
+        return `ArcGIS World Imagery · z${targetZoom}`;
       default:
-        return 'NASA Blue Marble (1km Base)';
+        return 'TerraLens base imagery';
     }
   }
 
@@ -401,7 +398,7 @@ export class ImageryLODManager {
       bounds.minLon,
       bounds.maxLon,
       this.patchRadius,
-      8
+      z <= 3 ? 24 : 8
     );
 
     const initialOpacity = instantVisible ? 0.98 : 0.0;

@@ -56,7 +56,7 @@ export const AboutMethodologyView: React.FC = () => {
       <div className="bg-[#0d121d] border border-slate-800 p-6 rounded-xl space-y-5">
         <h3 className="text-base font-bold text-white flex items-center space-x-2">
           <Award className="h-5 w-5 text-cyan-400" />
-          <span>Processing Pipelines & Harmonization Algorithms</span>
+          <span>Intended Products & Measurement Notes</span>
         </h3>
 
         <div className="space-y-4 text-xs text-slate-300">

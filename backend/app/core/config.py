@@ -62,7 +62,7 @@ class Settings(BaseSettings):
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = "terralens_user"
-    POSTGRES_PASSWORD: str = "terralens_secret_pass"
+    POSTGRES_PASSWORD: str = ""
     POSTGRES_DB: str = "terralens_db"
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20

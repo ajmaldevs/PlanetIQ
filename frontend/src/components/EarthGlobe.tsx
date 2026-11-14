@@ -45,6 +45,7 @@ interface EarthGlobeProps {
   sidePanelOpen?: boolean;
   trendsOpen?: boolean;
   trendsExpanded?: boolean;
+  introMode?: boolean;
 }
 
 // Convert (Lat, Lon) in degrees to 3D Cartesian coordinates on sphere
@@ -139,6 +140,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   sidePanelOpen = false,
   trendsOpen = false,
   trendsExpanded = false,
+  introMode = false,
 }) => {
   // Leaf container specifically for Three.js canvas (isolated from React children)
   const canvasMountRef = useRef<HTMLDivElement>(null);
@@ -160,12 +162,12 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   visibleRef.current = visible;
   const prevVisibleRef = useRef(visible);
 
-  const currentZoomRef = useRef<ZoomLevel>('continental');
-  const [currentZoomLevel, setCurrentZoomLevel] = useState<ZoomLevel>('continental');
-  const [imageryResolution, setImageryResolution] = useState<string>('NASA Blue Marble (1km Base)');
-  const currentResolutionBadgeRef = useRef<string>('NASA Blue Marble (1km Base)');
+  const currentZoomRef = useRef<ZoomLevel>('global');
+  const [currentZoomLevel, setCurrentZoomLevel] = useState<ZoomLevel>('global');
+  const [imageryResolution, setImageryResolution] = useState<string>('TerraLens base imagery');
+  const currentResolutionBadgeRef = useRef<string>('TerraLens base imagery');
   const lastCenterCalcRef = useRef(Date.now());
-  const lastReportedDistRef = useRef(4.6);
+  const lastReportedDistRef = useRef(5.35);
 
   // Device-adaptive quality state & profile refs
   const [qualityTier, setQualityTier] = useState<QualityTier>(adaptiveQuality.getProfile().tier);
@@ -216,8 +218,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const prevMousePos = useRef({ x: 0, y: 0 });
   const targetRotation = useRef({ x: 0.12, y: -0.6 });
   const currentRotation = useRef({ x: 0.12, y: -0.6 });
-  const targetCameraDistance = useRef(4.6);
-  const currentCameraDistance = useRef(4.6);
+  const targetCameraDistance = useRef(5.35);
+  const currentCameraDistance = useRef(5.35);
   const lastInteractionTime = useRef(Date.now());
   const minDistance = 2.15; // Camera can zoom in deep to close orbit (~250km) for high-res tile inspection
   const maxDistance = 6.8;  // Wide space perspective
@@ -275,6 +277,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   useEffect(() => {
     const mount = canvasMountRef.current;
     if (!mount) return;
+    let disposed = false;
 
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -354,6 +357,10 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
 
     // 9. Authentic 3D Vector Geographic Boundaries (Countries, Coastlines, States)
     loadVectorBoundaries(earthRadius).then((vb) => {
+      if (disposed) {
+        vb.dispose();
+        return;
+      }
       earthGroup.add(vb.group);
       vectorBoundariesRef.current = vb;
     });
@@ -477,23 +484,23 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       // Adaptive Zoom Level & Resolution Scale Calculation
       const distNow = currentCameraDistance.current;
       let newLevel: ZoomLevel = 'global';
-      let resBadge = 'NASA Blue Marble (1km Base)';
+      let resBadge = 'TerraLens base imagery';
 
       if (distNow < 2.65) {
         newLevel = 'regional';
-        resBadge = 'High-Res Satellite (15m LOD)';
+        resBadge = 'ArcGIS World Imagery · z8';
       } else if (distNow < 3.2) {
         newLevel = 'regional';
-        resBadge = 'Regional Satellite (30m LOD)';
+        resBadge = 'ArcGIS World Imagery · z7';
       } else if (distNow < 3.8) {
         newLevel = 'country';
-        resBadge = 'Country Satellite (60m LOD)';
+        resBadge = 'ArcGIS World Imagery · z5';
       } else if (distNow < 4.7) {
         newLevel = 'continental';
-        resBadge = 'Continental Satellite (250m LOD)';
+        resBadge = 'ArcGIS World Imagery · z3';
       } else {
         newLevel = 'global';
-        resBadge = 'NASA Blue Marble (1km Base)';
+        resBadge = 'TerraLens base imagery';
       }
 
       if (newLevel !== currentZoomRef.current || Math.abs(distNow - lastReportedDistRef.current) > 0.08) {
@@ -680,6 +687,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
 
     // Cleanup resources on unmount
     return () => {
+      disposed = true;
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('wheel', onWindowWheel);
       document.removeEventListener('visibilitychange', onVisibilityChange);
@@ -1176,7 +1184,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       startDist: currentCameraDistance.current,
       targetX,
       targetY: currentRotation.current.y + diffY,
-      targetDist: 4.6,
+      targetDist: 5.35,
     };
     interactionStateRef.current = 'transitioning';
     lastInteractionTime.current = Date.now();
@@ -1222,7 +1230,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         onPointerCancel={handlePointerUp}
         onClick={handleClick}
         onDoubleClick={handleDoubleClick}
-        className={`fixed inset-0 w-screen h-screen z-0 overflow-hidden select-none cursor-grab active:cursor-grabbing touch-none ${className}`}
+        className={`fixed inset-0 w-full h-dvh z-0 overflow-hidden select-none cursor-grab active:cursor-grabbing touch-none ${className}`}
         style={{ touchAction: 'none' }}
       >
         <div ref={canvasMountRef} className="absolute inset-0 w-full h-full pointer-events-none" />
@@ -1236,17 +1244,18 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         </div>
       )}
 
-      {/* Precision Navigation Controls & Resolution Scale Bar (Bottom-Left) */}
+      {/* Keep navigation clear of the home cards while the globe is an overview backdrop. */}
       <div
-        className={`fixed left-4 sm:left-6 z-30 flex items-center space-x-2.5 pointer-events-auto transition-all duration-300 ease-out ${
+        className={`fixed left-4 sm:left-6 z-30 ${introMode ? 'top-[4.5rem] right-3 left-auto hidden sm:flex justify-end' : 'flex'} items-center space-x-2.5 pointer-events-auto transition-all duration-300 ease-out ${
           trendsOpen
             ? trendsExpanded
-              ? 'bottom-[min(535px,calc(100vh-120px))]'
+              ? 'bottom-[min(535px,calc(100dvh-120px))]'
               : 'bottom-[335px] sm:bottom-[395px]'
             : 'bottom-4 sm:bottom-6'
         }`}
+        style={introMode ? { bottom: 'auto' } : undefined}
       >
-        <div className="flex flex-col space-y-1 bg-[#090d16]/90 p-1.5 rounded-xl border border-slate-800/80 backdrop-blur-md shadow-2xl">
+        <div className={`flex ${introMode ? 'flex-row space-x-1' : 'flex-col space-y-1'} bg-[#090d16]/90 p-1.5 rounded-xl border border-slate-800/80 backdrop-blur-md shadow-2xl`}>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -1300,13 +1309,13 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         </div>
 
         {/* Imagery & Science Resolution Information Pill with Adaptive Quality Indicator */}
-        <div className="hidden sm:flex flex-col justify-center px-3 py-2 rounded-xl bg-[#090d16]/90 border border-slate-800/80 text-[10px] font-mono backdrop-blur-md shadow-2xl text-slate-300 space-y-1">
+        {!introMode && <div className="hidden sm:flex min-w-[235px] flex-col justify-center px-3.5 py-2.5 rounded-xl bg-[#090d16]/95 border border-slate-800/80 text-[11px] font-mono backdrop-blur-md shadow-2xl text-slate-300 space-y-2">
           <div className="flex items-center space-x-1.5 text-slate-400">
             <Layers className="h-3 w-3 text-cyan-400" />
             <span className="text-slate-500 uppercase tracking-wider text-[8px]">Imagery LOD:</span>
             <span className="text-cyan-300 font-medium">{imageryResolution}</span>
           </div>
-          <div className="flex items-center justify-between gap-3 text-[9px] text-slate-400">
+          <div className="flex items-center justify-between gap-3 text-[10px] text-slate-400">
             <div className="flex items-center space-x-1">
               <span>Scale: <strong className="text-white capitalize">{currentZoomLevel}</strong></span>
               {activeModule && (
@@ -1316,24 +1325,15 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
               )}
             </div>
 
-            {/* Device-Adaptive Quality Switcher Pill */}
-            <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-slate-900/90 border border-slate-800">
+            {/* Advanced quality controls are available in the Tools menu. */}
+            <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-slate-900/90 border border-slate-800" title={`Rendering quality: ${qualityMode}; active tier: ${qualityTier}`}>
               <Cpu className="h-2.5 w-2.5 text-cyan-400" />
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const modes: QualityMode[] = ['auto', 'high', 'standard', 'low'];
-                  const nextIdx = (modes.indexOf(qualityMode) + 1) % modes.length;
-                  adaptiveQuality.setMode(modes[nextIdx]);
-                }}
-                className="hover:text-cyan-300 uppercase tracking-wider text-[8px] font-semibold transition-colors"
-                title={`Rendering Quality: ${qualityMode} (Active Tier: ${qualityTier}) - Click to toggle Auto/High/Standard/Low`}
-              >
+              <span className="uppercase tracking-wider text-[8px] font-semibold">
                 {qualityMode === 'auto' ? `Auto (${qualityTier[0].toUpperCase()})` : qualityMode}
-              </button>
+              </span>
             </div>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

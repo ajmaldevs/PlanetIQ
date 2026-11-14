@@ -31,10 +31,14 @@ interface ActiveLabelItem {
   targetOpacity: number;
   currentOpacity: number;
   worldPos: THREE.Vector3;
-  normal: THREE.Vector3;
   baseWidth: number;
   baseHeight: number;
   targetPixelHeight: number;
+}
+
+interface DynamicPlaceCandidate {
+  place: GISPlace;
+  angularDist: number;
 }
 
 /**
@@ -55,6 +59,9 @@ export class SurfaceLabelManager {
 
   // Texture cache keyed by place id
   private readonly textureCache = new Map<string, THREE.CanvasTexture>();
+  private readonly permanentPlaceIds = new Set(GIS_PLACES.filter((place) => place.level <= 2).map((place) => place.id));
+  private readonly protectedTextureIds = new Set<string>();
+  private readonly maxCachedTextures = 400;
 
   // Permanent sprites for Level 1 (continents/oceans) and Level 2 (countries)
   private readonly permanentItems: ActiveLabelItem[] = [];
@@ -63,12 +70,18 @@ export class SurfaceLabelManager {
   private readonly poolSize: number;
   private readonly poolSprites: THREE.Sprite[] = [];
   private readonly poolItems: ActiveLabelItem[] = [];
+  private readonly poolSlots: ActiveLabelItem[] = [];
+  private readonly dynamicCandidates: DynamicPlaceCandidate[] = GIS_PLACES
+    .filter((place) => place.level >= 3)
+    .map((place) => ({ place, angularDist: 0 }));
+  private readonly facingCandidates: DynamicPlaceCandidate[] = [];
 
   // Reusable vectors to eliminate GC in render loop
   private readonly tempWorldPos = new THREE.Vector3();
   private readonly tempViewDir = new THREE.Vector3();
   private readonly earthWorldPos = new THREE.Vector3();
   private readonly tempScreenPos = new THREE.Vector3();
+  private readonly tempNormal = new THREE.Vector3();
 
   // Throttling state
   private lastUpdateDist = 0;
@@ -98,7 +111,6 @@ export class SurfaceLabelManager {
 
     for (const place of permPlaces) {
       const pos = this.latLonToSphere(place.lat, place.lon, this.surfaceRadius);
-      const normal = pos.clone().normalize();
       const texture = this.getOrCreateTexture(place);
 
       const material = new THREE.SpriteMaterial({
@@ -124,7 +136,6 @@ export class SurfaceLabelManager {
         targetOpacity: 0.0,
         currentOpacity: 0.0,
         worldPos: pos,
-        normal,
         baseWidth: 440,
         baseHeight: 76,
         targetPixelHeight,
@@ -136,6 +147,7 @@ export class SurfaceLabelManager {
    * Initialize dynamic sprite pool for Level 3 (States/Provinces) and Level 4 (Cities).
    */
   private initializeDynamicPool(): void {
+    const placeholderPlace = this.dynamicCandidates[0]?.place || GIS_PLACES[0];
     for (let i = 0; i < this.poolSize; i++) {
       const material = new THREE.SpriteMaterial({
         transparent: true,
@@ -147,16 +159,26 @@ export class SurfaceLabelManager {
       sprite.visible = false;
       this.group.add(sprite);
       this.poolSprites.push(sprite);
+      this.poolSlots.push({
+        place: placeholderPlace,
+        sprite,
+        targetOpacity: 0,
+        currentOpacity: 0,
+        worldPos: new THREE.Vector3(),
+        baseWidth: 440,
+        baseHeight: 76,
+        targetPixelHeight: 13,
+      });
     }
   }
 
   /**
    * Convert lat/lon to 3D Cartesian coordinates on sphere.
    */
-  private latLonToSphere(lat: number, lon: number, radius: number): THREE.Vector3 {
+  private latLonToSphere(lat: number, lon: number, radius: number, target = new THREE.Vector3()): THREE.Vector3 {
     const phi = (90 - lat) * (Math.PI / 180);
     const theta = (lon + 180) * (Math.PI / 180);
-    return new THREE.Vector3(
+    return target.set(
       -radius * Math.sin(phi) * Math.cos(theta),
       radius * Math.cos(phi),
       radius * Math.sin(phi) * Math.sin(theta)
@@ -168,7 +190,11 @@ export class SurfaceLabelManager {
    */
   private getOrCreateTexture(place: GISPlace): THREE.CanvasTexture {
     const cached = this.textureCache.get(place.id);
-    if (cached) return cached;
+    if (cached) {
+      this.textureCache.delete(place.id);
+      this.textureCache.set(place.id, cached);
+      return cached;
+    }
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
@@ -221,7 +247,22 @@ export class SurfaceLabelManager {
     const texture = new THREE.CanvasTexture(canvas);
     texture.minFilter = THREE.LinearFilter;
     this.textureCache.set(place.id, texture);
+    this.evictOldTextures();
     return texture;
+  }
+
+  private evictOldTextures(): void {
+    while (this.textureCache.size > this.maxCachedTextures) {
+      let evicted = false;
+      for (const [id, texture] of this.textureCache) {
+        if (this.permanentPlaceIds.has(id) || this.protectedTextureIds.has(id)) continue;
+        this.textureCache.delete(id);
+        texture.dispose();
+        evicted = true;
+        break;
+      }
+      if (!evicted) break;
+    }
   }
 
   /**
@@ -407,9 +448,11 @@ export class SurfaceLabelManager {
     }
 
     const candidates: ScreenCandidate[] = [];
-    const allActiveItems = [...this.permanentItems, ...this.poolItems];
-
-    for (const item of allActiveItems) {
+    const activeItemCount = this.permanentItems.length + this.poolItems.length;
+    for (let index = 0; index < activeItemCount; index++) {
+      const item = index < this.permanentItems.length
+        ? this.permanentItems[index]
+        : this.poolItems[index - this.permanentItems.length];
       const place = item.place;
 
       // Angular distance from camera facing center
@@ -427,8 +470,7 @@ export class SurfaceLabelManager {
 
       // Geometric Horizon Culling on Rotating Earth
       item.sprite.getWorldPosition(this.tempWorldPos);
-      const normal = this.tempWorldPos.clone().normalize();
-      const dotHorizon = normal.dot(this.tempViewDir);
+      const dotHorizon = this.tempNormal.copy(this.tempWorldPos).normalize().dot(this.tempViewDir);
 
       const horizonCutoff = horizonThreshold + 0.018;
       if (dotHorizon <= horizonCutoff) {
@@ -536,23 +578,24 @@ export class SurfaceLabelManager {
         item.targetOpacity = 0.0;
       }
       this.poolItems.length = 0;
+      this.protectedTextureIds.clear();
       for (const sprite of this.poolSprites) {
         sprite.visible = false;
+        sprite.material.map = null;
       }
       return;
     }
 
-    // Query Level 3 and Level 4 places within facing hemisphere
-    const candidates = GIS_PLACES.filter((p) => p.level >= 3).map((place) => {
-      const dLat = place.lat - centerLat;
-      let dLon = Math.abs(place.lon - centerLon);
+    // Reuse prebuilt candidate records and one scratch list while filtering to the facing hemisphere.
+    const facingCandidates = this.facingCandidates;
+    facingCandidates.length = 0;
+    for (const candidate of this.dynamicCandidates) {
+      const dLat = candidate.place.lat - centerLat;
+      let dLon = Math.abs(candidate.place.lon - centerLon);
       if (dLon > 180) dLon = 360 - dLon;
-      const angularDist = Math.hypot(dLat, dLon);
-      return { place, angularDist };
-    });
-
-    // Filter to facing hemisphere (< 82 deg angular distance from center)
-    const facingCandidates = candidates.filter((c) => c.angularDist < 82);
+      candidate.angularDist = Math.hypot(dLat, dLon);
+      if (candidate.angularDist < 82) facingCandidates.push(candidate);
+    }
 
     // Sort by proximity to center and priority
     facingCandidates.sort((a, b) => {
@@ -562,38 +605,38 @@ export class SurfaceLabelManager {
       return b.place.priority - a.place.priority;
     });
 
-    const selected = facingCandidates.slice(0, this.poolSize);
-
     this.poolItems.length = 0;
+    const selectedCount = Math.min(facingCandidates.length, this.poolSize);
+    this.protectedTextureIds.clear();
+    for (let i = 0; i < selectedCount; i++) this.protectedTextureIds.add(facingCandidates[i].place.id);
 
     for (let i = 0; i < this.poolSize; i++) {
       const sprite = this.poolSprites[i];
-      if (i < selected.length) {
-        const place = selected[i].place;
+      const item = this.poolSlots[i];
+      if (i < selectedCount) {
+        const place = facingCandidates[i].place;
         const texture = this.getOrCreateTexture(place);
-        const pos = this.latLonToSphere(place.lat, place.lon, this.surfaceRadius);
-        const normal = pos.clone().normalize();
+        const pos = this.latLonToSphere(place.lat, place.lon, this.surfaceRadius, item.worldPos);
 
-        sprite.material.map = texture;
+        if (sprite.material.map !== texture) {
+          sprite.material.map = texture;
+          sprite.material.needsUpdate = true;
+        }
         sprite.position.copy(pos);
-        sprite.userData = { place, id: place.id };
+        sprite.userData.place = place;
+        sprite.userData.id = place.id;
 
         const targetPixelHeight = place.level === 3 ? 14 : 13;
-
-        this.poolItems.push({
-          place,
-          sprite,
-          targetOpacity: 0.0,
-          currentOpacity: sprite.material.opacity,
-          worldPos: pos,
-          normal,
-          baseWidth: 440,
-          baseHeight: 76,
-          targetPixelHeight,
-        });
+        item.place = place;
+        item.targetOpacity = 0;
+        item.currentOpacity = sprite.material.opacity;
+        item.targetPixelHeight = targetPixelHeight;
+        this.poolItems.push(item);
       } else {
         sprite.visible = false;
         sprite.material.opacity = 0.0;
+        sprite.material.map = null;
+        item.targetOpacity = 0;
       }
     }
   }
@@ -608,9 +651,11 @@ export class SurfaceLabelManager {
   ): void {
     const fovFactor = (2 * Math.tan((camera.fov * Math.PI) / 360)) / Math.max(screenHeight, 1);
     const alphaRate = 1.0 - Math.exp(-10.0 * delta);
-    const allItems = [...this.permanentItems, ...this.poolItems];
-
-    for (const item of allItems) {
+    const activeItemCount = this.permanentItems.length + this.poolItems.length;
+    for (let index = 0; index < activeItemCount; index++) {
+      const item = index < this.permanentItems.length
+        ? this.permanentItems[index]
+        : this.poolItems[index - this.permanentItems.length];
       // Exponential smoothing of opacity
       item.currentOpacity += (item.targetOpacity - item.currentOpacity) * alphaRate;
 

@@ -31,6 +31,18 @@ export interface SearchResult {
   detail?: string;
 }
 
+function isDuplicatePlace(a: SearchResult, b: SearchResult): boolean {
+  const normalizedName = (value: string) => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  if (normalizedName(a.name) !== normalizedName(b.name) || a.category !== b.category) return false;
+  if (a.parentCountry && b.parentCountry && normalizedName(a.parentCountry) !== normalizedName(b.parentCountry)) return false;
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latDelta = toRadians(b.lat - a.lat);
+  const lonDelta = toRadians(b.lon - a.lon);
+  const haversine = Math.sin(latDelta / 2) ** 2 + Math.cos(toRadians(a.lat)) * Math.cos(toRadians(b.lat)) * Math.sin(lonDelta / 2) ** 2;
+  const distanceKm = 6371 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+  return distanceKm < 5;
+}
+
 const SCIENTIFIC_SEARCH_DATABASE: SearchResult[] = [
   // Ocean Systems & Boundary Currents
   {
@@ -376,6 +388,12 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
   const combinedMatches = useMemo(() => {
     const items: SearchResult[] = [];
     const seenKeys = new Set<string>();
+    const addIfUnique = (item: SearchResult) => {
+      const key = `${item.name.toLowerCase()}-${item.lat.toFixed(2)}-${item.lon.toFixed(2)}`;
+      if (seenKeys.has(key) || items.some((existing) => isDuplicatePlace(existing, item))) return;
+      seenKeys.add(key);
+      items.push(item);
+    };
 
     const getCategoryType = (catStr: string): SearchResult['category'] => {
       const c = catStr.toLowerCase();
@@ -392,10 +410,6 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
 
     // 1. Backend results (primary authority with accurate bounding boxes)
     backendResults.forEach((b) => {
-      const key = `${b.name.toLowerCase()}-${b.latitude.toFixed(2)}-${b.longitude.toFixed(2)}`;
-      if (seenKeys.has(key)) return;
-      seenKeys.add(key);
-
       const detailParts: string[] = [];
       if (b.detail) {
         detailParts.push(b.detail);
@@ -406,7 +420,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
         if (b.parent_continent) detailParts.push(b.parent_continent);
       }
 
-      items.push({
+      addIfUnique({
         id: b.id,
         name: b.name,
         formal_name: b.formal_name,
@@ -427,10 +441,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
 
     // 2. Client-side matches (scientific regions, marine currents, local cache)
     clientMatches.forEach((c) => {
-      const key = `${c.name.toLowerCase()}-${c.lat.toFixed(2)}-${c.lon.toFixed(2)}`;
-      if (seenKeys.has(key)) return;
-      seenKeys.add(key);
-      items.push(c);
+      addIfUnique(c);
     });
 
     return items.slice(0, 10);

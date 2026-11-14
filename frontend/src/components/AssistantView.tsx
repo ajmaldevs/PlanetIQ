@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { queryAssistant, AssistantQueryResponse, ScientificCitation } from '../services/api';
 import { Send, Sparkles, ExternalLink, User } from 'lucide-react';
 import { EarthModule } from './EarthGlobe';
+import { DataNotice } from './DataNotice';
 
 interface AssistantViewProps {
   activeModule?: EarthModule;
@@ -141,6 +142,9 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
+        <DataNotice type="demo" title="Assistant data scope">
+          Answers can explain dataset methods, but this build has no ingested NASA observations. Its map values and time series are demonstrations.
+        </DataNotice>
         {messages.map((msg, idx) => (
           <div
             key={idx}

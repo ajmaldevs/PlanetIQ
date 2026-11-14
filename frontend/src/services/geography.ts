@@ -112,7 +112,7 @@ export function resolveGeographicContext(
       lat,
       lon,
       spatialResolution: 'Global Planetary Grid',
-      coverageNote: 'Full planetary observation coverage. Regional and sub-mesoscale features are aggregated at synoptic scale.',
+      coverageNote: 'Global geographic context. Scientific layers use modelled demonstration values in this build.',
     };
   }
 
@@ -139,7 +139,7 @@ export function resolveGeographicContext(
       lon,
       spatialResolution: 'Basin / Continental Multi-Sensor Synthesis',
       coverageNote:
-        'Observations are aggregated across the continental landmass or ocean basin to highlight broad-scale teleconnections and climate anomalies.',
+        'Broad-scale location context. Teleconnection and climate anomaly examples are not calculated from ingested observations.',
     };
   }
 
@@ -168,7 +168,7 @@ export function resolveGeographicContext(
       lon,
       spatialResolution: 'National / Regional Footprint (~50–100 km)',
       coverageNote:
-        'Country-level statistics reflect authentic satellite observations aggregated across borders. Topographic radar shadow or cloud obstruction is flagged where present.',
+        'Country-scale context is approximate. Current scientific layers are modelled examples, not satellite observations aggregated across borders.',
     };
   }
 
@@ -185,18 +185,18 @@ export function resolveGeographicContext(
   }
 
   const regionTitle = explicitLocationName || (minRegionDist < 120 ? nearestRegion.name : `${nearestCountry.name} Region`);
-  let resolutionStr = 'High-Resolution Satellite Swath';
-  let limitationStr = 'Observations rendered at native satellite sensor resolution.';
+  let resolutionStr = 'Demonstration model grid';
+  let limitationStr = 'The map points are generated examples, not satellite pixels.';
 
   if (moduleType === 'ocean') {
-    resolutionStr = 'SWOT KaRIn 2 km Swath / 120 km Swath Width';
-    limitationStr = 'Precision: ±2.4 cm. Sub-mesoscale eddies resolved down to 15 km. Nadir gap (~20 km) directly beneath nadir track is excluded.';
+    resolutionStr = 'Intended SWOT grid: 2 km / 120 km swath';
+    limitationStr = 'The example values do not reproduce SWOT precision, swath coverage, eddies, or the nadir gap.';
   } else if (moduleType === 'atmosphere') {
-    resolutionStr = 'GPM IMERG 0.1° × 0.1° (~10 km) Calibrated Grid';
-    limitationStr = 'Monthly accumulation depth calibrated against GPCC rain gauges. Micro-scale convective cells (<10 km) are integrated into cell totals.';
+    resolutionStr = 'GPM IMERG target grid: 0.1° × 0.1° (~10 km)';
+    limitationStr = 'The examples are not gauge calibrated and do not reproduce local convection or retrieval uncertainty.';
   } else if (moduleType === 'land') {
     resolutionStr = 'MODIS 0.05° (~5.5 km) Climate Modeling Grid';
-    limitationStr = 'Vegetation canopy indices (NDVI/EVI) with cloud and aerosol filtering. Sub-hectare field boundaries are averaged into composite pixels.';
+    limitationStr = 'The examples are not derived from QA-filtered MODIS pixels and do not reproduce cloud or aerosol gaps.';
   }
 
   return {

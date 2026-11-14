@@ -16,7 +16,7 @@ def get_precipitation_grid(
     max_lat: Optional[float] = Query(None, ge=-90.0, le=90.0, description="Maximum bounding latitude"),
     min_lon: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Minimum bounding longitude"),
     max_lon: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Maximum bounding longitude"),
-    date: str = Query("2026-03", pattern=r"^\d{4}-\d{2}$", description="Target calendar month (YYYY-MM)")
+    date: str = Query("2026-03", pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Target calendar month (YYYY-MM)")
 ):
     """
     Returns spatially gridded GPM IMERG Final Monthly Precipitation (GPM_3IMERGM v07) observations.

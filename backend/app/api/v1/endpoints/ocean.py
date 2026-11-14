@@ -16,7 +16,7 @@ def get_ocean_observations(
     max_lat: Optional[float] = Query(None, ge=-90.0, le=90.0),
     min_lon: Optional[float] = Query(None, ge=-180.0, le=180.0),
     max_lon: Optional[float] = Query(None, ge=-180.0, le=180.0),
-    date: str = Query("2026-03", pattern=r"^\d{4}-\d{2}$", description="Calendar month (YYYY-MM)")
+    date: str = Query("2026-03", pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Calendar month (YYYY-MM)")
 ):
     """
     Returns SWOT KaRIn Low Rate Ocean Sea Surface Height (Option A) swath and gridded features.

@@ -1,7 +1,6 @@
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { lazy, Suspense, useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { Navbar, MainView } from './components/Navbar';
-import { EarthGlobe, EarthModule, ZoomLevel } from './components/EarthGlobe';
-import { MapView } from './components/MapView';
+import type { EarthModule, ZoomLevel } from './components/EarthGlobe';
 import { ModuleSelector } from './components/ModuleSelector';
 import { AdaptiveSidePanel, TimeseriesDataPoint } from './components/AdaptiveSidePanel';
 import { TrendDrawer, TrendDrawerStatus } from './components/TrendDrawer';
@@ -11,6 +10,10 @@ import { AboutView } from './components/AboutView';
 import { SearchBar, SearchResult } from './components/SearchBar';
 import { DatasetInfoModal } from './components/DatasetInfoModal';
 import { DataNotice } from './components/DataNotice';
+import { adaptiveQuality, QualityMode } from './services/adaptiveQuality';
+
+const EarthGlobe = lazy(() => import('./components/EarthGlobe').then((module) => ({ default: module.EarthGlobe })));
+const MapView = lazy(() => import('./components/MapView').then((module) => ({ default: module.MapView })));
 import { resolveGeographicContext } from './services/geography';
 import { GISPlace, searchGISPlaces } from './services/gisDatabase';
 import {
@@ -41,9 +44,13 @@ import {
   Trees,
   TrendingUp,
   Layers,
+  Wrench,
+  Database,
+  HelpCircle,
 } from 'lucide-react';
 
 export const App: React.FC = () => {
+  const introDismissedKey = 'terralens-intro-dismissed-v1';
   const [currentView, setCurrentView] = useState<MainView>('explore');
   const [explorationMode, setExplorationMode] = useState<'3d' | '2d'>('3d');
   const [activeModule, setActiveModule] = useState<EarthModule>(null);
@@ -64,8 +71,25 @@ export const App: React.FC = () => {
 
   // Adaptive Zoom and Contextual Side Panel States
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('global');
-  const cameraDistanceRef = useRef<number>(4.6);
-  const [isIntroVisible, setIsIntroVisible] = useState<boolean>(true);
+  const cameraDistanceRef = useRef<number>(5.35);
+  const [isIntroVisible, setIsIntroVisible] = useState<boolean>(() => {
+    try {
+      return typeof window === 'undefined' || localStorage.getItem(introDismissedKey) !== 'true';
+    } catch {
+      return true;
+    }
+  });
+  const dismissIntro = useCallback(() => {
+    setIsIntroVisible(false);
+    try {
+      localStorage.setItem(introDismissedKey, 'true');
+    } catch {
+      // The session still dismisses the introduction if storage is unavailable.
+    }
+  }, []);
+  const [showToolsMenu, setShowToolsMenu] = useState(false);
+  const toolsMenuRef = useRef<HTMLDivElement>(null);
+  const [qualityMode, setQualityMode] = useState<QualityMode>(() => adaptiveQuality.getMode());
   const [sidePanelOpen, setSidePanelOpen] = useState<boolean>(false);
   const [centerCoords, setCenterCoords] = useState<{ lat: number; lon: number }>({
     lat: 10.0,
@@ -100,7 +124,7 @@ export const App: React.FC = () => {
         name:
           selectedFeature.properties.location_name ||
           selectedFeature.properties.region_name ||
-          'Selected Observation Point',
+          'Selected Example Point',
       };
     }
     if (selectedPlace) {
@@ -114,7 +138,7 @@ export const App: React.FC = () => {
       return {
         lat: centerCoords.lat,
         lon: centerCoords.lon,
-        name: 'Observed Geographic Center',
+        name: 'Selected Geographic Center',
       };
     }
     if (activeModule === 'ocean') return { lat: 36.0, lon: -68.0, name: 'North Atlantic Gyre' };
@@ -152,8 +176,44 @@ export const App: React.FC = () => {
       .catch(() => setHealth(null));
   }, []);
 
+  useEffect(() => adaptiveQuality.subscribe((_profile, mode) => setQualityMode(mode)), []);
+
+  useEffect(() => {
+    if (!showToolsMenu) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowToolsMenu(false);
+    };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      if (!toolsMenuRef.current?.contains(event.target as Node)) setShowToolsMenu(false);
+    };
+    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+    };
+  }, [showToolsMenu]);
+
+  const cycleQualityMode = () => {
+    const modes: QualityMode[] = ['auto', 'high', 'standard', 'low'];
+    adaptiveQuality.setMode(modes[(modes.indexOf(qualityMode) + 1) % modes.length]);
+  };
+
+  const toggleAllModules = () => {
+    if (activeModules.length === 3) {
+      setActiveModules(['ocean']);
+      setActiveModule('ocean');
+    } else {
+      setActiveModules(['ocean', 'atmosphere', 'land']);
+      setActiveModule('ocean');
+    }
+    setSidePanelOpen(true);
+    dismissIntro();
+  };
+
   // Set default metric type on module change while preserving spatial selections
   const handleSelectModule = (mod: EarthModule) => {
+    dismissIntro();
     setActiveModule(mod);
     if (mod) {
       setActiveModules((prev) => (prev.includes(mod) ? prev : [mod, ...prev]));
@@ -191,14 +251,8 @@ export const App: React.FC = () => {
   const handleZoomChange = useCallback((newZoom: ZoomLevel, dist: number) => {
     cameraDistanceRef.current = dist;
     setZoomLevel((prev) => (prev !== newZoom ? newZoom : prev));
-    setIsIntroVisible((prev) => {
-      // Hysteresis: fade out when zoomed in past global view (dist < 4.50 or non-global zoom level)
-      // Restore when camera pulls all the way back out to deep space (dist > 4.65 && newZoom === 'global')
-      if (prev && (dist < 4.50 || newZoom !== 'global')) return false;
-      if (!prev && dist > 4.65 && newZoom === 'global') return true;
-      return prev;
-    });
-  }, []);
+    if (dist < 4.50 || newZoom !== 'global') dismissIntro();
+  }, [dismissIntro]);
 
   const handleCenterCoordinatesChange = useCallback((lat: number, lon: number) => {
     setCenterCoords((prev) => {
@@ -415,6 +469,7 @@ export const App: React.FC = () => {
     name: string,
     placeObj?: SearchResult | GISPlace | GeocodingResult
   ) => {
+    dismissIntro();
     // Auto-select relevant module if none is active and search target clearly belongs to a domain
     if (!activeModule) {
       const lower = name.toLowerCase();
@@ -497,9 +552,9 @@ export const App: React.FC = () => {
   );
 
   return (
-    <div className="h-screen w-screen bg-[#05070b] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black overflow-hidden relative select-none">
+    <div className="h-dvh w-full bg-[#05070b] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black overflow-hidden relative select-none">
       {/* 3D Realistic Earth Globe Canvas */}
-      <EarthGlobe
+      <Suspense fallback={null}><EarthGlobe
         activeModule={activeModule}
         activeModules={activeModules}
         data={getActiveData()}
@@ -518,7 +573,8 @@ export const App: React.FC = () => {
         sidePanelOpen={sidePanelOpen}
         trendsOpen={showTrends}
         trendsExpanded={trendsExpanded}
-      />
+        introMode={activeModule === null && isIntroVisible}
+      /></Suspense>
 
       {/* 2D Planar Map Canvas */}
       <div
@@ -526,28 +582,23 @@ export const App: React.FC = () => {
           currentView === 'explore' && explorationMode === '2d'
             ? 'opacity-100 pointer-events-auto'
             : 'opacity-0 pointer-events-none'
+        } ${
+          sidePanelOpen && activeModule !== null && currentView === 'explore'
+            ? 'right-0 lg:right-[390px]'
+            : 'right-0'
+        } ${
+          showTrends
+            ? trendsExpanded
+              ? 'bottom-[min(520px,75dvh)]'
+              : 'bottom-[min(320px,55dvh)] sm:bottom-[min(384px,60dvh)]'
+            : 'bottom-0'
         }`}
         style={{
           top: activeModule !== null ? '116px' : '64px',
           left: '0px',
-          right:
-            sidePanelOpen &&
-            activeModule !== null &&
-            currentView === 'explore' &&
-            typeof window !== 'undefined' &&
-            window.innerWidth >= 1024
-              ? '390px'
-              : '0px',
-          bottom: showTrends
-            ? trendsExpanded
-              ? '520px'
-              : typeof window !== 'undefined' && window.innerWidth >= 640
-              ? '384px'
-              : '320px'
-            : '0px',
         }}
       >
-        <MapView
+        <Suspense fallback={null}><MapView
           module={activeModule || 'overview'}
           activeModules={activeModules}
           data={getActiveData()}
@@ -568,8 +619,9 @@ export const App: React.FC = () => {
           sidePanelOpen={sidePanelOpen}
           trendsOpen={showTrends}
           trendsExpanded={trendsExpanded}
+          introMode={activeModule === null && isIntroVisible}
           visible={currentView === 'explore' && explorationMode === '2d'}
-        />
+        /></Suspense>
       </div>
 
       {/* 1. Global Navigation Header (Sticky, minimal, professional) */}
@@ -659,8 +711,8 @@ export const App: React.FC = () => {
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white drop-shadow-lg">
                 Explore Earth's changing systems.
               </h1>
-              <p className="mt-2 text-sm sm:text-base text-slate-400 font-normal leading-relaxed max-w-lg mx-auto">
-                Discover how our oceans, atmosphere and land are changing through real observations from NASA satellites.
+              <p className="mt-2 inline-block rounded-lg bg-[#05070b]/65 px-3 py-2 text-sm sm:text-base text-slate-200 font-normal leading-relaxed max-w-lg mx-auto shadow-lg backdrop-blur-sm">
+                Explore ocean, atmosphere, and land data concepts with modelled examples. NASA satellite observations are not loaded in this build.
               </p>
               <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-2 max-w-xl mx-auto pointer-events-auto">
                 <div className="w-full sm:flex-1">
@@ -668,7 +720,7 @@ export const App: React.FC = () => {
                 </div>
                 <div className="inline-flex items-center p-0.5 rounded-xl bg-slate-900/90 border border-slate-800 shadow-xl shrink-0 backdrop-blur-md">
                   <button
-                    onClick={() => setExplorationMode('3d')}
+                    onClick={() => { dismissIntro(); setExplorationMode('3d'); }}
                     className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                       explorationMode === '3d'
                         ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
@@ -680,7 +732,7 @@ export const App: React.FC = () => {
                     <span>3D Globe</span>
                   </button>
                   <button
-                    onClick={() => setExplorationMode('2d')}
+                    onClick={() => { dismissIntro(); setExplorationMode('2d'); }}
                     className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                       explorationMode === '2d'
                         ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
@@ -697,13 +749,13 @@ export const App: React.FC = () => {
 
             {/* When intro text is faded out on zoom, provide a floating top search bar with 3D/2D controls */}
             {!isIntroVisible && (
-              <div className="fixed top-18 left-1/2 -translate-x-1/2 z-20 w-full max-w-xl px-4 flex items-center gap-2 pointer-events-auto transition-all duration-300">
+              <div className="fixed top-[4.5rem] left-1/2 -translate-x-1/2 z-20 w-full max-w-xl px-4 flex items-center gap-2 pointer-events-auto transition-all duration-300">
                 <div className="flex-1">
                   <SearchBar onSelectLocation={handleSearchSelect} />
                 </div>
                 <div className="inline-flex items-center p-0.5 rounded-xl bg-slate-900/90 border border-slate-800 shadow-xl shrink-0 backdrop-blur-md">
                   <button
-                    onClick={() => setExplorationMode('3d')}
+                    onClick={() => { dismissIntro(); setExplorationMode('3d'); }}
                     className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                       explorationMode === '3d'
                         ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
@@ -715,7 +767,7 @@ export const App: React.FC = () => {
                     <span className="hidden sm:inline">3D Globe</span>
                   </button>
                   <button
-                    onClick={() => setExplorationMode('2d')}
+                    onClick={() => { dismissIntro(); setExplorationMode('2d'); }}
                     className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
                       explorationMode === '2d'
                         ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
@@ -828,27 +880,6 @@ export const App: React.FC = () => {
                     <span className="capitalize">Land</span>
                   </button>
 
-                  <button
-                    onClick={() => {
-                      if (activeModules.length === 3) {
-                        setActiveModules(['ocean']);
-                        setActiveModule('ocean');
-                      } else {
-                        setActiveModules(['ocean', 'atmosphere', 'land']);
-                        setActiveModule('ocean');
-                      }
-                      setSidePanelOpen(true);
-                    }}
-                    className={`hidden md:flex items-center space-x-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                      activeModules.length === 3
-                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                    title="Toggle All 3 Earth Systems Simultaneously"
-                  >
-                    <Layers className="h-3 w-3" />
-                    <span>All 3</span>
-                  </button>
                 </div>
               </div>
 
@@ -923,6 +954,58 @@ export const App: React.FC = () => {
                     {zoomLevel}
                   </span>
                 </button>
+
+                <div className="relative" ref={toolsMenuRef}>
+                  <button
+                    onClick={() => setShowToolsMenu((open) => !open)}
+                    className={`flex items-center justify-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${showToolsMenu ? 'bg-cyan-500/20 text-cyan-200 border-cyan-500/50' : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'}`}
+                    title="Tools and additional options"
+                    aria-label="Tools and additional options"
+                    aria-expanded={showToolsMenu}
+                    aria-controls="terralens-tools-menu"
+                  >
+                    <Wrench className="h-3.5 w-3.5 text-cyan-400" />
+                    <span className="hidden md:inline">Tools</span>
+                  </button>
+                  {showToolsMenu && (
+                    <div id="terralens-tools-menu" className="absolute top-full right-0 mt-2 w-[min(18rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-xl border border-slate-700/80 bg-[#080c16]/98 p-2 shadow-2xl backdrop-blur-xl z-50" aria-label="Additional exploration tools">
+                      <p className="px-2 py-1 text-[10px] uppercase tracking-widest text-slate-500">Systems</p>
+                      <button
+                        onClick={() => { toggleAllModules(); setShowToolsMenu(false); }}
+                        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
+                        aria-pressed={activeModules.length === 3}
+                      >
+                        <Layers className="h-4 w-4 text-purple-300" />
+                        {activeModules.length === 3 ? 'Show Ocean only' : 'Show all Earth systems'}
+                      </button>
+                      <div className="my-1 border-t border-slate-800" />
+                      <p className="px-2 py-1 text-[10px] uppercase tracking-widest text-slate-500">Data and help</p>
+                      <button
+                        onClick={() => { setCurrentView(activeModule ? 'explore' : 'catalog'); if (activeModule) setShowDatasetInfo(true); setShowToolsMenu(false); }}
+                        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
+                      >
+                        <Database className="h-4 w-4 text-cyan-300" />
+                        {activeModule ? 'Dataset details and provenance' : 'Dataset catalog'}
+                      </button>
+                      <button
+                        onClick={() => { setCurrentView('about'); setShowToolsMenu(false); }}
+                        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
+                      >
+                        <HelpCircle className="h-4 w-4 text-slate-300" />
+                        About and introduction
+                      </button>
+                      <div className="my-1 border-t border-slate-800" />
+                      <p className="px-2 py-1 text-[10px] uppercase tracking-widest text-slate-500">Rendering</p>
+                      <button
+                        onClick={() => { cycleQualityMode(); setShowToolsMenu(false); }}
+                        className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
+                      >
+                        <span className="flex items-center gap-2"><Wrench className="h-4 w-4 text-amber-300" />Rendering quality</span>
+                        <span className="font-mono text-cyan-300 capitalize">{qualityMode}</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -931,7 +1014,7 @@ export const App: React.FC = () => {
               {/* Viewport Area: Globe or 2D Map + Bottom TrendDrawer */}
               <div className="flex-1 h-full relative overflow-hidden pointer-events-none">
                 {(activeModule !== null || activeModules.length > 0) && (
-                  <div className="absolute z-40 top-3 left-3 right-3 sm:left-4 sm:right-auto sm:max-w-lg pointer-events-auto">
+                  <div className="absolute z-40 top-3 left-16 right-3 sm:left-20 sm:right-3 sm:max-w-lg pointer-events-auto">
                     <DataNotice type="demo" title="Demonstration data — not NASA observations">
                       Scientific layers, time series, comparisons, and cross-system examples are modelled by this build. NASA product citations describe intended data sources; no NASA granules are currently loaded.
                     </DataNotice>
@@ -944,6 +1027,7 @@ export const App: React.FC = () => {
                   activeModules={activeModules.length > 0 ? activeModules : (activeModule ? [activeModule] : [])}
                   sidePanelOpen={sidePanelOpen}
                   trendsOpen={showTrends}
+                  trendsExpanded={trendsExpanded}
                   onOpenPeriodComparison={() => {
                     setShowTrends(true);
                     setTrendsExpanded(true);

@@ -17,8 +17,8 @@ router = APIRouter()
 )
 def compare_periods(
     module: str = Query(..., description="Earth system module: 'atmosphere', 'ocean', or 'land'"),
-    period_a: str = Query(..., description="First historical period in YYYY-MM format (e.g., '2024-03')"),
-    period_b: str = Query(..., description="Second historical period in YYYY-MM format (e.g., '2026-03')"),
+    period_a: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="First period in YYYY-MM format"),
+    period_b: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Second period in YYYY-MM format"),
     latitude: float = Query(0.0, ge=-90.0, le=90.0, description="Latitude of inspection coordinate"),
     longitude: float = Query(0.0, ge=-180.0, le=180.0, description="Longitude of inspection coordinate"),
 ) -> PeriodComparisonResponse:

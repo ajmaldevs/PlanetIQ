@@ -12,6 +12,8 @@ async def test_atmosphere_endpoints():
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
+        assert data["metadata"]["data_status"] == "demonstration_model"
+        assert data["metadata"]["is_observation"] is False
         assert len(data["features"]) > 0
         
         # Verify scientific distinction: rate vs accumulation
@@ -27,6 +29,8 @@ async def test_atmosphere_endpoints():
         ts_res = await client.get("/api/v1/atmosphere/timeseries?latitude=6.5&longitude=-150.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
+        assert ts_data["data_status"] == "demonstration_model"
+        assert ts_data["is_observation"] is False
         assert ts_data["dataset_id"] == "GPM_3IMERGM"
         assert len(ts_data["timeseries"]) > 0
         assert "mean_monthly_accumulation_mm" in ts_data["summary_statistics"]
@@ -41,6 +45,8 @@ async def test_ocean_swot_endpoints():
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
+        assert data["metadata"]["data_status"] == "demonstration_model"
+        assert data["metadata"]["is_observation"] is False
         assert len(data["features"]) > 0
 
         prop = data["features"][0]["properties"]
@@ -54,6 +60,8 @@ async def test_ocean_swot_endpoints():
         ts_res = await client.get("/api/v1/ocean/timeseries?latitude=36.0&longitude=-68.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
+        assert ts_data["data_status"] == "demonstration_model"
+        assert ts_data["is_observation"] is False
         assert ts_data["dataset_id"] == "SWOT_L2_LR_SSH"
         assert len(ts_data["timeseries"]) > 0
         assert "mean_ssha_m" in ts_data["summary_statistics"]
@@ -68,6 +76,8 @@ async def test_land_modis_endpoints():
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
+        assert data["metadata"]["data_status"] == "demonstration_model"
+        assert data["metadata"]["is_observation"] is False
         assert len(data["features"]) > 0
 
         prop = data["features"][0]["properties"]
@@ -82,6 +92,8 @@ async def test_land_modis_endpoints():
         ts_res = await client.get("/api/v1/land/timeseries?latitude=-3.5&longitude=-62.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
+        assert ts_data["data_status"] == "demonstration_model"
+        assert ts_data["is_observation"] is False
         assert ts_data["dataset_id"] == "MOD13C2"
         assert len(ts_data["timeseries"]) > 0
         assert "mean_ndvi" in ts_data["summary_statistics"]
@@ -117,6 +129,15 @@ async def test_assistant_endpoint():
         assert "scientific_grounding" in data
         assert len(data["scientific_grounding"]) > 0
         assert any(c["units"] == "meters (m)" for c in data["scientific_grounding"])
+
+
+@pytest.mark.asyncio
+async def test_invalid_calendar_month_is_rejected():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        for endpoint in ("atmosphere/grid", "ocean/observations", "land/grid"):
+            response = await client.get(f"/api/v1/{endpoint}?date=2026-13")
+            assert response.status_code == 422
 
 
 @pytest.mark.asyncio

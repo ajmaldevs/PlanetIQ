@@ -97,7 +97,7 @@ export const CrossSystemView: React.FC = () => {
         <div className="h-64 flex items-center justify-center bg-[#0d121d] rounded-xl border border-slate-800">
           <div className="flex items-center space-x-2 text-cyan-400 font-mono text-xs">
             <div className="h-4 w-4 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-            <span>Harmonizing Multi-Sphere Observation Arrays...</span>
+            <span>Loading modelled cross-system examples...</span>
           </div>
         </div>
       ) : data ? (
@@ -108,7 +108,7 @@ export const CrossSystemView: React.FC = () => {
               <div>
                 <h3 className="text-sm font-semibold text-white flex items-center space-x-2">
                   <Compass className="h-4 w-4 text-cyan-400" />
-                  <span>Synchronized Multi-Sphere Observation Timeline (2024–2026)</span>
+                  <span>Modelled Cross-System Examples (2024–2026)</span>
                 </h3>
                 <p className="text-[11px] text-slate-400">
                   Tracking ocean sea surface anomalies against lagged atmospheric rain shifts and vegetation responses.

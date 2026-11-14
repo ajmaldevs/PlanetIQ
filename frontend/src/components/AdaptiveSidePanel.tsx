@@ -117,7 +117,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
 
   if (activeModule === 'ocean') {
     systemName = 'Ocean Altimetry';
-    sensorTitle = 'NASA SWOT KaRIn Radar (Option A)';
+    sensorTitle = 'Intended source: NASA SWOT KaRIn (Option A)';
     systemIcon = <Waves className="h-4 w-4 text-cyan-400" />;
     observationLabel = metricType === 'ssh' ? 'Sea Surface Height (Absolute)' : 'Sea Surface Height Anomaly (SSHA)';
     const sshaVal = selectedFeature?.properties.ssha_karin_m;
@@ -144,7 +144,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
     }
   } else if (activeModule === 'atmosphere') {
     systemName = 'Atmospheric Precipitation';
-    sensorTitle = 'NASA GPM IMERG Final Run (Dual Radar)';
+    sensorTitle = 'Intended source: NASA GPM IMERG Final';
     systemIcon = <CloudRain className="h-4 w-4 text-blue-400" />;
     const rateVal = selectedFeature?.properties.precipitation_rate_mm_hr;
     const accVal = selectedFeature?.properties.precipitation_accumulated_mm;
@@ -181,7 +181,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
     }
   } else if (activeModule === 'land') {
     systemName = 'Terrestrial Biosphere';
-    sensorTitle = 'NASA MODIS Terra/Aqua Spectroradiometer';
+    sensorTitle = 'Intended source: NASA MODIS Terra/Aqua';
     systemIcon = <Trees className="h-4 w-4 text-emerald-400" />;
     const ndviVal = selectedFeature?.properties.ndvi;
     const eviVal = selectedFeature?.properties.evi;
@@ -381,7 +381,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                 </div>
               </div>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-cyan-300 border border-slate-700">
-                L3 / L4 Validated
+                Modelled demo
               </span>
             </div>
 
@@ -423,10 +423,10 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                 <div className="py-2 space-y-1">
                   <div className="text-sm font-semibold text-slate-300 font-mono flex items-center space-x-2">
                     <span className="h-2 w-2 rounded-full bg-slate-500" />
-                    <span>Outside Active Orbital Swath</span>
+                    <span>No demo value at this location</span>
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed font-sans">
-                    No satellite observation at this coordinate for {selectedDate}. Click an illuminated observation point on the globe or scrub the timeline below.
+                    No modelled value is available at this coordinate for {selectedDate}. Select an illuminated example point on the globe or choose another date.
                   </p>
                 </div>
               )}
@@ -498,17 +498,17 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                 {hasObservation ? (
                   <>
                     <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                    <span className="text-slate-300 font-medium">Orbital Pass Verified</span>
+                    <span className="text-slate-300 font-medium">Modelled value available</span>
                   </>
                 ) : (
                   <>
                     <AlertCircle className="h-4 w-4 text-slate-400 shrink-0" />
-                    <span className="text-slate-400">Inter-Swath Gap</span>
+                    <span className="text-slate-400">No modelled value</span>
                   </>
                 )}
               </div>
               <span className="text-[10px] font-mono text-slate-400">
-                {hasObservation ? 'QC Passed (Flags: 0)' : 'Outside Swath'}
+                {hasObservation ? 'Example value' : 'No example value'}
               </span>
             </div>
 
@@ -718,7 +718,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
               >
                 <span className="flex items-center space-x-1.5">
                   <Info className="h-3.5 w-3.5 text-cyan-400" />
-                  <span>Coverage & Uncertainty</span>
+                  <span>Dataset Context & Limitations</span>
                 </span>
                 {showAdvancedDetails ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </button>
@@ -727,7 +727,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                 <div className="mt-2 p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] text-slate-400 leading-relaxed space-y-1.5 font-mono animate-slide-up">
                   <p>{geographicContext.coverageNote}</p>
                   <p className="text-cyan-400/90">
-                    Scientific Safeguard: Observations reflect satellite orbital passes. Local sub-grid variability is bounded by instrument noise floor.
+                    Product limitations describe the intended satellite dataset. This demonstration does not simulate QA flags, orbital coverage, or instrument uncertainty.
                   </p>
                 </div>
               )}

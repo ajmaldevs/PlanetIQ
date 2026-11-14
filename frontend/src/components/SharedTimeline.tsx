@@ -16,6 +16,7 @@ export interface SharedTimelineProps {
   activeModules: ('ocean' | 'atmosphere' | 'land')[];
   sidePanelOpen?: boolean;
   trendsOpen?: boolean;
+  trendsExpanded?: boolean;
   onOpenPeriodComparison?: () => void;
 }
 
@@ -61,6 +62,7 @@ export const SharedTimeline: React.FC<SharedTimelineProps> = ({
   activeModules,
   sidePanelOpen = false,
   trendsOpen = false,
+  trendsExpanded = false,
   onOpenPeriodComparison,
 }) => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -125,17 +127,18 @@ export const SharedTimeline: React.FC<SharedTimelineProps> = ({
   // Satellite pass & data status calculation
   const coverageStatus = useMemo(() => {
     const parts: string[] = [];
-    if (activeModules.includes('ocean')) parts.push('SWOT KaRIn 21-Day Pass (Nominal)');
-    if (activeModules.includes('atmosphere')) parts.push('GPM IMERG Final (Calibrated)');
-    if (activeModules.includes('land')) parts.push('MODIS 16-Day Composite (v6.1)');
+    if (activeModules.includes('ocean')) parts.push('SWOT KaRIn example');
+    if (activeModules.includes('atmosphere')) parts.push('GPM IMERG example');
+    if (activeModules.includes('land')) parts.push('MODIS example');
     return parts.length > 0 ? parts.join(' • ') : 'Global Planetary Baseline';
   }, [activeModules]);
 
   return (
     <div
+      aria-label="Shared earth observation timeline"
       className={`fixed z-20 transition-all duration-300 pointer-events-none ${
         sidePanelOpen ? 'left-3 sm:left-6 right-3 lg:right-[400px]' : 'left-3 sm:left-6 right-3 sm:right-6'
-      } ${trendsOpen ? 'bottom-[335px] sm:bottom-[395px]' : 'bottom-16 sm:bottom-6'}`}
+      } ${trendsOpen ? (trendsExpanded ? 'bottom-[596px] max-[799px]:hidden' : 'bottom-[335px] sm:bottom-[395px]') : 'bottom-16 sm:bottom-6'}`}
     >
       <div className="max-w-4xl mx-auto bg-[#070b14]/95 border border-slate-800/90 rounded-2xl shadow-2xl backdrop-blur-xl p-3 sm:p-4 text-white pointer-events-auto space-y-3">
         {/* Top Controls & Current Date Readout */}
@@ -359,19 +362,19 @@ export const SharedTimeline: React.FC<SharedTimelineProps> = ({
           </div>
         </div>
 
-        {/* Authentic Satellite Data Coverage Banner */}
+        {/* Demonstration coverage status */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-400 font-sans border-t border-slate-800/60">
           <div className="flex items-center space-x-1.5 min-w-0">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
             <span className="truncate">
-              Satellite Coverage: <strong className="text-slate-300">{coverageStatus}</strong>
+              Demonstration coverage: <strong className="text-slate-300">{coverageStatus}</strong>
             </span>
           </div>
 
           <div className="flex items-center space-x-2 text-[10px] font-mono text-slate-500">
-            <span>Cadence: Monthly (Final Run)</span>
+            <span>Example cadence: Monthly</span>
             <span>•</span>
-            <span>No manufactured daily interpolation</span>
+            <span>Modelled values</span>
           </div>
         </div>
       </div>

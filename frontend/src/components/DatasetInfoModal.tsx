@@ -36,7 +36,7 @@ export const DatasetInfoModal: React.FC<DatasetInfoModalProps> = ({ activeModule
       agency: 'NASA GES DISC / JAXA',
       sensor: 'GPM Microwave Imager (GMI), Dual-frequency Radar (DPR) and constellation radiometers',
       spatialResolution: '0.1° × 0.1° (~10 km at the equator)',
-      temporalResolution: 'Monthly calendar product (calibrated with ground GPCC gauges)',
+      temporalResolution: 'Intended product cadence: Monthly (Final; GPCC gauge calibrated)',
       variables: [
         { name: 'precipitation_accumulated_mm', unit: 'mm (liquid depth)', desc: 'Monthly total accumulated liquid precipitation' },
         { name: 'precipitation_rate_mm_hr', unit: 'mm/hr', desc: 'Average monthly precipitation rate' },

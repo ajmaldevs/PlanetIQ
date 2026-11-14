@@ -92,7 +92,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
               </div>
               <h4 className="text-sm font-bold text-white">SWOT Mission (Option A)</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                NASA/CNES Ka-band Radar Interferometer (KaRIn) measures sea surface height at 2 km resolution, revealing meso-scale eddies and dynamic currents in meters (m).
+                Intended dataset: NASA/CNES Ka-band Radar Interferometer (KaRIn), with product grid resolution around 2 km. The current map layer is a model, not a measurement.
               </p>
             </div>
 
@@ -103,7 +103,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
               </div>
               <h4 className="text-sm font-bold text-white">GPM IMERG Final Monthly</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                NASA GES DISC / JAXA precipitation product (GPM_3IMERGM v07). Differentiates instantaneous intensity (mm/hr) from monthly accumulated liquid depth (mm).
+                Intended dataset: NASA GES DISC / JAXA GPM_3IMERGM v07. This build distinguishes rate (mm/hr) from monthly depth (mm) in its examples; it does not display retrieved precipitation.
               </p>
             </div>
 
@@ -114,7 +114,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
               </div>
               <h4 className="text-sm font-bold text-white">MODIS Vegetation Indices</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                NASA LP DAAC / USGS MOD13C2 v061. Tracks canopy phenology via NDVI and EVI (dimensionless -0.2 to 1.0) and assesses agricultural drought via VCI %.
+                Intended dataset: NASA LP DAAC / USGS MOD13C2 v061. The app demonstrates NDVI/EVI and VCI concepts with generated values; it does not display retrieved MODIS pixels.
               </p>
             </div>
           </div>
@@ -194,7 +194,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
         </div>
       )}
 
-      {/* Tab 3: Scientific Methodology & Processing Pipelines */}
+      {/* Tab 3: Intended Dataset Methodology */}
       {activeTab === 'methodology' && (
         <div className="animate-fade-scale">
           <AboutMethodologyView />

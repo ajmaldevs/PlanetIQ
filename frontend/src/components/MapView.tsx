@@ -32,10 +32,19 @@ export interface MapViewProps {
   sidePanelOpen?: boolean;
   trendsOpen?: boolean;
   trendsExpanded?: boolean;
+  introMode?: boolean;
   visible?: boolean;
 }
 
 const CARTO_DARK_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
+
+function getMapDetailLevel(zoom: number): 'global' | 'continental' | 'country' | 'regional' | 'local' {
+  if (zoom < 2.3) return 'global';
+  if (zoom < 3.8) return 'continental';
+  if (zoom < 5.5) return 'country';
+  if (zoom < 8.5) return 'regional';
+  return 'local';
+}
 
 // Zero-network fallback style utilizing local authentic Natural Earth GeoJSON boundaries
 const OFFLINE_FALLBACK_STYLE: maplibregl.StyleSpecification = {
@@ -138,6 +147,7 @@ export const MapView: React.FC<MapViewProps> = ({
   sidePanelOpen = false,
   trendsOpen = false,
   trendsExpanded = false,
+  introMode = false,
   visible = true,
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
@@ -180,14 +190,18 @@ export const MapView: React.FC<MapViewProps> = ({
         center: startCenter,
         zoom: 2.0,
         minZoom: 1,
-        maxZoom: 14,
+        maxZoom: 15,
         attributionControl: false,
       });
 
-      m.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'bottom-right');
+      m.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
 
       m.on('load', () => {
         setMapLoaded(true);
+        mapContainer.current?.setAttribute('data-map-zoom', m.getZoom().toFixed(2));
+        mapContainer.current?.setAttribute('data-map-detail-level', getMapDetailLevel(m.getZoom()));
+        const initialCenter = m.getCenter();
+        mapContainer.current?.setAttribute('data-map-center', `${initialCenter.lat.toFixed(3)},${initialCenter.lng.toFixed(3)}`);
         // Suppress Carto's faint built-in place layers to prevent collision suppression of authoritative labels
         // and eliminate unwanted permanent dot/pointer artifacts
         const cartoLayersToHide = [
@@ -226,13 +240,13 @@ export const MapView: React.FC<MapViewProps> = ({
         }
       });
 
-      const reportCameraState = () => {
+      const reportZoomState = () => {
         if (!map.current || isInternalFlyRef.current) return;
         const c = map.current.getCenter();
         const z = map.current.getZoom();
-        if (onCenterChangeRef.current) {
-          onCenterChangeRef.current(c.lat, c.lng);
-        }
+        mapContainer.current?.setAttribute('data-map-zoom', z.toFixed(2));
+        mapContainer.current?.setAttribute('data-map-detail-level', getMapDetailLevel(z));
+        mapContainer.current?.setAttribute('data-map-center', `${c.lat.toFixed(3)},${c.lng.toFixed(3)}`);
         if (onZoomChangeRef.current) {
           const equivDist = mapZoomToDistance(z);
           const equivLevel: ZoomLevel =
@@ -247,9 +261,15 @@ export const MapView: React.FC<MapViewProps> = ({
         }
       };
 
-      m.on('zoom', reportCameraState);
-      m.on('move', reportCameraState);
-      m.on('moveend', reportCameraState);
+      const reportSettledCenter = () => {
+        if (!map.current || isInternalFlyRef.current) return;
+        const { lat, lng } = map.current.getCenter();
+        mapContainer.current?.setAttribute('data-map-center', `${lat.toFixed(3)},${lng.toFixed(3)}`);
+        onCenterChangeRef.current?.(lat, lng);
+      };
+
+      m.on('zoom', reportZoomState);
+      m.on('moveend', reportSettledCenter);
 
       map.current = m;
     } catch (e) {
@@ -261,11 +281,17 @@ export const MapView: React.FC<MapViewProps> = ({
           center: startCenter,
           zoom: 2.0,
           minZoom: 1,
-          maxZoom: 14,
+          maxZoom: 15,
           attributionControl: false,
         });
-        m.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'bottom-right');
-        m.on('load', () => setMapLoaded(true));
+        m.addControl(new maplibregl.NavigationControl({ showCompass: true }), 'top-right');
+        m.on('load', () => {
+          setMapLoaded(true);
+          mapContainer.current?.setAttribute('data-map-zoom', m.getZoom().toFixed(2));
+          mapContainer.current?.setAttribute('data-map-detail-level', getMapDetailLevel(m.getZoom()));
+          const initialCenter = m.getCenter();
+          mapContainer.current?.setAttribute('data-map-center', `${initialCenter.lat.toFixed(3)},${initialCenter.lng.toFixed(3)}`);
+        });
         map.current = m;
         setUsingFallbackStyle(true);
       } catch (err) {
@@ -303,11 +329,13 @@ export const MapView: React.FC<MapViewProps> = ({
   }, [sidePanelOpen, trendsOpen, trendsExpanded, visible]);
 
   // Synchronize 2D map center & zoom context when switching from 3D to 2D
-  const prevVisibleRef = useRef(visible);
+  const prevVisibleRef = useRef(false);
   useEffect(() => {
-    if (!prevVisibleRef.current && visible && map.current && mapLoaded) {
+    if (!mapLoaded) return;
+    const wasVisible = prevVisibleRef.current;
+    prevVisibleRef.current = visible;
+    if (!wasVisible && visible && map.current) {
       const targetZoom = distanceToMapZoom(cameraDistance ?? 4.6);
-      isInternalFlyRef.current = true;
       map.current.resize();
       if (center) {
         map.current.jumpTo({
@@ -315,13 +343,8 @@ export const MapView: React.FC<MapViewProps> = ({
           zoom: targetZoom,
         });
       }
-      const timer = setTimeout(() => {
-        isInternalFlyRef.current = false;
-        map.current?.resize();
-      }, 100);
-      return () => clearTimeout(timer);
+      map.current.resize();
     }
-    prevVisibleRef.current = visible;
   }, [visible, mapLoaded, center, cameraDistance]);
 
   // Synchronize map center when selectedFeature changes
@@ -745,19 +768,26 @@ export const MapView: React.FC<MapViewProps> = ({
       }
     };
 
-    interactiveLabelLayers.forEach((layerId) => {
-      m.on('mouseenter', layerId, () => {
+    const onLabelMouseEnter = () => {
         m.getCanvas().style.cursor = 'pointer';
-      });
-      m.on('mouseleave', layerId, () => {
+    };
+    const onLabelMouseLeave = () => {
         m.getCanvas().style.cursor = '';
-      });
+    };
+
+    interactiveLabelLayers.forEach((layerId) => {
+      m.on('mouseenter', layerId, onLabelMouseEnter);
+      m.on('mouseleave', layerId, onLabelMouseLeave);
     });
 
     m.on('click', onLabelClick);
 
     return () => {
       m.off('click', onLabelClick);
+      interactiveLabelLayers.forEach((layerId) => {
+        m.off('mouseenter', layerId, onLabelMouseEnter);
+        m.off('mouseleave', layerId, onLabelMouseLeave);
+      });
     };
   }, [mapLoaded, onSelectPlace]);
 
@@ -1041,7 +1071,7 @@ function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricT
       )}
 
       {/* Bottom Floating Dynamic Scale Legend */}
-      <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 z-10 flex items-center space-x-2 sm:space-x-2.5 pointer-events-auto max-w-[calc(100vw-24px)] overflow-x-auto no-scrollbar">
+      <div className={`absolute bottom-3 sm:bottom-4 left-3 sm:left-4 z-10 flex items-center space-x-2 sm:space-x-2.5 pointer-events-auto max-w-[calc(100vw-24px)] overflow-x-auto no-scrollbar ${introMode && module === 'overview' ? 'hidden' : ''}`}>
         <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-[#090d16]/90 border border-slate-800/80 text-[11px] font-mono backdrop-blur-md shadow-2xl text-slate-300">
           <span className="text-[9px] uppercase text-slate-500 font-semibold tracking-wider">
             {module} Scale:
