@@ -6,20 +6,39 @@
 
 @layer base {
   body {
-    @apply bg-[#07090e] text-slate-100 font-sans antialiased selection:bg-cyan-500 selection:text-black;
+    @apply bg-[#05070b] text-slate-200 font-sans antialiased selection:bg-cyan-500 selection:text-black;
+    overflow-x: hidden;
   }
 }
 
-/* Scientific Grid background utility */
-.scientific-grid {
-  background-size: 32px 32px;
-  background-image: 
-    linear-gradient(to right, rgba(30, 41, 59, 0.3) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(30, 41, 59, 0.3) 1px, transparent 1px);
+/* Custom scrollbars for clean minimal panels */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
 }
 
-/* Subtle crosshair indicator */
-.crosshair-pattern {
-  background-image: radial-gradient(rgba(56, 189, 248, 0.15) 1px, transparent 0);
-  background-size: 24px 24px;
+/* MapLibre Globe Styling */
+.maplibregl-canvas {
+  outline: none;
+}
+.maplibregl-ctrl-group {
+  background: rgba(15, 20, 31, 0.8) !important;
+  border: 1px solid rgba(51, 65, 85, 0.5) !important;
+  backdrop-filter: blur(8px);
+}
+.maplibregl-ctrl-group button {
+  border-bottom: 1px solid rgba(51, 65, 85, 0.3) !important;
+}
+.maplibregl-ctrl-icon {
+  filter: invert(0.85);
 }
