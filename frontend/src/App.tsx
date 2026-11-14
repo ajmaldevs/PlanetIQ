@@ -339,17 +339,24 @@ export const App: React.FC = () => {
         visible={currentView === 'explore' && explorationMode === '3d'}
         onZoomChange={handleZoomChange}
         onCenterCoordinatesChange={handleCenterCoordinatesChange}
+        center={centerCoords}
         sidePanelOpen={sidePanelOpen}
         trendsOpen={showTrends}
       />
 
       {/* 2D Planar Map Canvas */}
       <div
-        className={`fixed inset-0 w-screen h-screen z-0 overflow-hidden transition-opacity duration-300 ${
+        className={`fixed z-0 overflow-hidden transition-all duration-300 ease-out ${
           currentView === 'explore' && explorationMode === '2d'
             ? 'opacity-100 pointer-events-auto'
             : 'opacity-0 pointer-events-none'
         }`}
+        style={{
+          top: activeModule !== null ? '116px' : '64px',
+          left: '0px',
+          right: sidePanelOpen && typeof window !== 'undefined' && window.innerWidth >= 768 ? '390px' : '0px',
+          bottom: showTrends ? (trendsExpanded ? '480px' : '320px') : '0px',
+        }}
       >
         <MapView
           module={activeModule || 'overview'}
@@ -361,6 +368,13 @@ export const App: React.FC = () => {
           selectedFeature={selectedFeature}
           activeMetric={metricType}
           setActiveMetric={setMetricType}
+          center={centerCoords}
+          onCenterChange={handleCenterCoordinatesChange}
+          selectedPlace={selectedPlace}
+          sidePanelOpen={sidePanelOpen}
+          trendsOpen={showTrends}
+          trendsExpanded={trendsExpanded}
+          visible={currentView === 'explore' && explorationMode === '2d'}
         />
       </div>
 
@@ -454,15 +468,71 @@ export const App: React.FC = () => {
               <p className="mt-2 text-sm sm:text-base text-slate-400 font-normal leading-relaxed max-w-lg mx-auto">
                 Discover how our oceans, atmosphere and land are changing through real observations from NASA satellites.
               </p>
-              <div className="mt-4 max-w-md mx-auto pointer-events-auto">
-                <SearchBar onSelectLocation={handleSearchSelect} />
+              <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-2 max-w-xl mx-auto pointer-events-auto">
+                <div className="w-full sm:flex-1">
+                  <SearchBar onSelectLocation={handleSearchSelect} />
+                </div>
+                <div className="inline-flex items-center p-0.5 rounded-xl bg-slate-900/90 border border-slate-800 shadow-xl shrink-0 backdrop-blur-md">
+                  <button
+                    onClick={() => setExplorationMode('3d')}
+                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      explorationMode === '3d'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    aria-label="Switch to 3D Globe View"
+                  >
+                    <GlobeIcon className="h-3.5 w-3.5" />
+                    <span>3D Globe</span>
+                  </button>
+                  <button
+                    onClick={() => setExplorationMode('2d')}
+                    className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      explorationMode === '2d'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    aria-label="Switch to 2D Planar Map View"
+                  >
+                    <MapIcon className="h-3.5 w-3.5" />
+                    <span>2D Map</span>
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* When intro text is faded out on zoom, provide a floating top search bar */}
+            {/* When intro text is faded out on zoom, provide a floating top search bar with 3D/2D controls */}
             {!isIntroVisible && (
-              <div className="fixed top-18 left-1/2 -translate-x-1/2 z-20 w-full max-w-xs sm:max-w-md px-4 pointer-events-auto transition-all duration-300">
-                <SearchBar onSelectLocation={handleSearchSelect} />
+              <div className="fixed top-18 left-1/2 -translate-x-1/2 z-20 w-full max-w-xl px-4 flex items-center gap-2 pointer-events-auto transition-all duration-300">
+                <div className="flex-1">
+                  <SearchBar onSelectLocation={handleSearchSelect} />
+                </div>
+                <div className="inline-flex items-center p-0.5 rounded-xl bg-slate-900/90 border border-slate-800 shadow-xl shrink-0 backdrop-blur-md">
+                  <button
+                    onClick={() => setExplorationMode('3d')}
+                    className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      explorationMode === '3d'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    aria-label="Switch to 3D Globe View"
+                  >
+                    <GlobeIcon className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">3D Globe</span>
+                  </button>
+                  <button
+                    onClick={() => setExplorationMode('2d')}
+                    className={`flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      explorationMode === '2d'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/50 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    aria-label="Switch to 2D Planar Map View"
+                  >
+                    <MapIcon className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">2D Map</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -572,27 +642,29 @@ export const App: React.FC = () => {
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-900/90 border border-slate-800">
                   <button
                     onClick={() => setExplorationMode('3d')}
-                    className={`flex items-center space-x-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                    className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
                       explorationMode === '3d'
                         ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
-                    title="3D Spherical Earth Globe"
+                    title="Switch to 3D Spherical Earth Globe"
+                    aria-label="Switch to 3D Globe View"
                   >
-                    <GlobeIcon className="h-3 w-3" />
-                    <span>3D</span>
+                    <GlobeIcon className="h-3.5 w-3.5" />
+                    <span>3D Globe</span>
                   </button>
                   <button
                     onClick={() => setExplorationMode('2d')}
-                    className={`flex items-center space-x-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                    className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
                       explorationMode === '2d'
                         ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
-                    title="2D Planar Map"
+                    title="Switch to 2D Planar Map"
+                    aria-label="Switch to 2D Planar Map View"
                   >
-                    <MapIcon className="h-3 w-3" />
-                    <span>2D</span>
+                    <MapIcon className="h-3.5 w-3.5" />
+                    <span>2D Map</span>
                   </button>
                 </div>
 

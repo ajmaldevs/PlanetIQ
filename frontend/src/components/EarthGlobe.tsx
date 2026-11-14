@@ -31,6 +31,7 @@ interface EarthGlobeProps {
   visible?: boolean;
   onZoomChange?: (zoom: ZoomLevel, distance: number) => void;
   onCenterCoordinatesChange?: (lat: number, lon: number) => void;
+  center?: { lat: number; lon: number };
   sidePanelOpen?: boolean;
   trendsOpen?: boolean;
 }
@@ -198,6 +199,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   visible = true,
   onZoomChange,
   onCenterCoordinatesChange,
+  center,
   sidePanelOpen = false,
   trendsOpen = false,
 }) => {
@@ -215,6 +217,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   sidePanelOpenRef.current = sidePanelOpen;
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
+  const prevVisibleRef = useRef(visible);
 
   const currentZoomRef = useRef<ZoomLevel>('continental');
   const [currentZoomLevel, setCurrentZoomLevel] = useState<ZoomLevel>('continental');
@@ -881,6 +884,14 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         : 4.6;
     flyToCoordinates(selectedPlace.lat, selectedPlace.lon, targetDist);
   }, [selectedPlace]);
+
+  // Synchronize 3D camera orientation with geographic center when restoring from 2D mode
+  useEffect(() => {
+    if (!prevVisibleRef.current && visible && center && isReady) {
+      flyToCoordinates(center.lat, center.lon, currentCameraDistance.current, 750);
+    }
+    prevVisibleRef.current = visible;
+  }, [visible, center, isReady]);
 
   // Synchronize selected observation marker halo for breathing pulse
   useEffect(() => {
