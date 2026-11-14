@@ -35,6 +35,7 @@ interface EarthGlobeProps {
   onZoomChange?: (zoom: ZoomLevel, distance: number) => void;
   onCenterCoordinatesChange?: (lat: number, lon: number) => void;
   center?: { lat: number; lon: number };
+  cameraDistance?: number;
   sidePanelOpen?: boolean;
   trendsOpen?: boolean;
   trendsExpanded?: boolean;
@@ -126,6 +127,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   onZoomChange,
   onCenterCoordinatesChange,
   center,
+  cameraDistance,
   sidePanelOpen = false,
   trendsOpen = false,
   trendsExpanded = false,
@@ -835,13 +837,16 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     flyToCoordinates(selectedPlace.lat, selectedPlace.lon, targetDist);
   }, [selectedPlace]);
 
-  // Synchronize 3D camera orientation with geographic center when restoring from 2D mode
+  // Synchronize 3D camera orientation with geographic center and distance when restoring from 2D mode
   useEffect(() => {
     if (!prevVisibleRef.current && visible && center && isReady) {
-      flyToCoordinates(center.lat, center.lon, currentCameraDistance.current, 750);
+      const targetDist = cameraDistance
+        ? Math.max(minDistance, Math.min(maxDistance, cameraDistance))
+        : currentCameraDistance.current;
+      flyToCoordinates(center.lat, center.lon, targetDist, 750);
     }
     prevVisibleRef.current = visible;
-  }, [visible, center, isReady]);
+  }, [visible, center, isReady, cameraDistance]);
 
   // Synchronize selected observation marker halo for breathing pulse
   useEffect(() => {

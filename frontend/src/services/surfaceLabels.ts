@@ -9,6 +9,22 @@ export interface SurfaceLabelConfig {
   maxVisibleLabels?: number;
 }
 
+/**
+ * Monotonic bidirectional mapping between 3D camera distance (2.15 - 5.5)
+ * and 2D MapLibre planar zoom level (1.6 - 10.4).
+ */
+export function distanceToMapZoom(distance: number): number {
+  const d = Math.max(2.15, Math.min(5.5, distance));
+  const t = (5.5 - d) / (5.5 - 2.15); // 0 at d=5.5 (global), 1 at d=2.15 (city/town)
+  return Number((1.6 + 8.8 * Math.pow(t, 0.95)).toFixed(2));
+}
+
+export function mapZoomToDistance(zoom: number): number {
+  const z = Math.max(1.6, Math.min(10.4, zoom));
+  const t = Math.pow((z - 1.6) / 8.8, 1 / 0.95);
+  return Number((5.5 - t * (5.5 - 2.15)).toFixed(3));
+}
+
 interface ActiveLabelItem {
   place: GISPlace;
   sprite: THREE.Sprite;
@@ -291,21 +307,23 @@ export class SurfaceLabelManager {
 
     // Level 4: Cities, Towns & Populated Places (e.g. Kozhikode, Mumbai, New York, Tokyo)
     if (place.level === 4) {
-      if (dist >= 3.6) return 0.0;
+      if (dist >= 3.5) return 0.0;
 
       const priority = place.priority || 50;
-      const isMegaMetropolis = priority >= 78;
+      const isMajorCity = priority >= 70;
 
-      // Between 3.6 and 3.0: Mega metropolises fade in
-      if (dist >= 3.0) {
-        if (!isMegaMetropolis) return 0.0;
-        return Math.min(0.9, Math.max(0.0, (3.6 - dist) / 0.6));
+      // Major metropolises and national capitals fade in between 3.5 and 2.85
+      if (dist >= 2.85) {
+        if (!isMajorCity) return 0.0;
+        return Math.min(0.95, Math.max(0.0, (3.5 - dist) / 0.6));
       }
 
-      // Below 3.0 (Regional / City view): All local cities fade in
-      let alpha = Math.min(1.0, Math.max(0.0, (3.0 - dist) / 0.5));
+      // Below 2.85 (Regional / Town view): Smaller cities, towns, and local features emerge
+      if (isMajorCity) return 0.95;
 
-      // Proximity boost to facing center: cities right under the camera are extra prominent
+      let alpha = Math.min(1.0, Math.max(0.0, (2.85 - dist) / 0.55));
+
+      // Proximity boost to facing center: towns right under the camera are extra prominent
       if (angularDistFromCenter < 25) {
         alpha = Math.min(1.0, alpha + 0.15);
       }

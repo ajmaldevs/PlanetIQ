@@ -3,6 +3,8 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { GeoJSONFeatureCollection, GeoJSONFeature } from '../services/api';
 import { GISPlace, GIS_PLACES, findPlaceById } from '../services/gisDatabase';
+import { distanceToMapZoom, mapZoomToDistance } from '../services/surfaceLabels';
+import { ZoomLevel } from './EarthGlobe';
 import { Calendar, Navigation, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export interface MapViewProps {
@@ -17,6 +19,8 @@ export interface MapViewProps {
   setActiveMetric: (metric: string) => void;
   center?: { lat: number; lon: number };
   onCenterChange?: (lat: number, lon: number) => void;
+  cameraDistance?: number;
+  onZoomChange?: (zoom: ZoomLevel, distance: number) => void;
   selectedPlace?: GISPlace | null;
   onSelectPlace?: (place: GISPlace) => void;
   sidePanelOpen?: boolean;
@@ -119,6 +123,8 @@ export const MapView: React.FC<MapViewProps> = ({
   setActiveMetric,
   center,
   onCenterChange,
+  cameraDistance = 4.6,
+  onZoomChange,
   selectedPlace,
   onSelectPlace,
   sidePanelOpen = false,
@@ -131,6 +137,10 @@ export const MapView: React.FC<MapViewProps> = ({
   const [mapLoaded, setMapLoaded] = useState(false);
   const [usingFallbackStyle, setUsingFallbackStyle] = useState(false);
   const isInternalFlyRef = useRef(false);
+  const onCenterChangeRef = useRef(onCenterChange);
+  onCenterChangeRef.current = onCenterChange;
+  const onZoomChangeRef = useRef(onZoomChange);
+  onZoomChangeRef.current = onZoomChange;
 
   // Available dates for historical exploration
   const dateOptions = [
@@ -187,8 +197,21 @@ export const MapView: React.FC<MapViewProps> = ({
       m.on('moveend', () => {
         if (!map.current || isInternalFlyRef.current) return;
         const c = map.current.getCenter();
-        if (onCenterChange) {
-          onCenterChange(c.lat, c.lng);
+        const z = map.current.getZoom();
+        if (onCenterChangeRef.current) {
+          onCenterChangeRef.current(c.lat, c.lng);
+        }
+        if (onZoomChangeRef.current) {
+          const equivDist = mapZoomToDistance(z);
+          const equivLevel: ZoomLevel =
+            equivDist >= 4.75
+              ? 'global'
+              : equivDist >= 3.8
+              ? 'continental'
+              : equivDist >= 2.85
+              ? 'country'
+              : 'regional';
+          onZoomChangeRef.current(equivLevel, equivDist);
         }
       });
 
@@ -242,6 +265,28 @@ export const MapView: React.FC<MapViewProps> = ({
     }, 120);
     return () => clearTimeout(timer);
   }, [sidePanelOpen, trendsOpen, trendsExpanded, visible]);
+
+  // Synchronize 2D map center & zoom context when switching from 3D to 2D
+  const prevVisibleRef = useRef(visible);
+  useEffect(() => {
+    if (!prevVisibleRef.current && visible && map.current && mapLoaded) {
+      const targetZoom = distanceToMapZoom(cameraDistance ?? 4.6);
+      isInternalFlyRef.current = true;
+      map.current.resize();
+      if (center) {
+        map.current.jumpTo({
+          center: [center.lon, center.lat],
+          zoom: targetZoom,
+        });
+      }
+      const timer = setTimeout(() => {
+        isInternalFlyRef.current = false;
+        map.current?.resize();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+    prevVisibleRef.current = visible;
+  }, [visible, mapLoaded, center, cameraDistance]);
 
   // Synchronize map center when selectedFeature changes
   useEffect(() => {
@@ -531,36 +576,36 @@ export const MapView: React.FC<MapViewProps> = ({
       });
     }
 
-    // 4. Cities Location Anchor Dots (Level 4: zoom >= 5.2)
-    if (!m.getLayer('terralens-labels-cities-points')) {
+    // 4. Major Cities Location Anchor Dots (Capitals & Metropolises: zoom >= 4.8)
+    if (!m.getLayer('terralens-labels-cities-major-points')) {
       m.addLayer({
-        id: 'terralens-labels-cities-points',
+        id: 'terralens-labels-cities-major-points',
         type: 'circle',
         source: sourceId,
-        filter: ['==', ['get', 'level'], 4],
-        minzoom: 5.2,
+        filter: ['all', ['==', ['get', 'level'], 4], ['>=', ['get', 'priority'], 70]],
+        minzoom: 4.8,
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5.2, 2.5, 8, 3.5],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 4.8, 2.5, 8, 3.5],
           'circle-color': '#38bdf8',
           'circle-stroke-width': 1.5,
           'circle-stroke-color': '#05070b',
-          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 5.2, 0.0, 6.0, 1.0],
+          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 4.8, 0.0, 5.5, 1.0],
         },
       });
     }
 
-    // 5. Cities Text Labels (Level 4: zoom >= 5.2)
-    if (!m.getLayer('terralens-labels-cities')) {
+    // 5. Major Cities Text Labels (Capitals & Metropolises: zoom >= 4.8)
+    if (!m.getLayer('terralens-labels-cities-major')) {
       m.addLayer({
-        id: 'terralens-labels-cities',
+        id: 'terralens-labels-cities-major',
         type: 'symbol',
         source: sourceId,
-        filter: ['==', ['get', 'level'], 4],
-        minzoom: 5.2,
+        filter: ['all', ['==', ['get', 'level'], 4], ['>=', ['get', 'priority'], 70]],
+        minzoom: 4.8,
         layout: {
           'text-field': ['get', 'name'],
-          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 5.2, 10, 8, 12.5, 11, 14.5],
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 4.8, 10.5, 8, 13, 11, 15],
           'text-offset': [0.6, 0],
           'text-anchor': 'left',
           'symbol-sort-key': ['-', 1000, ['get', 'priority']],
@@ -568,10 +613,55 @@ export const MapView: React.FC<MapViewProps> = ({
           'text-ignore-placement': false,
         },
         paint: {
-          'text-color': '#f1f5f9',
+          'text-color': '#f8fafc',
           'text-halo-color': 'rgba(5, 7, 11, 0.95)',
           'text-halo-width': 2,
-          'text-opacity': ['interpolate', ['linear'], ['zoom'], 5.2, 0.0, 6.0, 1.0],
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 4.8, 0.0, 5.5, 1.0],
+        },
+      });
+    }
+
+    // 6. Towns & Local Populated Places Anchor Dots (Regional density: zoom >= 7.0)
+    if (!m.getLayer('terralens-labels-towns-points')) {
+      m.addLayer({
+        id: 'terralens-labels-towns-points',
+        type: 'circle',
+        source: sourceId,
+        filter: ['all', ['==', ['get', 'level'], 4], ['<', ['get', 'priority'], 70]],
+        minzoom: 7.0,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 7.0, 2.0, 10, 3.0],
+          'circle-color': '#7dd3fc',
+          'circle-stroke-width': 1.2,
+          'circle-stroke-color': '#05070b',
+          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 7.0, 0.0, 7.8, 0.9],
+        },
+      });
+    }
+
+    // 7. Towns & Local Populated Places Text Labels (Regional density: zoom >= 7.0)
+    if (!m.getLayer('terralens-labels-towns')) {
+      m.addLayer({
+        id: 'terralens-labels-towns',
+        type: 'symbol',
+        source: sourceId,
+        filter: ['all', ['==', ['get', 'level'], 4], ['<', ['get', 'priority'], 70]],
+        minzoom: 7.0,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 7.0, 9.5, 9, 12, 11, 13.5],
+          'text-offset': [0.55, 0],
+          'text-anchor': 'left',
+          'symbol-sort-key': ['-', 1000, ['get', 'priority']],
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+        },
+        paint: {
+          'text-color': '#e2e8f0',
+          'text-halo-color': 'rgba(5, 7, 11, 0.95)',
+          'text-halo-width': 1.8,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 7.0, 0.0, 7.8, 0.95],
         },
       });
     }
@@ -580,8 +670,10 @@ export const MapView: React.FC<MapViewProps> = ({
       'terralens-labels-continents',
       'terralens-labels-countries',
       'terralens-labels-states',
-      'terralens-labels-cities',
-      'terralens-labels-cities-points',
+      'terralens-labels-cities-major',
+      'terralens-labels-cities-major-points',
+      'terralens-labels-towns',
+      'terralens-labels-towns-points',
     ];
 
     const onLabelClick = (e: maplibregl.MapMouseEvent) => {

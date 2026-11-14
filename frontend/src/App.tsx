@@ -413,6 +413,7 @@ export const App: React.FC = () => {
         onZoomChange={handleZoomChange}
         onCenterCoordinatesChange={handleCenterCoordinatesChange}
         center={centerCoords}
+        cameraDistance={cameraDistanceRef.current}
         sidePanelOpen={sidePanelOpen}
         trendsOpen={showTrends}
         trendsExpanded={trendsExpanded}
@@ -450,6 +451,8 @@ export const App: React.FC = () => {
           setActiveMetric={setMetricType}
           center={centerCoords}
           onCenterChange={handleCenterCoordinatesChange}
+          cameraDistance={cameraDistanceRef.current}
+          onZoomChange={handleZoomChange}
           selectedPlace={selectedPlace}
           onSelectPlace={handlePlaceSelect}
           sidePanelOpen={sidePanelOpen}
