@@ -15,12 +15,13 @@ Base = declarative_base()
 # Async PostgreSQL + PostGIS Engine
 try:
     async_engine = create_async_engine(
-        settings.ASYNC_DATABASE_URL,
-        echo=settings.DEBUG,
-        pool_size=settings.DATABASE_POOL_SIZE,
-        max_overflow=settings.DATABASE_MAX_OVERFLOW,
-        future=True,
-    )
+    settings.ASYNC_DATABASE_URL,
+    echo=settings.DEBUG,
+    pool_pre_ping=True,
+    pool_size=settings.DATABASE_POOL_SIZE,
+    max_overflow=settings.DATABASE_MAX_OVERFLOW,
+    future=True,
+    )   
     AsyncSessionLocal = async_sessionmaker(
         bind=async_engine,
         class_=AsyncSession,

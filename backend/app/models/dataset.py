@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Text, JSON
+from sqlalchemy import Column, JSON, String, Text
+
 from app.models.base import TimeStampedModel
 
 
@@ -9,7 +10,7 @@ class DatasetCatalogModel(TimeStampedModel):
     """
     __tablename__ = "dataset_catalogs"
 
-    dataset_id = Column(String(64), primary_key=True, index=True)
+    dataset_id = Column(String(64), unique=True, index=True, nullable=False)
     module = Column(String(32), index=True, nullable=False)  # ocean, atmosphere, land
     name = Column(String(255), nullable=False)
     agency = Column(String(128), nullable=False)
