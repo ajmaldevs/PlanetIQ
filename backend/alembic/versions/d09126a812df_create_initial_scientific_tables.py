@@ -19,6 +19,9 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # New Render Postgres databases support PostGIS but do not enable it by default.
+    op.execute("CREATE EXTENSION IF NOT EXISTS postgis")
+
     # 1. Dataset Catalogs
     op.create_table(
         'dataset_catalogs',

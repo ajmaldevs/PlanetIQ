@@ -79,6 +79,10 @@ npm run dev
 ```
 Frontend dashboard will be available at: `http://localhost:5173`
 
+### Deploy to Render
+
+The root [`render.yaml`](render.yaml) provisions the frontend, FastAPI backend, PostgreSQL database, PostGIS extension, and schema migrations. Follow the [Render deployment guide](docs/deployment/render.md) to launch the Blueprint and verify the live services.
+
 ---
 
 ## 📜 Branch & Contribution Strategy

@@ -1,6 +1,6 @@
 # TerraLens Production Deployment Guide
 
-TerraLens is engineered for cloud-native deployment with decoupled frontend (Vercel) and backend services (Render / AWS / GCP) paired with a high-availability PostGIS instance.
+TerraLens is engineered for cloud deployment with a decoupled React frontend and FastAPI backend paired with PostgreSQL + PostGIS. The repository's one-click Render configuration is documented in [Render deployment](render.md).
 
 ---
 
@@ -18,51 +18,21 @@ TerraLens is engineered for cloud-native deployment with decoupled frontend (Ver
 
 ---
 
-## 2. Frontend Deployment: Vercel
+## 2. Frontend Deployment
 
-1. **Root Directory**: `frontend`
-2. **Framework Preset**: `Vite`
-3. **Build Command**: `npm run build`
-4. **Output Directory**: `dist`
-5. **Environment Variables**:
-   * `VITE_API_BASE_URL`: `https://terralens-backend.onrender.com/api/v1`
-6. Single-page application rewrites are managed by [`frontend/vercel.json`](file:///C:/Users/ajumu/Downloads/PlanetIQ/frontend/vercel.json).
+For Render, the Blueprint configures `frontend` as a static Vite site, sets the API URL at build time, and rewrites nested routes to `index.html`. Follow the Render guide above. Other static hosts need `VITE_API_BASE_URL` set to the public backend URL ending in `/api/v1` and an SPA fallback rewrite.
 
 ---
 
-## 3. Backend Deployment: Render / Cloud Container
+## 3. Backend Deployment
 
-1. **Root Directory**: `backend`
-2. **Environment**: Python 3.11+ or Docker via [`backend/Dockerfile`](file:///C:/Users/ajumu/Downloads/PlanetIQ/backend/Dockerfile).
-3. **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-4. **Health Check Path**: `/api/v1/health`
-5. **Required Production Environment Variables**:
-   * `ENVIRONMENT`: `production`
-   * `DEBUG`: `false`
-   * `CORS_ORIGINS`: `["https://terralens.vercel.app","https://terralens.onrender.com"]`
-   * `POSTGRES_SERVER`: Hostname of managed PostGIS instance
-   * `POSTGRES_PORT`: `5432`
-   * `POSTGRES_USER`: Database username
-   * `POSTGRES_PASSWORD`: Database password
-   * `POSTGRES_DB`: `terralens_db`
-   * `GEMINI_API_KEY`: Google AI Studio API key
-   * `GEMINI_MODEL`: `gemini-1.5-flash`
+The Render Blueprint sets Python 3.11, starts Uvicorn on Render's assigned `$PORT`, checks `/api/v1/health`, references the managed database credentials, and runs `alembic upgrade head` before each deploy. Gemini and NASA Earthdata credentials are optional for this demo build.
 
 ---
 
 ## 4. Managed PostgreSQL + PostGIS Setup
 
-1. Provision PostgreSQL 16.
-2. Initialize spatial extensions:
-   ```sql
-   CREATE EXTENSION IF NOT EXISTS postgis;
-   CREATE EXTENSION IF NOT EXISTS postgis_topology;
-   CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-   ```
-3. Run Alembic migrations:
-   ```bash
-   alembic upgrade head
-   ```
+The Render Blueprint provisions PostgreSQL 16. The first Alembic revision enables PostGIS before creating spatial tables, and the backend pre-deploy command applies the migrations automatically. For an existing database, confirm PostGIS is enabled before running `alembic upgrade head`.
 
 ---
 
