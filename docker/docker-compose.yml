@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: terralens_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: terralens_user
+      POSTGRES_PASSWORD: terralens_secret_pass
+      POSTGRES_DB: terralens_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - terralens_pgdata:/var/lib/postgresql/data
+      - ./postgres/init_postgis.sql:/docker-entrypoint-initdb.d/init_postgis.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U terralens_user -d terralens_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  terralens_pgdata:
+    driver: local

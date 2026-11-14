@@ -1,9 +1,25 @@
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    @apply bg-[#0a0d14] text-slate-100 font-sans;
+    @apply bg-[#07090e] text-slate-100 font-sans antialiased selection:bg-cyan-500 selection:text-black;
   }
+}
+
+/* Scientific Grid background utility */
+.scientific-grid {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(30, 41, 59, 0.3) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(30, 41, 59, 0.3) 1px, transparent 1px);
+}
+
+/* Subtle crosshair indicator */
+.crosshair-pattern {
+  background-image: radial-gradient(rgba(56, 189, 248, 0.15) 1px, transparent 0);
+  background-size: 24px 24px;
 }

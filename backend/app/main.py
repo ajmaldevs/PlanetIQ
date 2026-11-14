@@ -1,31 +1,51 @@
+from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.config import settings
+from app.api.v1.router import api_router
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("terralens")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown."""
+    logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION} [{settings.ENVIRONMENT}]")
+    yield
+    logger.info(f"Shutting down {settings.PROJECT_NAME}")
+
 
 app = FastAPI(
     title="TerraLens Scientific API",
-    version="0.1.0",
-    description="Earth Observation and Environmental Analysis Backend"
+    version=settings.VERSION,
+    description="Interactive Earth Observation and Environmental Analysis Backend",
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/api/v1/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "service": "TerraLens Backend",
-        "version": "0.1.0"
-    }
+# Register API v1 routes
+app.include_router(api_router, prefix=settings.API_V1_STR)
 
-@app.get("/")
+
+@app.get("/", tags=["Root"])
 async def root():
     return {
-        "message": "Welcome to TerraLens Earth Observation API",
-        "docs_url": "/docs"
+        "project": settings.PROJECT_NAME,
+        "version": settings.VERSION,
+        "api_v1": settings.API_V1_STR,
+        "documentation": "/docs",
+        "description": "Earth Observation Scientific Platform API",
     }
