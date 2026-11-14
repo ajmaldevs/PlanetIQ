@@ -28,7 +28,16 @@ import {
   LandTimeSeriesResponse,
   CrossSystemResponse,
 } from './services/api';
-import { ArrowLeft, Compass, Globe as GlobeIcon, Map as MapIcon } from 'lucide-react';
+import {
+  ArrowLeft,
+  Compass,
+  Globe as GlobeIcon,
+  Map as MapIcon,
+  Waves,
+  CloudRain,
+  Trees,
+  TrendingUp,
+} from 'lucide-react';
 
 export const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<MainView>('explore');
@@ -42,14 +51,18 @@ export const App: React.FC = () => {
   const [selectedPlace, setSelectedPlace] = useState<GISPlace | null>(null);
   const [metricType, setMetricType] = useState<string>('accumulated');
   const [showTrends, setShowTrends] = useState<boolean>(false);
+  const [trendsExpanded, setTrendsExpanded] = useState<boolean>(false);
   const [dataLoading, setDataLoading] = useState<boolean>(false);
   const [showDatasetInfo, setShowDatasetInfo] = useState<boolean>(false);
   const [pendingAiPrompt, setPendingAiPrompt] = useState<string | undefined>(undefined);
 
   // Adaptive Zoom and Contextual Side Panel States
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('global');
-  const [centerCoords, setCenterCoords] = useState<{ lat: number; lon: number }>({ lat: 20, lon: 0 });
   const [sidePanelOpen, setSidePanelOpen] = useState<boolean>(false);
+  const [centerCoords, setCenterCoords] = useState<{ lat: number; lon: number }>({
+    lat: 10.0,
+    lon: -30.0,
+  });
 
   // Scientific data states
   const [atmosphereGrid, setAtmosphereGrid] = useState<GeoJSONFeatureCollection | null>(null);
@@ -93,10 +106,9 @@ export const App: React.FC = () => {
       .catch(() => setHealth(null));
   }, []);
 
-  // Set default metric type on module change
+  // Set default metric type on module change while preserving spatial selections
   const handleSelectModule = (mod: EarthModule) => {
     setActiveModule(mod);
-    setSelectedFeature(null);
     setSidePanelOpen(true);
     if (mod === 'atmosphere') setMetricType('accumulated');
     if (mod === 'ocean') setMetricType('ssha');
@@ -106,9 +118,6 @@ export const App: React.FC = () => {
   // Adaptive Zoom and Center Coordinate handlers
   const handleZoomChange = (newZoom: ZoomLevel, _dist: number) => {
     setZoomLevel(newZoom);
-    if (newZoom !== 'global') {
-      setSidePanelOpen(true);
-    }
   };
 
   const handleCenterCoordinatesChange = (lat: number, lon: number) => {
@@ -132,8 +141,8 @@ export const App: React.FC = () => {
         })
         .catch(console.error);
 
-      const lat = selectedFeature?.properties.latitude ?? 6.5;
-      const lon = selectedFeature?.properties.longitude ?? -150.0;
+      const lat = selectedFeature?.properties.latitude ?? centerCoords.lat ?? 6.5;
+      const lon = selectedFeature?.properties.longitude ?? centerCoords.lon ?? -150.0;
       fetchAtmosphereTimeseries(lat, lon)
         .then((ts) => {
           if (reqId !== dataReqIdRef.current) return;
@@ -154,8 +163,8 @@ export const App: React.FC = () => {
         })
         .catch(console.error);
 
-      const lat = selectedFeature?.properties.latitude ?? 36.0;
-      const lon = selectedFeature?.properties.longitude ?? -68.0;
+      const lat = selectedFeature?.properties.latitude ?? centerCoords.lat ?? 36.0;
+      const lon = selectedFeature?.properties.longitude ?? centerCoords.lon ?? -68.0;
       fetchOceanTimeseries(lat, lon)
         .then((ts) => {
           if (reqId !== dataReqIdRef.current) return;
@@ -176,8 +185,8 @@ export const App: React.FC = () => {
         })
         .catch(console.error);
 
-      const lat = selectedFeature?.properties.latitude ?? -3.5;
-      const lon = selectedFeature?.properties.longitude ?? -62.0;
+      const lat = selectedFeature?.properties.latitude ?? centerCoords.lat ?? -3.5;
+      const lon = selectedFeature?.properties.longitude ?? centerCoords.lon ?? -62.0;
       fetchLandTimeseries(lat, lon)
         .then((ts) => {
           if (reqId !== dataReqIdRef.current) return;
@@ -206,67 +215,67 @@ export const App: React.FC = () => {
     const lon = feat.properties.longitude;
 
     if (activeModule === 'atmosphere') {
-      fetchAtmosphereTimeseries(lat, lon).then(setAtmosphereTimeseries);
+      fetchAtmosphereTimeseries(lat, lon)
+        .then(setAtmosphereTimeseries)
+        .catch(console.error);
     } else if (activeModule === 'ocean') {
-      fetchOceanTimeseries(lat, lon).then(setOceanTimeseries);
+      fetchOceanTimeseries(lat, lon)
+        .then(setOceanTimeseries)
+        .catch(console.error);
     } else if (activeModule === 'land') {
-      fetchLandTimeseries(lat, lon).then(setLandTimeseries);
+      fetchLandTimeseries(lat, lon)
+        .then(setLandTimeseries)
+        .catch(console.error);
     }
   };
 
-  // Handle GIS place label click
+  // Handle GIS place label selection (cities, countries, states, oceans)
   const handlePlaceSelect = (place: GISPlace) => {
     setSelectedPlace(place);
-    handleSelectPreset(place.lat, place.lon, place.name);
+    setSidePanelOpen(true);
   };
 
-  // Handle Preset selection with nearest authentic feature matching
+  // Handle Preset feature selection from Context Panel
   const handleSelectPreset = (lat: number, lon: number, name: string) => {
-    const activeData = getActiveData();
-    let matchedFeature: GeoJSONFeature | null = null;
-    let minDistance = Infinity;
+    const dummyFeature: GeoJSONFeature = {
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [lon, lat] },
+      properties: {
+        location_name: name,
+        region_name: name,
+        latitude: lat,
+        longitude: lon,
+      },
+    };
+    setSelectedFeature(dummyFeature);
+    setSidePanelOpen(true);
 
-    if (activeData && activeData.features.length > 0) {
-      for (const feat of activeData.features) {
-        const featLat = feat.properties.latitude ?? feat.geometry.coordinates[1];
-        const featLon = feat.properties.longitude ?? feat.geometry.coordinates[0];
-        const dist = Math.pow(featLat - lat, 2) + Math.pow(featLon - lon, 2);
-        if (dist < minDistance) {
-          minDistance = dist;
-          matchedFeature = feat;
-        }
-      }
-    }
-
-    if (matchedFeature && minDistance < 150) {
-      handleFeatureSelect(matchedFeature);
-    } else {
-      const fallbackFeature: GeoJSONFeature = {
-        type: 'Feature',
-        geometry: { type: 'Point', coordinates: [lon, lat] },
-        properties: {
-          location_name: name,
-          latitude: lat,
-          longitude: lon,
-        },
-      };
-      handleFeatureSelect(fallbackFeature);
+    if (activeModule === 'atmosphere') {
+      fetchAtmosphereTimeseries(lat, lon)
+        .then(setAtmosphereTimeseries)
+        .catch(console.error);
+    } else if (activeModule === 'ocean') {
+      fetchOceanTimeseries(lat, lon)
+        .then(setOceanTimeseries)
+        .catch(console.error);
+    } else if (activeModule === 'land') {
+      fetchLandTimeseries(lat, lon)
+        .then(setLandTimeseries)
+        .catch(console.error);
     }
   };
 
-  // Geographic search selection with automatic Earth-system context inference
+  // Search selection handler
   const handleSearchSelect = (lat: number, lon: number, name: string) => {
     if (!activeModule) {
       const lower = name.toLowerCase();
       if (
-        lower.includes('current') ||
         lower.includes('ocean') ||
+        lower.includes('current') ||
+        lower.includes('sea') ||
         lower.includes('passage') ||
-        lower.includes('retroflection') ||
-        lower.includes('gulf') ||
-        lower.includes('kuroshio') ||
-        lower.includes('humboldt') ||
-        lower.includes('pacific')
+        lower.includes('reef') ||
+        lower.includes('eddy')
       ) {
         handleSelectModule('ocean');
       } else if (
@@ -307,8 +316,8 @@ export const App: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-[#05070b] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black overflow-x-hidden relative">
-      {/* 3D Realistic Earth Globe Canvas (Full Viewport, zero rectangular clipping) */}
+    <div className="h-screen w-screen bg-[#05070b] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black overflow-hidden relative select-none">
+      {/* 3D Realistic Earth Globe Canvas */}
       <EarthGlobe
         activeModule={activeModule}
         data={getActiveData()}
@@ -322,9 +331,10 @@ export const App: React.FC = () => {
         onZoomChange={handleZoomChange}
         onCenterCoordinatesChange={handleCenterCoordinatesChange}
         sidePanelOpen={sidePanelOpen}
+        trendsOpen={showTrends}
       />
 
-      {/* 2D Planar Map Canvas (Strictly synchronized coordinates, active layer, and feature) */}
+      {/* 2D Planar Map Canvas */}
       <div
         className={`fixed inset-0 w-screen h-screen z-0 overflow-hidden transition-opacity duration-300 ${
           currentView === 'explore' && explorationMode === '2d'
@@ -345,7 +355,7 @@ export const App: React.FC = () => {
         />
       </div>
 
-      {/* Minimal Top Header */}
+      {/* 1. Global Navigation Header (Sticky, minimal, professional) */}
       <Navbar
         currentView={currentView}
         setCurrentView={setCurrentView}
@@ -355,184 +365,235 @@ export const App: React.FC = () => {
           setSelectedFeature(null);
           setSelectedPlace(null);
           setSidePanelOpen(false);
+          setShowTrends(false);
         }}
       />
 
-      {/* Floating Reopen Pill when contextual side panel is closed */}
-      {currentView === 'explore' && !sidePanelOpen && (zoomLevel !== 'global' || activeModule !== null || selectedFeature !== null) && (
-        <button
-          onClick={() => setSidePanelOpen(true)}
-          className="fixed top-20 right-4 sm:right-6 z-30 flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-[#090d16]/90 border border-slate-700/80 text-xs font-semibold text-cyan-300 shadow-2xl backdrop-blur-md hover:bg-slate-800 transition-all pointer-events-auto"
-        >
-          <Compass className="h-3.5 w-3.5 text-cyan-400" />
-          <span>Context Panel • <span className="capitalize">{zoomLevel}</span></span>
-        </button>
-      )}
-
-      {/* Adaptive Contextual Side Panel (Desktop: Right slide-in, Mobile: Bottom sheet) */}
-      {currentView === 'explore' && (
-        <AdaptiveSidePanel
-          activeModule={activeModule}
-          onSelectModule={handleSelectModule}
-          selectedDate={selectedDate}
-          setSelectedDate={setSelectedDate}
-          selectedFeature={selectedFeature}
-          metricType={metricType}
-          setMetricType={setMetricType}
-          onSelectPreset={handleSelectPreset}
-          showTrends={showTrends}
-          setShowTrends={setShowTrends}
-          dataLoading={dataLoading}
-          onExplainWithAI={(prompt) => {
-            setPendingAiPrompt(prompt);
-            setCurrentView('assistant');
-          }}
-          onOpenDatasetInfo={() => setShowDatasetInfo(true)}
-          zoomLevel={zoomLevel}
-          geographicContext={geographicContext}
-          timeseriesData={activeTimeseriesPoints}
-          isOpen={sidePanelOpen}
-          onClose={() => setSidePanelOpen(false)}
-        />
-      )}
-
-      {/* Main Container */}
-      <main className="flex-1 flex flex-col max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-3 sm:py-6 overflow-x-hidden relative z-10 pointer-events-none">
-        {/* ================= EXPLORE VIEW (HOME & EXPLORATION) ================= */}
-        {currentView === 'explore' && (
-          <div className="flex-1 flex flex-col space-y-4 pointer-events-none">
-            {/* HOMEPAGE STATE: Realistic Satellite Earth Floating in Space */}
-            {activeModule === null ? (
-              <div className="flex-1 flex flex-col justify-between min-h-[calc(100vh-8.5rem)] py-2 sm:py-4 pointer-events-none">
-                {/* Simple Messaging, Global Geographic Search & 2D/3D Mode Switcher */}
-                <div className="text-center max-w-2xl mx-auto space-y-2 sm:space-y-3 pt-1 sm:pt-3 pointer-events-none">
-                  <div className="inline-flex items-center space-x-1 p-1 rounded-full bg-slate-900/90 border border-slate-800 backdrop-blur-md shadow-lg pointer-events-auto mb-1">
-                    <button
-                      onClick={() => setExplorationMode('3d')}
-                      className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                        explorationMode === '3d'
-                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      <GlobeIcon className="h-3.5 w-3.5" />
-                      <span>3D Globe</span>
-                    </button>
-                    <button
-                      onClick={() => setExplorationMode('2d')}
-                      className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
-                        explorationMode === '2d'
-                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      <MapIcon className="h-3.5 w-3.5" />
-                      <span>2D Map</span>
-                    </button>
-                  </div>
-
-                  <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white drop-shadow-md">
-                    Explore Earth's changing systems.
-                  </h1>
-                  <p className="text-xs sm:text-base text-slate-400 font-normal leading-relaxed max-w-xl mx-auto">
-                    Discover how our oceans, atmosphere and land are changing through observations
-                    from NASA satellites.
-                  </p>
-                  <div className="pt-1 max-w-md mx-auto pointer-events-auto">
-                    <SearchBar onSelectLocation={handleSearchSelect} />
-                  </div>
-                </div>
-
-                {/* Open Space Viewport: Earth Floats Freely in Deep Space */}
-                <div className="flex-1 w-full min-h-[160px] pointer-events-none" />
-
-                {/* Three Exploration Options */}
-                <div className="w-full pt-2 pointer-events-auto">
-                  <ModuleSelector
-                    activeModule={activeModule}
-                    onSelectModule={handleSelectModule}
-                  />
-                </div>
+      {/* 2. Main Content Area */}
+      {currentView === 'explore' ? (
+        activeModule === null ? (
+          /* ================= HOMEPAGE / INTRODUCTORY STATE ================= */
+          <div className="flex-1 relative flex flex-col justify-between overflow-hidden pointer-events-none">
+            {/* Minimal Hero Header & Centered Search */}
+            <div className="pt-8 sm:pt-12 pb-4 text-center max-w-2xl mx-auto px-4 z-10 pointer-events-auto animate-fade-scale">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white drop-shadow-lg">
+                Explore Earth's changing systems.
+              </h1>
+              <p className="mt-2 text-sm sm:text-base text-slate-400 font-normal leading-relaxed max-w-lg mx-auto">
+                Discover how our oceans, atmosphere and land are changing through real observations from NASA satellites.
+              </p>
+              <div className="mt-4 max-w-md mx-auto">
+                <SearchBar onSelectLocation={handleSearchSelect} />
               </div>
-            ) : (
-              /* EXPLORATION EXPERIENCE STATE: Expansive Viewport + Expandable Trends */
-              <div className="flex-1 flex flex-col justify-between min-h-[calc(100vh-8.5rem)] py-2 sm:py-4 space-y-4 pointer-events-none">
-                {/* Top Bar Controls */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-1 pointer-events-auto">
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => {
-                        setActiveModule(null);
-                        setSelectedFeature(null);
-                        setSelectedPlace(null);
-                        setSidePanelOpen(false);
-                      }}
-                      className="flex items-center space-x-1.5 text-xs text-slate-300 hover:text-cyan-300 bg-slate-900/85 px-3 py-1.5 rounded-full border border-slate-800/80 backdrop-blur-md transition-colors"
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                      <span>Back to Overview</span>
-                    </button>
+            </div>
 
-                    <span className="text-xs font-mono text-slate-300 bg-slate-900/85 px-3 py-1.5 rounded-full border border-slate-800/80 backdrop-blur-md">
-                      Active System: <strong className="text-cyan-400 capitalize">{activeModule}</strong>
-                    </span>
+            {/* Generous Central Open Space where Earth floats freely */}
+            <div className="flex-1 w-full pointer-events-none" />
 
-                    {/* 2D/3D Mode Switcher */}
-                    <div className="inline-flex items-center p-0.5 rounded-full bg-slate-900/90 border border-slate-800/80 backdrop-blur-md">
-                      <button
-                        onClick={() => setExplorationMode('3d')}
-                        className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
-                          explorationMode === '3d'
-                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                            : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        <GlobeIcon className="h-3 w-3" />
-                        <span>3D</span>
-                      </button>
-                      <button
-                        onClick={() => setExplorationMode('2d')}
-                        className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
-                          explorationMode === '2d'
-                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                            : 'text-slate-400 hover:text-slate-200'
-                        }`}
-                      >
-                        <MapIcon className="h-3 w-3" />
-                        <span>2D</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="w-full sm:w-80 sm:mr-96 lg:sm:mr-[430px] transition-all">
-                    <SearchBar onSelectLocation={handleSearchSelect} />
-                  </div>
-                </div>
-
-                {/* Open Space for Earth Exploration */}
-                <div className="flex-1 w-full min-h-[140px] pointer-events-none" />
-
-                {/* Progressive Disclosure: Expandable Detailed Trends */}
-                {showTrends && (
-                  <div className="w-full pointer-events-auto">
-                    <TrendDrawer
-                      activeModule={activeModule}
-                      atmosphereData={atmosphereTimeseries}
-                      oceanData={oceanTimeseries}
-                      landData={landTimeseries}
-                      crossSystemData={crossSystemData}
-                      loading={dataLoading}
-                    />
-                  </div>
-                )}
+            {/* Three Clear Exploration Choices in a Clean Row */}
+            <div className="pb-6 sm:pb-8 px-4 z-10 pointer-events-auto max-w-4xl mx-auto w-full">
+              <div className="text-center mb-2.5">
+                <span className="text-[11px] font-mono tracking-widest uppercase text-slate-500 font-semibold">
+                  Select a Scientific System to Begin
+                </span>
               </div>
-            )}
+              <ModuleSelector
+                activeModule={null}
+                onSelectModule={handleSelectModule}
+              />
+            </div>
+
+            {/* Clean Minimal Footer for Homepage */}
+            <footer className="z-10 py-2.5 px-4 text-center text-xs text-slate-500 font-mono bg-[#05070b]/60 backdrop-blur-xs pointer-events-auto border-t border-slate-800/40">
+              TerraLens • NASA Space Apps Challenge 2026 • Earth Observation Intelligence
+            </footer>
           </div>
-        )}
+        ) : (
+          /* ================= EXPLORE WORKSPACE STATE ================= */
+          <div className="flex-1 flex flex-col overflow-hidden relative">
+            {/* Dedicated Workspace Sub-Header Bar (Toolbar) */}
+            <div className="h-13 bg-[#080c16]/95 border-b border-slate-800/80 px-3 sm:px-4 flex items-center justify-between gap-2 z-30 shrink-0 backdrop-blur-md">
+              {/* Left: Overview back + Module switcher pills */}
+              <div className="flex items-center space-x-2 shrink-0">
+                <button
+                  onClick={() => {
+                    setActiveModule(null);
+                    setSelectedFeature(null);
+                    setSelectedPlace(null);
+                    setSidePanelOpen(false);
+                    setShowTrends(false);
+                  }}
+                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-800 transition-colors"
+                  title="Return to global overview"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Overview</span>
+                </button>
 
-        {/* ================= AI ASSISTANT VIEW ================= */}
-        {currentView === 'assistant' && (
-          <div className="w-full pointer-events-auto">
+                <div className="h-5 w-px bg-slate-800 hidden sm:block" />
+
+                {/* Unified System Selector Tabs */}
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <button
+                    onClick={() => handleSelectModule('ocean')}
+                    className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                      activeModule === 'ocean'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Waves className="h-3.5 w-3.5 text-cyan-400" />
+                    <span className="capitalize">Ocean</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleSelectModule('atmosphere')}
+                    className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                      activeModule === 'atmosphere'
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <CloudRain className="h-3.5 w-3.5 text-blue-400" />
+                    <span className="capitalize">Atmosphere</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleSelectModule('land')}
+                    className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                      activeModule === 'land'
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Trees className="h-3.5 w-3.5 text-emerald-400" />
+                    <span className="capitalize">Land</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Center: Geographic Search Bar */}
+              <div className="flex-1 max-w-xs sm:max-w-sm md:max-w-md mx-2">
+                <SearchBar onSelectLocation={handleSearchSelect} />
+              </div>
+
+              {/* Right: 3D/2D Mode Switcher + Trends + Context Panel Toggles */}
+              <div className="flex items-center space-x-1.5 shrink-0">
+                {/* 2D / 3D Switch */}
+                <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                  <button
+                    onClick={() => setExplorationMode('3d')}
+                    className={`flex items-center space-x-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                      explorationMode === '3d'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="3D Spherical Earth Globe"
+                  >
+                    <GlobeIcon className="h-3 w-3" />
+                    <span>3D</span>
+                  </button>
+                  <button
+                    onClick={() => setExplorationMode('2d')}
+                    className={`flex items-center space-x-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                      explorationMode === '2d'
+                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="2D Planar Map"
+                  >
+                    <MapIcon className="h-3 w-3" />
+                    <span>2D</span>
+                  </button>
+                </div>
+
+                <div className="h-5 w-px bg-slate-800 hidden sm:block" />
+
+                {/* Trends Drawer Toggle Button */}
+                <button
+                  onClick={() => setShowTrends(!showTrends)}
+                  className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                    showTrends
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                      : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
+                  }`}
+                  title="Toggle Historical Trends & Teleconnections"
+                >
+                  <TrendingUp className="h-3.5 w-3.5 text-cyan-400" />
+                  <span className="hidden md:inline">Trends</span>
+                </button>
+
+                {/* Context Panel Toggle Button */}
+                <button
+                  onClick={() => setSidePanelOpen(!sidePanelOpen)}
+                  className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                    sidePanelOpen
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                      : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
+                  }`}
+                  title="Toggle Scientific Context Panel"
+                >
+                  <Compass className="h-3.5 w-3.5 text-cyan-400" />
+                  <span className="hidden md:inline">Context</span>
+                  <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-1.5 py-0.2 rounded-full capitalize">
+                    {zoomLevel}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Workspace Body: Viewport Canvas + Side-by-Side Context Panel */}
+            <div className="flex-1 relative flex overflow-hidden">
+              {/* Viewport Area: Globe or 2D Map + Bottom TrendDrawer */}
+              <div className="flex-1 h-full relative overflow-hidden">
+                {/* Expandable Bottom Analysis Drawer (Trends & Teleconnections) */}
+                <TrendDrawer
+                  activeModule={activeModule}
+                  atmosphereData={atmosphereTimeseries}
+                  oceanData={oceanTimeseries}
+                  landData={landTimeseries}
+                  crossSystemData={crossSystemData}
+                  loading={dataLoading}
+                  isOpen={showTrends}
+                  onClose={() => setShowTrends(false)}
+                  onToggleOpen={() => setShowTrends(!showTrends)}
+                  isExpanded={trendsExpanded}
+                  onToggleExpand={() => setTrendsExpanded(!trendsExpanded)}
+                  sidePanelOpen={sidePanelOpen}
+                />
+              </div>
+
+              {/* Contextual Information Panel (Docks cleanly on right) */}
+              <AdaptiveSidePanel
+                activeModule={activeModule}
+                onSelectModule={handleSelectModule}
+                selectedDate={selectedDate}
+                setSelectedDate={setSelectedDate}
+                selectedFeature={selectedFeature}
+                metricType={metricType}
+                setMetricType={setMetricType}
+                onSelectPreset={handleSelectPreset}
+                showTrends={showTrends}
+                setShowTrends={setShowTrends}
+                dataLoading={dataLoading}
+                onExplainWithAI={(prompt) => {
+                  setPendingAiPrompt(prompt);
+                  setCurrentView('assistant');
+                }}
+                onOpenDatasetInfo={() => setShowDatasetInfo(true)}
+                zoomLevel={zoomLevel}
+                geographicContext={geographicContext}
+                timeseriesData={activeTimeseriesPoints}
+                isOpen={sidePanelOpen}
+                onClose={() => setSidePanelOpen(false)}
+              />
+            </div>
+          </div>
+        )
+      ) : currentView === 'assistant' ? (
+        /* ================= AI ASSISTANT VIEW ================= */
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pointer-events-auto">
+          <div className="max-w-4xl mx-auto">
             <AssistantView
               activeModule={activeModule}
               selectedLocationName={
@@ -544,15 +605,15 @@ export const App: React.FC = () => {
               initialPrompt={pendingAiPrompt}
             />
           </div>
-        )}
-
-        {/* ================= ABOUT VIEW ================= */}
-        {currentView === 'about' && (
-          <div className="w-full pointer-events-auto">
+        </div>
+      ) : (
+        /* ================= ABOUT VIEW ================= */
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pointer-events-auto">
+          <div className="max-w-4xl mx-auto">
             <AboutView />
           </div>
-        )}
-      </main>
+        </div>
+      )}
 
       {/* Authentic Dataset Provenance & Limitations Modal */}
       {showDatasetInfo && activeModule && (
@@ -561,11 +622,6 @@ export const App: React.FC = () => {
           onClose={() => setShowDatasetInfo(false)}
         />
       )}
-
-      {/* Minimal Footer */}
-      <footer className="relative z-10 border-t border-slate-800/60 py-3.5 px-6 text-center text-xs text-slate-500 font-mono bg-[#05070b]/80 backdrop-blur-sm pointer-events-auto">
-        TerraLens • NASA Space Apps Challenge 2026 • Earth Observation Intelligence
-      </footer>
     </div>
   );
 };

@@ -32,6 +32,7 @@ interface EarthGlobeProps {
   onZoomChange?: (zoom: ZoomLevel, distance: number) => void;
   onCenterCoordinatesChange?: (lat: number, lon: number) => void;
   sidePanelOpen?: boolean;
+  trendsOpen?: boolean;
 }
 
 // Convert (Lat, Lon) in degrees to 3D Cartesian coordinates on sphere
@@ -198,6 +199,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   onZoomChange,
   onCenterCoordinatesChange,
   sidePanelOpen = false,
+  trendsOpen = false,
 }) => {
   // Leaf container specifically for Three.js canvas (isolated from React children)
   const canvasMountRef = useRef<HTMLDivElement>(null);
@@ -1116,7 +1118,11 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       )}
 
       {/* Precision Navigation Controls & Resolution Scale Bar (Bottom-Left) */}
-      <div className="fixed bottom-5 left-5 sm:bottom-6 sm:left-6 z-30 flex items-center space-x-2.5 pointer-events-auto">
+      <div
+        className={`fixed left-4 sm:left-6 z-30 flex items-center space-x-2.5 pointer-events-auto transition-all duration-300 ease-out ${
+          trendsOpen ? 'bottom-[335px] sm:bottom-[395px]' : 'bottom-4 sm:bottom-6'
+        }`}
+      >
         <div className="flex flex-col space-y-1 bg-[#090d16]/90 p-1.5 rounded-xl border border-slate-800/80 backdrop-blur-md shadow-2xl">
           <button
             onClick={(e) => {
