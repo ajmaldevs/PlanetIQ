@@ -5,6 +5,7 @@ import { ScientificCharts } from './components/ScientificCharts';
 import { CrossSystemView } from './components/CrossSystemView';
 import { AssistantView } from './components/AssistantView';
 import { DatasetCatalogView } from './components/DatasetCatalogView';
+import { AboutMethodologyView } from './components/AboutMethodologyView';
 import { DataNotice } from './components/DataNotice';
 import {
   fetchSystemHealth,
@@ -427,6 +428,9 @@ export const App: React.FC = () => {
 
         {/* ================= DATASET DOCUMENTATION ================= */}
         {activeTab === 'datasets' && <DatasetCatalogView />}
+
+        {/* ================= ABOUT & METHODOLOGY ================= */}
+        {activeTab === 'about' && <AboutMethodologyView />}
       </main>
 
       {/* Scientific Platform Footer */}

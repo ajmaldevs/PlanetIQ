@@ -1,8 +1,8 @@
 import React from 'react';
-import { Globe2, Waves, CloudRain, Trees, Orbit, Bot, BookOpen, Activity } from 'lucide-react';
+import { Globe2, Waves, CloudRain, Trees, Orbit, Bot, BookOpen, Activity, FileText } from 'lucide-react';
 import { SystemHealth } from '../services/api';
 
-export type ActiveTab = 'overview' | 'ocean' | 'atmosphere' | 'land' | 'cross-system' | 'assistant' | 'datasets';
+export type ActiveTab = 'overview' | 'ocean' | 'atmosphere' | 'land' | 'cross-system' | 'assistant' | 'datasets' | 'about';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -24,7 +24,8 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'land', label: 'Land (MODIS)', icon: <Trees className="h-4 w-4" /> },
     { id: 'cross-system', label: 'Coupled Systems', icon: <Orbit className="h-4 w-4" />, badge: 'ENSO' },
     { id: 'assistant', label: 'AI Assistant', icon: <Bot className="h-4 w-4" />, badge: 'Gemini' },
-    { id: 'datasets', label: 'Documentation', icon: <BookOpen className="h-4 w-4" /> },
+    { id: 'datasets', label: 'Catalog', icon: <BookOpen className="h-4 w-4" /> },
+    { id: 'about', label: 'Methodology', icon: <FileText className="h-4 w-4" /> },
   ];
 
   return (

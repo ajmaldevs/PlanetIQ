@@ -1,0 +1,74 @@
+services:
+  # TerraLens FastAPI Backend API
+  - type: web
+    name: terralens-backend
+    env: python
+    region: oregon
+    plan: standard
+    rootDir: backend
+    buildCommand: pip install -r <(python -c "import tomli; f=open('pyproject.toml', 'rb'); data=tomli.load(f); print('\n'.join(data['project']['dependencies']))" 2>/dev/null || cat pyproject.toml | grep -E '^\s+"[a-zA-Z0-9_-]+' | sed 's/[" ,]//g') alembic
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: API_V1_STR
+        value: /api/v1
+      - key: CORS_ORIGINS
+        value: '["https://terralens.vercel.app","http://localhost:5173"]'
+      - key: POSTGRES_SERVER
+        fromDatabase:
+          name: terralens-postgis
+          property: host
+      - key: POSTGRES_PORT
+        fromDatabase:
+          name: terralens-postgis
+          property: port
+      - key: POSTGRES_USER
+        fromDatabase:
+          name: terralens-postgis
+          property: user
+      - key: POSTGRES_PASSWORD
+        fromDatabase:
+          name: terralens-postgis
+          property: password
+      - key: POSTGRES_DB
+        fromDatabase:
+          name: terralens-postgis
+          property: database
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-1.5-flash
+
+  # TerraLens React Frontend (Static Site)
+  - type: web
+    name: terralens-frontend
+    env: static
+    region: oregon
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        fromService:
+          type: web
+          name: terralens-backend
+          property: host
+          envVarKey: VITE_API_BASE_URL
+          transform: https://${VALUE}/api/v1
+
+databases:
+  - name: terralens-postgis
+    plan: standard
+    region: oregon
+    databaseName: terralens_db
+    user: terralens_user
+    postgresMajorVersion: 16
