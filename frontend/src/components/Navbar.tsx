@@ -2,7 +2,7 @@ import React from 'react';
 import { Globe } from 'lucide-react';
 import { SystemHealth } from '../services/api';
 
-export type MainView = 'explore' | 'assistant' | 'about';
+export type MainView = 'explore' | 'assistant' | 'about' | 'catalog';
 
 interface NavbarProps {
   currentView: MainView;
@@ -38,7 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </button>
 
-        {/* Minimal Navigation: Explore | AI Assistant | About */}
+        {/* Navigation: Explore | Dataset Catalog | AI Assistant | About */}
         <nav className="flex items-center space-x-1 sm:space-x-2">
           <button
             onClick={() => {
@@ -52,6 +52,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             Explore
+          </button>
+
+          <button
+            onClick={() => setCurrentView('catalog')}
+            className={`px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
+              currentView === 'catalog'
+                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+            }`}
+          >
+            Dataset Catalog
           </button>
 
           <button

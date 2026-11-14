@@ -220,6 +220,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const [currentZoomLevel, setCurrentZoomLevel] = useState<ZoomLevel>('continental');
   const [imageryResolution, setImageryResolution] = useState<string>('NASA Blue Marble (1km Base)');
   const lastCenterCalcRef = useRef(Date.now());
+  const lastReportedDistRef = useRef(4.6);
 
   // Camera horizontal glide & layer cross-fade refs
   const targetCameraX = useRef(0);
@@ -243,10 +244,16 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const earthShadersRef = useRef<EarthDayNightShaderBundle | null>(null);
   const animFrameIdRef = useRef<number | null>(null);
 
-  // Interaction state machine ('idle' | 'dragging' | 'transitioning')
-  type InteractionState = 'idle' | 'dragging' | 'transitioning';
+  // Interaction state machine ('idle' | 'dragging' | 'transitioning' | 'pinching')
+  type InteractionState = 'idle' | 'dragging' | 'transitioning' | 'pinching';
   const interactionStateRef = useRef<InteractionState>('idle');
   const activeTransitionRef = useRef<CameraTransition | null>(null);
+
+  // Multi-touch & pointer tracking
+  const activePointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchStartDistanceRef = useRef<number | null>(null);
+  const pinchStartCameraDistRef = useRef<number>(4.6);
+  const dragDistanceRef = useRef<number>(0);
 
   const isDraggingRef = useRef(false);
   const prevMousePos = useRef({ x: 0, y: 0 });
@@ -523,8 +530,9 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         resBadge = 'NASA Blue Marble (1km Base)';
       }
 
-      if (newLevel !== currentZoomRef.current) {
+      if (newLevel !== currentZoomRef.current || Math.abs(distNow - lastReportedDistRef.current) > 0.04) {
         currentZoomRef.current = newLevel;
+        lastReportedDistRef.current = distNow;
         setCurrentZoomLevel(newLevel);
         if (onZoomChangeRef.current) {
           onZoomChangeRef.current(newLevel, distNow);
@@ -728,6 +736,17 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
 
     // Non-passive Native Wheel Handler (Altitude-Scaled Zoom Sensitivity)
     const onWindowWheel = (e: WheelEvent) => {
+      // Allow native scrolling when pointer is over any interactive UI container (aside, nav, drawer, dialog, etc.)
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        target.closest(
+          'aside, header, nav, button, input, select, textarea, [role="dialog"], [role="region"], .overflow-y-auto, .overflow-x-auto, .overflow-auto'
+        )
+      ) {
+        return;
+      }
+
       // Zoom ONLY when pointer is hovering over Earth sphere!
       if (isPointerOverEarth(e.clientX, e.clientY)) {
         e.preventDefault();
@@ -884,9 +903,21 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     selectedHaloRef.current = hitHalo || null;
   }, [selectedFeature]);
 
-  // Mouse / Pointer Drag Handlers with Altitude-Scaled Pan Sensitivity
+  // Mouse / Pointer Drag & Multi-Touch Pinch Handlers with Altitude-Scaled Sensitivity
   const handlePointerDown = (e: React.PointerEvent) => {
+    // Avoid capturing pointers if clicking on interactive child elements
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      target.closest(
+        'aside, header, nav, button, input, select, textarea, [role="dialog"], [role="region"], .overflow-y-auto, .overflow-x-auto, .overflow-auto'
+      )
+    ) {
+      return;
+    }
+
     if (!isPointerOverEarth(e.clientX, e.clientY)) return;
+
     // Seamless interruption: cancel any active camera transition without snapping
     if (interactionStateRef.current === 'transitioning') {
       activeTransitionRef.current = null;
@@ -894,17 +925,61 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       targetRotation.current.y = currentRotation.current.y;
       targetCameraDistance.current = currentCameraDistance.current;
     }
-    interactionStateRef.current = 'dragging';
-    isDraggingRef.current = true;
-    prevMousePos.current = { x: e.clientX, y: e.clientY };
+
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (activePointersRef.current.size === 1) {
+      interactionStateRef.current = 'dragging';
+      isDraggingRef.current = true;
+      dragDistanceRef.current = 0;
+      prevMousePos.current = { x: e.clientX, y: e.clientY };
+      pinchStartDistanceRef.current = null;
+    } else if (activePointersRef.current.size >= 2) {
+      // Initiate two-finger pinch gesture
+      const pts = Array.from(activePointersRef.current.values());
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      pinchStartDistanceRef.current = Math.max(10, dist);
+      pinchStartCameraDistRef.current = currentCameraDistance.current;
+      interactionStateRef.current = 'pinching';
+      isDraggingRef.current = false;
+    }
+
     lastInteractionTime.current = Date.now();
-    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    try {
+      (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {}
   };
 
   const handlePointerMove = (e: React.PointerEvent) => {
+    if (!activePointersRef.current.has(e.pointerId)) return;
+    activePointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    // Multi-touch pinch-to-zoom handling
+    if (activePointersRef.current.size >= 2) {
+      const pts = Array.from(activePointersRef.current.values());
+      const currentPinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      if (pinchStartDistanceRef.current && pinchStartDistanceRef.current > 10) {
+        const pinchDelta = currentPinchDist - pinchStartDistanceRef.current;
+        // Scale pinch zoom by current altitude
+        const altitude = Math.max(0.18, currentCameraDistance.current - 1.9);
+        const altitudeRatio = Math.min(1.0, altitude / 4.5);
+        const zoomStep = 0.0055 * Math.pow(altitudeRatio, 0.7);
+        const targetDist = pinchStartCameraDistRef.current - pinchDelta * zoomStep;
+
+        targetCameraDistance.current = Math.max(
+          minDistance,
+          Math.min(maxDistance, targetDist)
+        );
+        lastInteractionTime.current = Date.now();
+      }
+      return;
+    }
+
+    // Single-pointer drag rotation
     if (!isDraggingRef.current) return;
     const deltaX = e.clientX - prevMousePos.current.x;
     const deltaY = e.clientY - prevMousePos.current.y;
+    dragDistanceRef.current += Math.hypot(deltaX, deltaY);
     prevMousePos.current = { x: e.clientX, y: e.clientY };
 
     // Scale pan sensitivity with altitude above Earth surface
@@ -920,13 +995,23 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   };
 
   const handlePointerUp = (e: React.PointerEvent) => {
-    if (isDraggingRef.current) {
+    activePointersRef.current.delete(e.pointerId);
+    try {
+      (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+
+    if (activePointersRef.current.size === 0) {
       isDraggingRef.current = false;
+      pinchStartDistanceRef.current = null;
       interactionStateRef.current = 'idle';
       lastInteractionTime.current = Date.now();
-      try {
-        (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch {}
+    } else if (activePointersRef.current.size === 1) {
+      // Revert to single finger drag if one finger is lifted
+      const remaining = Array.from(activePointersRef.current.values())[0];
+      prevMousePos.current = { x: remaining.x, y: remaining.y };
+      pinchStartDistanceRef.current = null;
+      interactionStateRef.current = 'dragging';
+      isDraggingRef.current = true;
     }
   };
 
@@ -957,6 +1042,10 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
 
   // Click Raycasting: Select observation point or GIS place label
   const handleClick = (e: React.MouseEvent) => {
+    // Prevent accidental click activation after dragging (> 7px drag threshold)
+    if (dragDistanceRef.current > 7) {
+      return;
+    }
     if (!cameraRef.current) return;
 
     const x = (e.clientX / window.innerWidth) * 2 - 1;

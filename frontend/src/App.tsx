@@ -58,6 +58,8 @@ export const App: React.FC = () => {
 
   // Adaptive Zoom and Contextual Side Panel States
   const [zoomLevel, setZoomLevel] = useState<ZoomLevel>('global');
+  const [_cameraDistance, setCameraDistance] = useState<number>(4.6);
+  const [isIntroVisible, setIsIntroVisible] = useState<boolean>(true);
   const [sidePanelOpen, setSidePanelOpen] = useState<boolean>(false);
   const [centerCoords, setCenterCoords] = useState<{ lat: number; lon: number }>({
     lat: 10.0,
@@ -115,9 +117,16 @@ export const App: React.FC = () => {
     if (mod === 'land') setMetricType('ndvi');
   };
 
-  // Adaptive Zoom and Center Coordinate handlers
-  const handleZoomChange = (newZoom: ZoomLevel, _dist: number) => {
+  // Adaptive Zoom and Center Coordinate handlers with hysteresis
+  const handleZoomChange = (newZoom: ZoomLevel, dist: number) => {
     setZoomLevel(newZoom);
+    setCameraDistance(dist);
+    setIsIntroVisible((prev) => {
+      // Hysteresis: fade out when zoomed below 4.25, restore when zoomed above 4.35
+      if (prev && dist < 4.25) return false;
+      if (!prev && dist > 4.35) return true;
+      return prev;
+    });
   };
 
   const handleCenterCoordinatesChange = (lat: number, lon: number) => {
@@ -370,28 +379,104 @@ export const App: React.FC = () => {
       />
 
       {/* 2. Main Content Area */}
+      {/* Compact Left-Side Module Selector (Active during exploration or when zoomed in) */}
+      {(activeModule !== null || !isIntroVisible) && currentView === 'explore' && (
+        <div className="fixed left-3 sm:left-6 top-20 sm:top-24 z-30 flex flex-col space-y-1.5 p-1.5 rounded-2xl bg-[#080c16]/90 border border-slate-800/80 backdrop-blur-md shadow-2xl animate-fade-scale">
+          <div className="px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider text-slate-500 font-semibold hidden sm:block">
+            Systems
+          </div>
+
+          <button
+            onClick={() => handleSelectModule('ocean')}
+            className={`group relative flex items-center space-x-2 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeModule === 'ocean'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+            title="Ocean Explorer (SWOT KaRIn Sea Surface Height Anomaly)"
+          >
+            <Waves className="h-4 w-4 text-cyan-400 shrink-0" />
+            <span className="hidden sm:inline">Ocean</span>
+            {activeModule === 'ocean' && (
+              <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 ml-auto" />
+            )}
+          </button>
+
+          <button
+            onClick={() => handleSelectModule('atmosphere')}
+            className={`group relative flex items-center space-x-2 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeModule === 'atmosphere'
+                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+            title="Atmosphere Explorer (GPM IMERG Precipitation)"
+          >
+            <CloudRain className="h-4 w-4 text-blue-400 shrink-0" />
+            <span className="hidden sm:inline">Atmosphere</span>
+            {activeModule === 'atmosphere' && (
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-400 ml-auto" />
+            )}
+          </button>
+
+          <button
+            onClick={() => handleSelectModule('land')}
+            className={`group relative flex items-center space-x-2 px-2.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+              activeModule === 'land'
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+            title="Land Explorer (MODIS Vegetation Phenology & Drought)"
+          >
+            <Trees className="h-4 w-4 text-emerald-400 shrink-0" />
+            <span className="hidden sm:inline">Land</span>
+            {activeModule === 'land' && (
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 ml-auto" />
+            )}
+          </button>
+        </div>
+      )}
+
       {currentView === 'explore' ? (
         activeModule === null ? (
           /* ================= HOMEPAGE / INTRODUCTORY STATE ================= */
           <div className="flex-1 relative flex flex-col justify-between overflow-hidden pointer-events-none">
-            {/* Minimal Hero Header & Centered Search */}
-            <div className="pt-8 sm:pt-12 pb-4 text-center max-w-2xl mx-auto px-4 z-10 pointer-events-auto animate-fade-scale">
+            {/* Minimal Hero Header & Centered Search with smooth adaptive fade */}
+            <div
+              className={`pt-8 sm:pt-12 pb-4 text-center max-w-2xl mx-auto px-4 z-10 transition-all duration-500 ease-out ${
+                isIntroVisible
+                  ? 'opacity-100 translate-y-0 pointer-events-auto'
+                  : 'opacity-0 -translate-y-8 pointer-events-none'
+              }`}
+            >
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white drop-shadow-lg">
                 Explore Earth's changing systems.
               </h1>
               <p className="mt-2 text-sm sm:text-base text-slate-400 font-normal leading-relaxed max-w-lg mx-auto">
                 Discover how our oceans, atmosphere and land are changing through real observations from NASA satellites.
               </p>
-              <div className="mt-4 max-w-md mx-auto">
+              <div className="mt-4 max-w-md mx-auto pointer-events-auto">
                 <SearchBar onSelectLocation={handleSearchSelect} />
               </div>
             </div>
 
+            {/* When intro text is faded out on zoom, provide a floating top search bar */}
+            {!isIntroVisible && (
+              <div className="fixed top-18 left-1/2 -translate-x-1/2 z-20 w-full max-w-xs sm:max-w-md px-4 pointer-events-auto transition-all duration-300">
+                <SearchBar onSelectLocation={handleSearchSelect} />
+              </div>
+            )}
+
             {/* Generous Central Open Space where Earth floats freely */}
             <div className="flex-1 w-full pointer-events-none" />
 
-            {/* Three Clear Exploration Choices in a Clean Row */}
-            <div className="pb-6 sm:pb-8 px-4 z-10 pointer-events-auto max-w-4xl mx-auto w-full">
+            {/* Three Clear Exploration Choices in a Clean Row with smooth adaptive fade */}
+            <div
+              className={`pb-6 sm:pb-8 px-4 z-10 max-w-4xl mx-auto w-full transition-all duration-500 ease-out ${
+                isIntroVisible
+                  ? 'opacity-100 translate-y-0 pointer-events-auto'
+                  : 'opacity-0 translate-y-8 pointer-events-none'
+              }`}
+            >
               <div className="text-center mb-2.5">
                 <span className="text-[11px] font-mono tracking-widest uppercase text-slate-500 font-semibold">
                   Select a Scientific System to Begin
@@ -404,7 +489,11 @@ export const App: React.FC = () => {
             </div>
 
             {/* Clean Minimal Footer for Homepage */}
-            <footer className="z-10 py-2.5 px-4 text-center text-xs text-slate-500 font-mono bg-[#05070b]/60 backdrop-blur-xs pointer-events-auto border-t border-slate-800/40">
+            <footer
+              className={`z-10 py-2.5 px-4 text-center text-xs text-slate-500 font-mono bg-[#05070b]/60 backdrop-blur-xs border-t border-slate-800/40 transition-all duration-500 ${
+                isIntroVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              }`}
+            >
               TerraLens • NASA Space Apps Challenge 2026 • Earth Observation Intelligence
             </footer>
           </div>
@@ -590,6 +679,13 @@ export const App: React.FC = () => {
             </div>
           </div>
         )
+      ) : currentView === 'catalog' ? (
+        /* ================= DATASET CATALOG VIEW ================= */
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pointer-events-auto">
+          <div className="max-w-5xl mx-auto">
+            <AboutView initialTab="catalog" />
+          </div>
+        </div>
       ) : currentView === 'assistant' ? (
         /* ================= AI ASSISTANT VIEW ================= */
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pointer-events-auto">
@@ -609,8 +705,8 @@ export const App: React.FC = () => {
       ) : (
         /* ================= ABOUT VIEW ================= */
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pointer-events-auto">
-          <div className="max-w-4xl mx-auto">
-            <AboutView />
+          <div className="max-w-5xl mx-auto">
+            <AboutView initialTab="overview" />
           </div>
         </div>
       )}
