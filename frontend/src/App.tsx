@@ -141,18 +141,38 @@ export const App: React.FC = () => {
     }
   };
 
-  // Handle Preset selection
+  // Handle Preset selection with nearest authentic feature matching
   const handleSelectPreset = (lat: number, lon: number, name: string) => {
-    const dummyFeature: GeoJSONFeature = {
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: [lon, lat] },
-      properties: {
-        location_name: name,
-        latitude: lat,
-        longitude: lon,
-      },
-    };
-    handleFeatureSelect(dummyFeature);
+    const activeData = getActiveData();
+    let matchedFeature: GeoJSONFeature | null = null;
+    let minDistance = Infinity;
+
+    if (activeData && activeData.features.length > 0) {
+      for (const feat of activeData.features) {
+        const featLat = feat.properties.latitude ?? feat.geometry.coordinates[1];
+        const featLon = feat.properties.longitude ?? feat.geometry.coordinates[0];
+        const dist = Math.pow(featLat - lat, 2) + Math.pow(featLon - lon, 2);
+        if (dist < minDistance) {
+          minDistance = dist;
+          matchedFeature = feat;
+        }
+      }
+    }
+
+    if (matchedFeature && minDistance < 150) {
+      handleFeatureSelect(matchedFeature);
+    } else {
+      const fallbackFeature: GeoJSONFeature = {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [lon, lat] },
+        properties: {
+          location_name: name,
+          latitude: lat,
+          longitude: lon,
+        },
+      };
+      handleFeatureSelect(fallbackFeature);
+    }
   };
 
   const getActiveData = () => {
@@ -163,7 +183,18 @@ export const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#05070b] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black">
+    <div className="min-h-screen bg-[#05070b] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black overflow-x-hidden relative">
+      {/* Immersive Boundless 3D Earth Globe Canvas (Persistent full viewport, zero rectangular clipping) */}
+      <EarthGlobe
+        activeModule={activeModule}
+        data={getActiveData()}
+        loading={dataLoading}
+        onSelectFeature={handleFeatureSelect}
+        selectedFeature={selectedFeature}
+        metricType={metricType}
+        visible={currentView === 'explore'}
+      />
+
       {/* Minimal Top Header */}
       <Navbar
         currentView={currentView}
@@ -173,37 +204,29 @@ export const App: React.FC = () => {
       />
 
       {/* Main Container */}
-      <main className="flex-1 flex flex-col max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+      <main className="flex-1 flex flex-col max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-3 sm:py-6 overflow-x-hidden relative z-10 pointer-events-none">
         {/* ================= EXPLORE VIEW (HOME & EXPLORATION) ================= */}
         {currentView === 'explore' && (
-          <div className="flex-1 flex flex-col space-y-6">
-            {/* HOMEPAGE STATE: Globe-First with Introduction & Three Cards */}
+          <div className="flex-1 flex flex-col space-y-4 pointer-events-none">
+            {/* HOMEPAGE STATE: Realistic Satellite Earth Floating in Space */}
             {activeModule === null ? (
-              <div className="flex-1 flex flex-col justify-between py-2 sm:py-6 space-y-6 sm:space-y-8">
+              <div className="flex-1 flex flex-col justify-between min-h-[calc(100vh-8.5rem)] py-2 sm:py-4 pointer-events-none">
                 {/* Simple Messaging */}
-                <div className="text-center max-w-2xl mx-auto space-y-2">
-                  <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white">
+                <div className="text-center max-w-2xl mx-auto space-y-1.5 sm:space-y-2 pt-1 sm:pt-3 pointer-events-none">
+                  <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white drop-shadow-md">
                     Explore Earth's changing systems.
                   </h1>
-                  <p className="text-sm sm:text-base text-slate-400 font-normal leading-relaxed">
+                  <p className="text-xs sm:text-base text-slate-400 font-normal leading-relaxed max-w-xl mx-auto">
                     Discover how our oceans, atmosphere and land are changing through observations
                     from NASA satellites.
                   </p>
                 </div>
 
-                {/* Central Interactive 3D Earth Globe */}
-                <div className="w-full flex items-center justify-center">
-                  <div className="w-full max-w-3xl h-[380px] sm:h-[480px]">
-                    <EarthGlobe
-                      activeModule={null}
-                      data={null}
-                      className="h-full rounded-3xl"
-                    />
-                  </div>
-                </div>
+                {/* Open Space Viewport: Earth Floats Freely in Deep Space */}
+                <div className="flex-1 w-full min-h-[200px] pointer-events-none" />
 
                 {/* Three Exploration Options */}
-                <div className="w-full">
+                <div className="w-full pt-2 pointer-events-auto">
                   <ModuleSelector
                     activeModule={activeModule}
                     onSelectModule={handleSelectModule}
@@ -211,64 +234,55 @@ export const App: React.FC = () => {
                 </div>
               </div>
             ) : (
-              /* EXPLORATION EXPERIENCE STATE: Prominent Globe + Floating Panel + Expandable Trends */
-              <div className="flex-1 flex flex-col space-y-6">
-                {/* Back to Overview button */}
-                <div className="flex items-center justify-between">
+              /* EXPLORATION EXPERIENCE STATE: Expansive Orbit Viewport + Floating Panel + Expandable Trends */
+              <div className="flex-1 flex flex-col justify-between min-h-[calc(100vh-8.5rem)] py-2 sm:py-4 space-y-4 pointer-events-none">
+                {/* Top Bar Controls */}
+                <div className="flex items-center justify-between px-1 pointer-events-auto">
                   <button
                     onClick={() => setActiveModule(null)}
-                    className="flex items-center space-x-1.5 text-xs text-slate-400 hover:text-cyan-300 transition-colors"
+                    className="flex items-center space-x-1.5 text-xs text-slate-300 hover:text-cyan-300 bg-slate-900/85 px-3 py-1.5 rounded-full border border-slate-800/80 backdrop-blur-md transition-colors"
                   >
                     <ArrowLeft className="h-4 w-4" />
                     <span>Back to Overview</span>
                   </button>
 
-                  <span className="text-xs font-mono text-slate-400">
-                    Active System:{' '}
-                    <strong className="text-cyan-400 capitalize">{activeModule}</strong>
+                  <span className="text-xs font-mono text-slate-300 bg-slate-900/85 px-3 py-1.5 rounded-full border border-slate-800/80 backdrop-blur-md">
+                    Active System: <strong className="text-cyan-400 capitalize">{activeModule}</strong>
                   </span>
                 </div>
 
-                {/* Exploration Globe & Floating Panel Grid */}
-                <div className="relative w-full h-[520px] sm:h-[580px] rounded-3xl overflow-hidden border border-slate-800/80 bg-[#070a12] shadow-2xl">
-                  {/* Central Prominent Globe */}
-                  <EarthGlobe
+                {/* Floating Exploration Panel */}
+                <div className="w-full sm:max-w-sm pointer-events-auto">
+                  <ExplorationPanel
                     activeModule={activeModule}
-                    data={getActiveData()}
-                    loading={dataLoading}
-                    onSelectFeature={handleFeatureSelect}
+                    onSelectModule={handleSelectModule}
+                    selectedDate={selectedDate}
+                    setSelectedDate={setSelectedDate}
                     selectedFeature={selectedFeature}
                     metricType={metricType}
-                    className="w-full h-full"
+                    setMetricType={setMetricType}
+                    onSelectPreset={handleSelectPreset}
+                    showTrends={showTrends}
+                    setShowTrends={setShowTrends}
+                    dataLoading={dataLoading}
                   />
-
-                  {/* Floating Exploration Panel */}
-                  <div className="absolute top-4 left-4 z-20">
-                    <ExplorationPanel
-                      activeModule={activeModule}
-                      onSelectModule={handleSelectModule}
-                      selectedDate={selectedDate}
-                      setSelectedDate={setSelectedDate}
-                      selectedFeature={selectedFeature}
-                      metricType={metricType}
-                      setMetricType={setMetricType}
-                      onSelectPreset={handleSelectPreset}
-                      showTrends={showTrends}
-                      setShowTrends={setShowTrends}
-                    />
-                  </div>
                 </div>
+
+                {/* Open Space for Earth Exploration */}
+                <div className="flex-1 w-full min-h-[140px] pointer-events-none" />
 
                 {/* Progressive Disclosure: Expandable Detailed Trends */}
                 {showTrends && (
-                  <TrendDrawer
-                    activeModule={activeModule}
-                    atmosphereData={atmosphereTimeseries}
-                    oceanData={oceanTimeseries}
-                    landData={landTimeseries}
-                    crossSystemData={crossSystemData}
-                    loading={dataLoading}
-                  />
+                  <div className="w-full pointer-events-auto">
+                    <TrendDrawer
+                      activeModule={activeModule}
+                      atmosphereData={atmosphereTimeseries}
+                      oceanData={oceanTimeseries}
+                      landData={landTimeseries}
+                      crossSystemData={crossSystemData}
+                      loading={dataLoading}
+                    />
+                  </div>
                 )}
               </div>
             )}
@@ -277,23 +291,29 @@ export const App: React.FC = () => {
 
         {/* ================= AI ASSISTANT VIEW ================= */}
         {currentView === 'assistant' && (
-          <AssistantView
-            activeModule={activeModule}
-            selectedLocationName={
-              selectedFeature?.properties.location_name ||
-              selectedFeature?.properties.region_name ||
-              'Global Earth Systems'
-            }
-            selectedDate={selectedDate}
-          />
+          <div className="w-full pointer-events-auto">
+            <AssistantView
+              activeModule={activeModule}
+              selectedLocationName={
+                selectedFeature?.properties.location_name ||
+                selectedFeature?.properties.region_name ||
+                'Global Earth Systems'
+              }
+              selectedDate={selectedDate}
+            />
+          </div>
         )}
 
         {/* ================= ABOUT VIEW ================= */}
-        {currentView === 'about' && <AboutView />}
+        {currentView === 'about' && (
+          <div className="w-full pointer-events-auto">
+            <AboutView />
+          </div>
+        )}
       </main>
 
       {/* Minimal Footer */}
-      <footer className="border-t border-slate-800/60 py-4 px-6 text-center text-xs text-slate-500 font-mono">
+      <footer className="relative z-10 border-t border-slate-800/60 py-3.5 px-6 text-center text-xs text-slate-500 font-mono bg-[#05070b]/80 backdrop-blur-sm pointer-events-auto">
         TerraLens • NASA Space Apps Challenge 2026 • Earth Observation Intelligence
       </footer>
     </div>

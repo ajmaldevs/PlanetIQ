@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { GeoJSONFeature } from '../services/api';
 import { EarthModule } from './EarthGlobe';
-import { Calendar, ChevronDown, ChevronUp, MapPin, Sliders } from 'lucide-react';
+import { Calendar, ChevronDown, ChevronUp, MapPin, Sliders, Minimize2, Maximize2 } from 'lucide-react';
 
 interface ExplorationPanelProps {
   activeModule: EarthModule;
@@ -14,6 +14,7 @@ interface ExplorationPanelProps {
   onSelectPreset: (lat: number, lon: number, name: string) => void;
   showTrends: boolean;
   setShowTrends: (show: boolean) => void;
+  dataLoading?: boolean;
 }
 
 export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
@@ -27,26 +28,48 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
   onSelectPreset,
   showTrends,
   setShowTrends,
+  dataLoading = false,
 }) => {
+  const [isMinimized, setIsMinimized] = useState(false);
+
   const dates = [
     '2024-01', '2024-04', '2024-07', '2024-10',
     '2025-01', '2025-04', '2025-07', '2025-10',
     '2026-01', '2026-03', '2026-06', '2026-09',
   ];
 
-  const presets = [
-    { name: 'Amazon Basin', lat: -3.5, lon: -62.0 },
-    { name: 'Gulf Stream', lat: 36.0, lon: -68.0 },
-    { name: 'South Asia (Bay of Bengal)', lat: 21.0, lon: 88.5 },
-    { name: 'Equatorial Pacific (Niño 3.4)', lat: 0.0, lon: -140.0 },
-    { name: 'Sahel Belt', lat: 14.5, lon: 2.0 },
-  ];
+  // System-specific curated presets with authentic coordinates
+  const modulePresets: Record<string, Array<{ name: string; lat: number; lon: number }>> = {
+    ocean: [
+      { name: 'Gulf Stream Boundary Current', lat: 36.0, lon: -68.0 },
+      { name: 'Kuroshio Extension Meander', lat: 35.0, lon: 143.0 },
+      { name: 'Equatorial Pacific (Niño 3.4)', lat: 0.0, lon: -140.0 },
+      { name: 'Agulhas Retroflection Rings', lat: -38.0, lon: 20.0 },
+      { name: 'Drake Passage ACC Jet', lat: -58.0, lon: -65.0 },
+    ],
+    atmosphere: [
+      { name: 'Intertropical Convergence Zone', lat: 6.5, lon: -150.0 },
+      { name: 'South Asian Monsoon (Bay of Bengal)', lat: 21.0, lon: 88.5 },
+      { name: 'Amazon Basin Convective Core', lat: -3.1, lon: -60.0 },
+      { name: 'Sahel Transition Belt', lat: 14.5, lon: 2.0 },
+      { name: 'North Atlantic Storm Track', lat: 48.0, lon: -30.0 },
+    ],
+    land: [
+      { name: 'Amazon Evergreen Rainforest', lat: -3.5, lon: -62.0 },
+      { name: 'Congo Basin Dense Forest', lat: 0.5, lon: 23.5 },
+      { name: 'US Corn Belt Agriculture', lat: 41.5, lon: -93.5 },
+      { name: 'Sahelian Acacia Savanna', lat: 14.0, lon: 5.0 },
+      { name: 'Siberian Boreal Taiga', lat: 62.0, lon: 129.0 },
+    ],
+  };
+
+  const activePresets = (activeModule && modulePresets[activeModule]) || modulePresets.ocean;
 
   // Derive observation readout
   const locationName =
     selectedFeature?.properties.location_name ||
     selectedFeature?.properties.region_name ||
-    'Global Ocean / Land Target';
+    'Global Earth Target';
 
   let observationValue = '--';
   let observationUnit = '';
@@ -80,59 +103,90 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
     observationUnit = 'ratio (0 to 1)';
   }
 
+  // Collapsed view for mobile / unobstructed globe exploration
+  if (isMinimized) {
+    return (
+      <div className="w-full bg-[#090d16]/95 border border-slate-800 rounded-xl px-3 py-2 backdrop-blur-md shadow-2xl flex items-center justify-between transition-all">
+        <div className="flex items-center space-x-2 truncate">
+          <span className="h-2 w-2 rounded-full bg-cyan-400 shrink-0" />
+          <span className="text-xs font-semibold text-white capitalize">{activeModule || 'Earth'}</span>
+          <span className="text-xs font-mono text-cyan-300 truncate">
+            {observationValue} {observationUnit}
+          </span>
+        </div>
+        <button
+          onClick={() => setIsMinimized(false)}
+          className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors ml-2 shrink-0"
+          title="Expand Panel"
+        >
+          <Maximize2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full max-w-sm bg-[#090d16]/90 border border-slate-800/80 rounded-2xl p-4 sm:p-5 backdrop-blur-md shadow-2xl space-y-4">
-      {/* Module Switcher Header */}
-      <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
-        <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">
-          Earth System
+    <div className="w-full sm:max-w-sm bg-[#090d16]/95 border border-slate-800/80 rounded-2xl p-4 sm:p-5 backdrop-blur-md shadow-2xl space-y-3.5 transition-all">
+      {/* Module Switcher Header & Minimize Button */}
+      <div className="flex items-center justify-between border-b border-slate-800/60 pb-2.5">
+        <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 font-semibold">
+          System
         </span>
-        <div className="flex items-center space-x-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+        <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1 bg-slate-900/90 p-0.5 rounded-lg border border-slate-800">
+            <button
+              onClick={() => onSelectModule('ocean')}
+              className={`px-2 py-0.5 text-[11px] rounded-md font-medium transition-colors ${
+                activeModule === 'ocean'
+                  ? 'bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/40'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Ocean
+            </button>
+            <button
+              onClick={() => onSelectModule('atmosphere')}
+              className={`px-2 py-0.5 text-[11px] rounded-md font-medium transition-colors ${
+                activeModule === 'atmosphere'
+                  ? 'bg-blue-500/20 text-blue-300 font-semibold border border-blue-500/40'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Atmosphere
+            </button>
+            <button
+              onClick={() => onSelectModule('land')}
+              className={`px-2 py-0.5 text-[11px] rounded-md font-medium transition-colors ${
+                activeModule === 'land'
+                  ? 'bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/40'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Land
+            </button>
+          </div>
           <button
-            onClick={() => onSelectModule('ocean')}
-            className={`px-2.5 py-1 text-[11px] rounded-md font-medium transition-colors ${
-              activeModule === 'ocean'
-                ? 'bg-cyan-500/20 text-cyan-300 font-semibold'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
+            onClick={() => setIsMinimized(true)}
+            className="p-1 rounded-md text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors"
+            title="Minimize to view full globe"
           >
-            Ocean
-          </button>
-          <button
-            onClick={() => onSelectModule('atmosphere')}
-            className={`px-2.5 py-1 text-[11px] rounded-md font-medium transition-colors ${
-              activeModule === 'atmosphere'
-                ? 'bg-blue-500/20 text-blue-300 font-semibold'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Atmosphere
-          </button>
-          <button
-            onClick={() => onSelectModule('land')}
-            className={`px-2.5 py-1 text-[11px] rounded-md font-medium transition-colors ${
-              activeModule === 'land'
-                ? 'bg-emerald-500/20 text-emerald-300 font-semibold'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Land
+            <Minimize2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
       {/* Selected Location & Main Observation Readout */}
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <div className="flex items-center space-x-1.5 text-xs text-slate-400">
           <MapPin className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
           <span className="font-medium text-slate-200 truncate">{locationName}</span>
         </div>
 
-        <div className="pt-1">
+        <div className="pt-0.5">
           <span className="text-[11px] text-slate-400 block">{observationLabel}</span>
           <div className="flex items-baseline space-x-2">
             <span className="text-2xl sm:text-3xl font-bold tracking-tight text-white font-mono">
-              {observationValue}
+              {dataLoading ? '--' : observationValue}
             </span>
             <span className="text-xs font-mono text-cyan-400">{observationUnit}</span>
           </div>
@@ -140,7 +194,7 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
       </div>
 
       {/* Controls: Date Picker & Metric Toggle */}
-      <div className="pt-2 border-t border-slate-800/60 space-y-2.5">
+      <div className="pt-2 border-t border-slate-800/60 space-y-2">
         {/* Date Selector */}
         <div className="flex items-center justify-between text-xs">
           <span className="text-slate-400 flex items-center space-x-1 text-[11px]">
@@ -170,7 +224,7 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
                 className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
                   metricType === 'accumulated'
                     ? 'bg-blue-500/20 text-blue-300 font-semibold border border-blue-500/40'
-                    : 'text-slate-400 bg-slate-900'
+                    : 'text-slate-400 bg-slate-900/80 hover:bg-slate-800'
                 }`}
               >
                 Monthly (mm)
@@ -180,7 +234,7 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
                 className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
                   metricType === 'rate'
                     ? 'bg-blue-500/20 text-blue-300 font-semibold border border-blue-500/40'
-                    : 'text-slate-400 bg-slate-900'
+                    : 'text-slate-400 bg-slate-900/80 hover:bg-slate-800'
                 }`}
               >
                 Rate (mm/h)
@@ -198,7 +252,7 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
                 className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
                   metricType === 'ssha'
                     ? 'bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/40'
-                    : 'text-slate-400 bg-slate-900'
+                    : 'text-slate-400 bg-slate-900/80 hover:bg-slate-800'
                 }`}
               >
                 Anomaly (m)
@@ -208,7 +262,7 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
                 className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
                   metricType === 'ssh'
                     ? 'bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/40'
-                    : 'text-slate-400 bg-slate-900'
+                    : 'text-slate-400 bg-slate-900/80 hover:bg-slate-800'
                 }`}
               >
                 Height (m)
@@ -226,7 +280,7 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
                 className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
                   metricType === 'ndvi'
                     ? 'bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/40'
-                    : 'text-slate-400 bg-slate-900'
+                    : 'text-slate-400 bg-slate-900/80 hover:bg-slate-800'
                 }`}
               >
                 NDVI
@@ -236,7 +290,7 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
                 className={`px-2 py-0.5 rounded text-[11px] font-mono transition-colors ${
                   metricType === 'evi'
                     ? 'bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/40'
-                    : 'text-slate-400 bg-slate-900'
+                    : 'text-slate-400 bg-slate-900/80 hover:bg-slate-800'
                 }`}
               >
                 EVI
@@ -248,15 +302,15 @@ export const ExplorationPanel: React.FC<ExplorationPanelProps> = ({
 
       {/* Quick Region Presets */}
       <div className="pt-2 border-t border-slate-800/60">
-        <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 block mb-1.5">
-          Quick Regions
+        <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 block mb-1.5 font-semibold">
+          Curated Regions
         </span>
         <div className="flex flex-wrap gap-1">
-          {presets.map((p) => (
+          {activePresets.map((p) => (
             <button
               key={p.name}
               onClick={() => onSelectPreset(p.lat, p.lon, p.name)}
-              className="text-[11px] px-2 py-1 rounded bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-800/80 transition-colors"
+              className="text-[11px] px-2 py-0.5 rounded bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-cyan-300 border border-slate-800/80 transition-colors"
             >
               {p.name.split('(')[0].trim()}
             </button>
