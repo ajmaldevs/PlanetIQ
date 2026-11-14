@@ -1,15 +1,16 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Search, MapPin, Globe, Compass, X } from 'lucide-react';
+import { GIS_PLACES } from '../services/gisDatabase';
 
 export interface SearchResult {
   name: string;
-  category: 'Country' | 'City' | 'Ocean System' | 'Climate Region' | 'Continent';
+  category: 'Country' | 'State / Province' | 'City' | 'Ocean System' | 'Climate Region' | 'Continent' | 'Natural Feature';
   lat: number;
   lon: number;
   detail?: string;
 }
 
-const SEARCH_DATABASE: SearchResult[] = [
+const SCIENTIFIC_SEARCH_DATABASE: SearchResult[] = [
   // Ocean Systems & Boundary Currents
   { name: 'Gulf Stream Boundary Current', category: 'Ocean System', lat: 36.0, lon: -68.0, detail: 'North Atlantic warm current & intense eddy field' },
   { name: 'Kuroshio Extension Meander', category: 'Ocean System', lat: 35.0, lon: 143.0, detail: 'Western Pacific boundary current & mesoscale vortices' },
@@ -33,38 +34,6 @@ const SEARCH_DATABASE: SearchResult[] = [
   { name: 'Sahara Desert Hyper-Arid Zone', category: 'Climate Region', lat: 23.0, lon: 12.0, detail: 'Lowest global NDVI & high surface albedo' },
   { name: 'Siberian Boreal Taiga Forest', category: 'Climate Region', lat: 62.0, lon: 129.0, detail: 'Sub-arctic coniferous forest & seasonal snow cover' },
   { name: 'Himalayan High Altitude Plateau', category: 'Climate Region', lat: 28.0, lon: 86.0, detail: 'Third Pole glacier water tower & alpine terrain' },
-
-  // Major Countries
-  { name: 'United States', category: 'Country', lat: 39.0, lon: -98.0, detail: 'North America' },
-  { name: 'Brazil', category: 'Country', lat: -10.0, lon: -53.0, detail: 'South America' },
-  { name: 'Canada', category: 'Country', lat: 56.0, lon: -106.0, detail: 'North America' },
-  { name: 'China', category: 'Country', lat: 35.0, lon: 104.0, detail: 'Asia' },
-  { name: 'India', category: 'Country', lat: 21.0, lon: 78.0, detail: 'Asia' },
-  { name: 'Australia', category: 'Country', lat: -25.0, lon: 135.0, detail: 'Oceania' },
-  { name: 'Germany', category: 'Country', lat: 51.0, lon: 10.0, detail: 'Europe' },
-  { name: 'France', category: 'Country', lat: 46.5, lon: 2.5, detail: 'Europe' },
-  { name: 'United Kingdom', category: 'Country', lat: 54.5, lon: -2.5, detail: 'Europe' },
-  { name: 'Japan', category: 'Country', lat: 36.5, lon: 138.0, detail: 'Asia' },
-  { name: 'Egypt', category: 'Country', lat: 26.5, lon: 30.0, detail: 'Africa' },
-  { name: 'South Africa', category: 'Country', lat: -29.0, lon: 24.0, detail: 'Africa' },
-  { name: 'Nigeria', category: 'Country', lat: 9.0, lon: 7.5, detail: 'Africa' },
-  { name: 'Kenya', category: 'Country', lat: 0.5, lon: 37.5, detail: 'Africa' },
-  { name: 'Mexico', category: 'Country', lat: 23.0, lon: -102.0, detail: 'North America' },
-  { name: 'Argentina', category: 'Country', lat: -34.0, lon: -64.0, detail: 'South America' },
-  { name: 'Indonesia', category: 'Country', lat: -1.0, lon: 118.0, detail: 'Maritime Continent Asia' },
-  { name: 'Saudi Arabia', category: 'Country', lat: 24.0, lon: 45.0, detail: 'Middle East' },
-
-  // Global Megacities & Research Nodes
-  { name: 'Tokyo', category: 'City', lat: 35.68, lon: 139.76, detail: 'Japan' },
-  { name: 'New York City', category: 'City', lat: 40.71, lon: -74.00, detail: 'United States' },
-  { name: 'London', category: 'City', lat: 51.51, lon: -0.12, detail: 'United Kingdom' },
-  { name: 'Paris', category: 'City', lat: 48.85, lon: 2.35, detail: 'France' },
-  { name: 'Cairo', category: 'City', lat: 30.04, lon: 31.23, detail: 'Egypt (Nile Delta)' },
-  { name: 'Mumbai', category: 'City', lat: 19.07, lon: 72.87, detail: 'India (Arabian Sea Coast)' },
-  { name: 'São Paulo', category: 'City', lat: -23.55, lon: -46.63, detail: 'Brazil' },
-  { name: 'Sydney', category: 'City', lat: -33.86, lon: 151.20, detail: 'Australia' },
-  { name: 'Singapore', category: 'City', lat: 1.35, lon: 103.82, detail: 'Equatorial Maritime Hub' },
-  { name: 'Nairobi', category: 'City', lat: -1.29, lon: 36.82, detail: 'Kenya (East African Rift)' },
 ];
 
 interface SearchBarProps {
@@ -79,15 +48,60 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Filter matching results
-  const matches = query.trim()
-    ? SEARCH_DATABASE.filter(
+  // Unified GIS and Scientific Places Search Database
+  const searchDatabase = useMemo(() => {
+    const items: SearchResult[] = [...SCIENTIFIC_SEARCH_DATABASE];
+    const existingNames = new Set(items.map((i) => i.name.toLowerCase()));
+
+    GIS_PLACES.forEach((p) => {
+      if (existingNames.has(p.name.toLowerCase())) return;
+
+      let cat: SearchResult['category'] = 'City';
+      if (p.category === 'country') cat = 'Country';
+      else if (p.category === 'state') cat = 'State / Province';
+      else if (p.category === 'continent') cat = 'Continent';
+      else if (p.category === 'ocean') cat = 'Ocean System';
+      else if (p.category === 'natural_feature') cat = 'Natural Feature';
+
+      const detailParts: string[] = [];
+      if (p.parentState) detailParts.push(p.parentState);
+      if (p.parentCountry) detailParts.push(p.parentCountry);
+      if (p.parentContinent) detailParts.push(p.parentContinent);
+      if (p.detail) detailParts.push(p.detail);
+
+      items.push({
+        name: p.name,
+        category: cat,
+        lat: p.lat,
+        lon: p.lon,
+        detail: detailParts.join(' • '),
+      });
+      existingNames.add(p.name.toLowerCase());
+    });
+
+    return items;
+  }, []);
+
+  // Filter matching results with priority ordering
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+
+    return searchDatabase
+      .filter(
         (item) =>
-          item.name.toLowerCase().includes(query.toLowerCase()) ||
-          (item.detail && item.detail.toLowerCase().includes(query.toLowerCase())) ||
-          item.category.toLowerCase().includes(query.toLowerCase())
-      ).slice(0, 7)
-    : [];
+          item.name.toLowerCase().includes(q) ||
+          (item.detail && item.detail.toLowerCase().includes(q)) ||
+          item.category.toLowerCase().includes(q)
+      )
+      .sort((a, b) => {
+        // Prioritize exact or prefix matches on name
+        const aStarts = a.name.toLowerCase().startsWith(q) ? 1 : 0;
+        const bStarts = b.name.toLowerCase().startsWith(q) ? 1 : 0;
+        return bStarts - aStarts;
+      })
+      .slice(0, 8);
+  }, [query, searchDatabase]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -133,11 +147,14 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
       case 'Ocean System':
         return 'bg-cyan-950/80 text-cyan-300 border-cyan-800/60';
       case 'Climate Region':
+      case 'Natural Feature':
         return 'bg-blue-950/80 text-blue-300 border-blue-800/60';
       case 'Country':
         return 'bg-emerald-950/80 text-emerald-300 border-emerald-800/60';
+      case 'State / Province':
+        return 'bg-amber-950/80 text-amber-300 border-amber-800/60';
       case 'City':
-        return 'bg-slate-800 text-slate-300 border-slate-700';
+        return 'bg-slate-850 text-slate-300 border-slate-700';
       default:
         return 'bg-slate-800 text-slate-300 border-slate-700';
     }
@@ -148,7 +165,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
       case 'Ocean System':
         return <Compass className="h-3.5 w-3.5 text-cyan-400 shrink-0" />;
       case 'Climate Region':
+      case 'Continent':
         return <Globe className="h-3.5 w-3.5 text-blue-400 shrink-0" />;
+      case 'State / Province':
+        return <MapPin className="h-3.5 w-3.5 text-amber-400 shrink-0" />;
       default:
         return <MapPin className="h-3.5 w-3.5 text-emerald-400 shrink-0" />;
     }
@@ -171,7 +191,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
             if (query.trim()) setIsOpen(true);
           }}
           onKeyDown={handleKeyDown}
-          placeholder="Search country, city, ocean current, or climate region..."
+          placeholder="Search country, state, city (e.g. Kozhikode), or ocean..."
           className="w-full bg-[#090d16]/90 border border-slate-700/80 hover:border-slate-600 focus:border-cyan-500 rounded-full pl-10 pr-9 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-400 shadow-xl backdrop-blur-md focus:outline-hidden transition-colors"
         />
         {query && (
@@ -225,4 +245,5 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
     </div>
   );
 };
+
 export default SearchBar;

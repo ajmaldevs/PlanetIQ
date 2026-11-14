@@ -1,7 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GeoJSONFeatureCollection, GeoJSONFeature } from '../services/api';
-import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { GIS_PLACES, GISPlace } from '../services/gisDatabase';
+import { ImageryLODManager } from '../services/imageryLOD';
+import { createCinematicSpaceEnvironment, SpaceEnvironment } from '../services/spaceEnvironment';
+import { createEarthDayNightShader, EarthDayNightShaderBundle } from '../services/earthShader';
+import { loadVectorBoundaries, VectorBoundariesMeshGroup } from '../services/vectorBoundaries';
+import {
+  ZoomIn,
+  ZoomOut,
+  Navigation,
+  Compass,
+  Layers,
+  Globe as GlobeIcon,
+} from 'lucide-react';
 
 export type EarthModule = 'ocean' | 'atmosphere' | 'land' | null;
 export type ZoomLevel = 'global' | 'continental' | 'country' | 'regional';
@@ -12,6 +24,8 @@ interface EarthGlobeProps {
   loading?: boolean;
   onSelectFeature?: (feature: GeoJSONFeature) => void;
   selectedFeature?: GeoJSONFeature | null;
+  onSelectPlace?: (place: GISPlace) => void;
+  selectedPlace?: GISPlace | null;
   metricType?: string;
   className?: string;
   visible?: boolean;
@@ -20,79 +34,7 @@ interface EarthGlobeProps {
   sidePanelOpen?: boolean;
 }
 
-// Geographic Places Database for authentic global orientation & education
-interface GeographicPlace {
-  name: string;
-  lat: number;
-  lon: number;
-  level: 1 | 2 | 3; // 1: Continents/Major Oceans, 2: Countries/Major Seas, 3: Cities/Landmarks
-  color?: string;
-  fontSize?: number;
-}
-
-const GEOGRAPHIC_PLACES: GeographicPlace[] = [
-  // Level 1: Continents & Major Oceans (Wide Space View)
-  { name: 'PACIFIC OCEAN', lat: 0.0, lon: -160.0, level: 1, color: '#60a5fa', fontSize: 22 },
-  { name: 'ATLANTIC OCEAN', lat: 18.0, lon: -38.0, level: 1, color: '#60a5fa', fontSize: 22 },
-  { name: 'INDIAN OCEAN', lat: -16.0, lon: 78.0, level: 1, color: '#60a5fa', fontSize: 22 },
-  { name: 'NORTH AMERICA', lat: 46.0, lon: -100.0, level: 1, color: '#94a3b8', fontSize: 24 },
-  { name: 'SOUTH AMERICA', lat: -16.0, lon: -60.0, level: 1, color: '#94a3b8', fontSize: 24 },
-  { name: 'EUROPE', lat: 52.0, lon: 16.0, level: 1, color: '#94a3b8', fontSize: 24 },
-  { name: 'AFRICA', lat: 4.0, lon: 20.0, level: 1, color: '#94a3b8', fontSize: 24 },
-  { name: 'ASIA', lat: 46.0, lon: 95.0, level: 1, color: '#94a3b8', fontSize: 24 },
-  { name: 'AUSTRALIA', lat: -25.0, lon: 135.0, level: 1, color: '#94a3b8', fontSize: 24 },
-
-  // Level 2: Sovereign Countries & Major Seas (Medium Orbit View: distance < 5.3)
-  { name: 'United States', lat: 39.0, lon: -98.0, level: 2, color: '#f8fafc' },
-  { name: 'Canada', lat: 56.0, lon: -106.0, level: 2, color: '#f8fafc' },
-  { name: 'Brazil', lat: -10.0, lon: -53.0, level: 2, color: '#f8fafc' },
-  { name: 'Mexico', lat: 23.0, lon: -102.0, level: 2, color: '#f8fafc' },
-  { name: 'Argentina', lat: -34.0, lon: -64.0, level: 2, color: '#f8fafc' },
-  { name: 'Colombia', lat: 4.5, lon: -73.0, level: 2, color: '#f8fafc' },
-  { name: 'United Kingdom', lat: 54.5, lon: -2.5, level: 2, color: '#f8fafc' },
-  { name: 'France', lat: 46.5, lon: 2.5, level: 2, color: '#f8fafc' },
-  { name: 'Germany', lat: 51.0, lon: 10.0, level: 2, color: '#f8fafc' },
-  { name: 'Spain', lat: 40.0, lon: -3.7, level: 2, color: '#f8fafc' },
-  { name: 'Italy', lat: 42.5, lon: 12.5, level: 2, color: '#f8fafc' },
-  { name: 'Norway', lat: 62.0, lon: 10.0, level: 2, color: '#f8fafc' },
-  { name: 'Egypt', lat: 26.5, lon: 30.0, level: 2, color: '#f8fafc' },
-  { name: 'Nigeria', lat: 9.0, lon: 7.5, level: 2, color: '#f8fafc' },
-  { name: 'Kenya', lat: 0.5, lon: 37.5, level: 2, color: '#f8fafc' },
-  { name: 'South Africa', lat: -29.0, lon: 24.0, level: 2, color: '#f8fafc' },
-  { name: 'Morocco', lat: 32.0, lon: -6.0, level: 2, color: '#f8fafc' },
-  { name: 'DR Congo', lat: -2.5, lon: 23.5, level: 2, color: '#f8fafc' },
-  { name: 'China', lat: 35.0, lon: 104.0, level: 2, color: '#f8fafc' },
-  { name: 'India', lat: 21.0, lon: 78.0, level: 2, color: '#f8fafc' },
-  { name: 'Japan', lat: 36.5, lon: 138.0, level: 2, color: '#f8fafc' },
-  { name: 'Indonesia', lat: -1.0, lon: 118.0, level: 2, color: '#f8fafc' },
-  { name: 'Saudi Arabia', lat: 24.0, lon: 45.0, level: 2, color: '#f8fafc' },
-  { name: 'Kazakhstan', lat: 48.0, lon: 67.0, level: 2, color: '#f8fafc' },
-  { name: 'New Zealand', lat: -41.0, lon: 174.0, level: 2, color: '#f8fafc' },
-  { name: 'Mediterranean Sea', lat: 35.0, lon: 18.0, level: 2, color: '#38bdf8' },
-  { name: 'Caribbean Sea', lat: 15.0, lon: -75.0, level: 2, color: '#38bdf8' },
-  { name: 'Arabian Sea', lat: 15.0, lon: 65.0, level: 2, color: '#38bdf8' },
-  { name: 'Bay of Bengal', lat: 14.0, lon: 87.0, level: 2, color: '#38bdf8' },
-
-  // Level 3: Major World Cities & Earth Geographic Systems (Close Orbit: distance < 3.9)
-  { name: 'Tokyo', lat: 35.68, lon: 139.76, level: 3, color: '#e2e8f0', fontSize: 20 },
-  { name: 'New York', lat: 40.71, lon: -74.00, level: 3, color: '#e2e8f0', fontSize: 20 },
-  { name: 'London', lat: 51.51, lon: -0.12, level: 3, color: '#e2e8f0', fontSize: 20 },
-  { name: 'Paris', lat: 48.85, lon: 2.35, level: 3, color: '#e2e8f0', fontSize: 20 },
-  { name: 'Cairo', lat: 30.04, lon: 31.23, level: 3, color: '#e2e8f0', fontSize: 20 },
-  { name: 'Mumbai', lat: 19.07, lon: 72.87, level: 3, color: '#e2e8f0', fontSize: 20 },
-  { name: 'São Paulo', lat: -23.55, lon: -46.63, level: 3, color: '#e2e8f0', fontSize: 20 },
-  { name: 'Sydney', lat: -33.86, lon: 151.20, level: 3, color: '#e2e8f0', fontSize: 20 },
-  { name: 'Singapore', lat: 1.35, lon: 103.82, level: 3, color: '#e2e8f0', fontSize: 20 },
-  { name: 'Nairobi', lat: -1.29, lon: 36.82, level: 3, color: '#e2e8f0', fontSize: 20 },
-  { name: 'Beijing', lat: 39.90, lon: 116.40, level: 3, color: '#e2e8f0', fontSize: 20 },
-  { name: 'Los Angeles', lat: 34.05, lon: -118.24, level: 3, color: '#e2e8f0', fontSize: 20 },
-  { name: 'Gulf Stream', lat: 36.0, lon: -68.0, level: 3, color: '#38bdf8', fontSize: 20 },
-  { name: 'Amazon Basin', lat: -3.5, lon: -62.0, level: 3, color: '#34d399', fontSize: 20 },
-  { name: 'Sahara', lat: 23.0, lon: 12.0, level: 3, color: '#fbbf24', fontSize: 20 },
-  { name: 'Himalayas', lat: 28.0, lon: 86.0, level: 3, color: '#cbd5e1', fontSize: 20 },
-];
-
-// Helper: Convert (Lat, Lon) to 3D Cartesian coordinates on sphere
+// Convert (Lat, Lon) in degrees to 3D Cartesian coordinates on sphere
 function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180);
   const theta = (lon + 180) * (Math.PI / 180);
@@ -103,26 +45,65 @@ function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector
   );
 }
 
-// Generate high-resolution 2D canvas text sprites with dark contrast halos
-function createTextSprite(text: string, fontSize = 24, color = '#f8fafc'): THREE.Sprite {
+// Generate high-resolution 2D canvas text sprites with dark contrast halos and category styling
+function createGISLabelSprite(place: GISPlace): THREE.Sprite {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d')!;
-  canvas.width = 384;
-  canvas.height = 72;
+  canvas.width = 440;
+  canvas.height = 76;
+
+  let fontSize = 21;
+  let textColor = '#f8fafc';
+  let isUppercase = false;
+
+  if (place.level === 1) {
+    // Continents & Major Oceans: wide tracked out
+    fontSize = place.category === 'ocean' ? 22 : 23;
+    textColor = place.category === 'ocean' ? '#7dd3fc' : '#94a3b8';
+    isUppercase = true;
+  } else if (place.level === 2) {
+    // Sovereign Countries & Seas
+    fontSize = 20;
+    textColor = place.category === 'natural_feature' ? '#38bdf8' : '#ffffff';
+  } else if (place.level === 3) {
+    // States & Provinces (e.g., Kerala, California, Bavaria)
+    fontSize = 18;
+    textColor = '#fde047'; // warm amber tint for administrative divisions
+  } else if (place.level === 4) {
+    // Cities / Ports / Populated Places (e.g., Kozhikode, Mumbai, New York)
+    fontSize = 17;
+    textColor = '#e2e8f0';
+  }
+
+  const displayName = isUppercase ? place.name.toUpperCase() : place.name;
 
   ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
+  const centerX = 220;
+  const centerY = 38;
+
+  // For cities, draw a small distinctive location dot
+  if (place.level === 4) {
+    ctx.beginPath();
+    ctx.arc(centerX - ctx.measureText(displayName).width / 2 - 12, centerY, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#38bdf8';
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#05070b';
+    ctx.stroke();
+  }
+
   // Crisp dark outline for universal contrast over deep oceans and bright sands
-  ctx.strokeStyle = 'rgba(5, 7, 11, 0.88)';
+  ctx.strokeStyle = 'rgba(5, 7, 11, 0.92)';
   ctx.lineWidth = 5;
   ctx.lineJoin = 'round';
-  ctx.strokeText(text, 192, 36);
+  ctx.strokeText(displayName, centerX, centerY);
 
   // Core clean typography fill
-  ctx.fillStyle = color;
-  ctx.fillText(text, 192, 36);
+  ctx.fillStyle = textColor;
+  ctx.fillText(displayName, centerX, centerY);
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.minFilter = THREE.LinearFilter;
@@ -135,7 +116,10 @@ function createTextSprite(text: string, fontSize = 24, color = '#f8fafc'): THREE
   });
 
   const sprite = new THREE.Sprite(material);
-  sprite.scale.set(0.42, 0.08, 1);
+  // Sprite sizing in 3D world coordinates
+  const scaleX = place.level === 1 ? 0.48 : place.level === 2 ? 0.40 : place.level === 3 ? 0.35 : 0.32;
+  const scaleY = scaleX * (76 / 440);
+  sprite.scale.set(scaleX, scaleY, 1);
   return sprite;
 }
 
@@ -182,6 +166,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   loading = false,
   onSelectFeature,
   selectedFeature,
+  onSelectPlace,
+  selectedPlace,
   metricType = 'default',
   className = '',
   visible = true,
@@ -197,11 +183,16 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   onZoomChangeRef.current = onZoomChange;
   const onCenterCoordsRef = useRef(onCenterCoordinatesChange);
   onCenterCoordsRef.current = onCenterCoordinatesChange;
+  const onSelectPlaceRef = useRef(onSelectPlace);
+  onSelectPlaceRef.current = onSelectPlace;
   const sidePanelOpenRef = useRef(sidePanelOpen);
   sidePanelOpenRef.current = sidePanelOpen;
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
 
   const currentZoomRef = useRef<ZoomLevel>('continental');
   const [currentZoomLevel, setCurrentZoomLevel] = useState<ZoomLevel>('continental');
+  const [imageryResolution, setImageryResolution] = useState<string>('NASA Blue Marble (1km Base)');
   const lastCenterCalcRef = useRef(Date.now());
 
   // Camera horizontal glide & layer cross-fade refs
@@ -217,8 +208,13 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const earthMeshRef = useRef<THREE.Mesh | null>(null);
   const cloudsMeshRef = useRef<THREE.Mesh | null>(null);
   const earthGroupRef = useRef<THREE.Group | null>(null);
+  const lodTilesGroupRef = useRef<THREE.Group | null>(null);
   const markersGroupRef = useRef<THREE.Group | null>(null);
   const labelsGroupRef = useRef<THREE.Group | null>(null);
+  const imageryLODRef = useRef<ImageryLODManager | null>(null);
+  const vectorBoundariesRef = useRef<VectorBoundariesMeshGroup | null>(null);
+  const spaceEnvRef = useRef<SpaceEnvironment | null>(null);
+  const earthShadersRef = useRef<EarthDayNightShaderBundle | null>(null);
   const animFrameIdRef = useRef<number | null>(null);
 
   // Interaction & camera animation state
@@ -229,14 +225,31 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const targetCameraDistance = useRef(4.6);
   const currentCameraDistance = useRef(4.6);
   const lastInteractionTime = useRef(Date.now());
-  const minDistance = 2.45; // Camera can zoom in deep to orbit view without clipping
+  const minDistance = 2.15; // Camera can zoom in deep to close orbit (~250km) for high-res tile inspection
   const maxDistance = 6.8;  // Wide space perspective
 
-  // Selected feature animation
+  // Fly-to camera animation
   const isFlyingToRef = useRef(false);
   const flyToTarget = useRef<{ x: number; y: number } | null>(null);
 
   const [isReady, setIsReady] = useState(false);
+
+  // Smoothly glide camera and rotate to center specific lat/lon
+  const flyToCoordinates = (lat: number, lon: number, targetDist?: number) => {
+    const targetY = -((lon + 90) * (Math.PI / 180));
+    const targetX = lat * (Math.PI / 180);
+
+    flyToTarget.current = {
+      x: Math.max(-1.15, Math.min(1.15, targetX)),
+      y: targetY,
+    };
+    isFlyingToRef.current = true;
+    lastInteractionTime.current = Date.now();
+
+    if (targetDist !== undefined) {
+      targetCameraDistance.current = targetDist;
+    }
+  };
 
   // Check if cursor coordinates intersect the Earth sphere
   const isPointerOverEarth = (clientX: number, clientY: number): boolean => {
@@ -249,7 +262,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     return hits.length > 0;
   };
 
-  // Initialize Three.js Full-Viewport Realistic Earth Scene
+  // Initialize Three.js Realistic Cinematic Earth Scene
   useEffect(() => {
     const mount = canvasMountRef.current;
     if (!mount) return;
@@ -262,7 +275,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     sceneRef.current = scene;
 
     // 2. Camera with true full-viewport aspect ratio
-    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 1200);
     camera.position.set(0, 0, currentCameraDistance.current);
     cameraRef.current = camera;
 
@@ -281,39 +294,20 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     mount.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // 4. Lighting: Realistic Sunlight matching NASA Photography
-    const sunlight = new THREE.DirectionalLight(0xfffaf0, 2.1);
-    sunlight.position.set(6, 2.5, 4.5);
+    // 4. Directional Sunlight matching NASA Deep Space Photography
+    const sunlight = new THREE.DirectionalLight(0xfffaf0, 2.2);
+    const sunPos = new THREE.Vector3(6.5, 2.8, 5.0);
+    sunlight.position.copy(sunPos);
     scene.add(sunlight);
 
-    // Deep space ambient fill (preserves soft visibility of night side)
-    const spaceAmbient = new THREE.AmbientLight(0x0a101e, 0.28);
+    // Deep space ambient fill (preserves soft visibility of dark hemisphere)
+    const spaceAmbient = new THREE.AmbientLight(0x080f1d, 0.24);
     scene.add(spaceAmbient);
 
-    // 5. Starfield Background (Deep Space Universe)
-    const starGeometry = new THREE.BufferGeometry();
-    const starCount = 1400;
-    const starPositions = new Float32Array(starCount * 3);
-    for (let i = 0; i < starCount * 3; i += 3) {
-      const radius = 60 + Math.random() * 80;
-      const u = Math.random();
-      const v = Math.random();
-      const theta = u * 2.0 * Math.PI;
-      const phi = Math.acos(2.0 * v - 1.0);
-      const sinPhi = Math.sin(phi);
-      starPositions[i] = radius * sinPhi * Math.cos(theta);
-      starPositions[i + 1] = radius * sinPhi * Math.sin(theta);
-      starPositions[i + 2] = radius * Math.cos(phi);
-    }
-    starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-    const starMaterial = new THREE.PointsMaterial({
-      size: 1.0,
-      color: 0x93c5fd,
-      transparent: true,
-      opacity: 0.60,
-    });
-    const stars = new THREE.Points(starGeometry, starMaterial);
-    scene.add(stars);
+    // 5. Cinematic Space Environment (Sky Dome with Faint Cosmic Dust & Stellar Classes)
+    const spaceEnv = createCinematicSpaceEnvironment();
+    scene.add(spaceEnv.group);
+    spaceEnvRef.current = spaceEnv;
 
     // 6. Earth Group Container
     const earthGroup = new THREE.Group();
@@ -322,30 +316,45 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     scene.add(earthGroup);
     earthGroupRef.current = earthGroup;
 
-    // 7. Textures Setup (NASA Blue Marble / Visible Earth Assets)
+    // 7. Textures Setup (NASA Blue Marble Day + Black Marble Night Lights + Relief)
     const textureLoader = new THREE.TextureLoader();
     const earthRadius = 1.9;
 
     const dayTexture = textureLoader.load('/textures/earth/earth_day.jpg');
+    const nightTexture = textureLoader.load('/textures/earth/earth_night.png');
     const normalTexture = textureLoader.load('/textures/earth/earth_normal.jpg');
     const specularTexture = textureLoader.load('/textures/earth/earth_specular.jpg');
     const cloudsTexture = textureLoader.load('/textures/earth/earth_clouds.png');
 
-    // 8. Earth Main Mesh (Natural Deep Blue Oceans, Topographic Relief & Specular Sun Glint)
+    // 8. Custom Earth Day/Night Shader & Rayleigh Atmospheric Scattering Limb
+    const earthShaders = createEarthDayNightShader(
+      dayTexture,
+      nightTexture,
+      normalTexture,
+      specularTexture
+    );
+    earthShadersRef.current = earthShaders;
+    earthShaders.updateSun(sunPos);
+
+    // Earth Main Mesh with Day/Night Shader
     const earthGeometry = new THREE.SphereGeometry(earthRadius, 64, 64);
-    const earthMaterial = new THREE.MeshPhongMaterial({
-      map: dayTexture,
-      normalMap: normalTexture,
-      normalScale: new THREE.Vector2(0.45, 0.45),
-      specularMap: specularTexture,
-      specular: new THREE.Color(0x2a3848),
-      shininess: 22,
-    });
-    const earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
+    const earthMesh = new THREE.Mesh(earthGeometry, earthShaders.earthMaterial);
     earthGroup.add(earthMesh);
     earthMeshRef.current = earthMesh;
 
-    // 9. Independent Cloud Layer (Natural, Delicate 40% Opacity hugging Surface)
+    // 9. Authentic 3D Vector Geographic Boundaries (Countries, Coastlines, States)
+    loadVectorBoundaries(earthRadius).then((vb) => {
+      earthGroup.add(vb.group);
+      vectorBoundariesRef.current = vb;
+    });
+
+    // 10. Multi-Resolution Imagery LOD Tiles Group (Spherical quadtree patches conforming to curvature)
+    const lodTilesGroup = new THREE.Group();
+    earthGroup.add(lodTilesGroup);
+    lodTilesGroupRef.current = lodTilesGroup;
+    imageryLODRef.current = new ImageryLODManager(earthRadius, lodTilesGroup);
+
+    // 11. Independent Cloud Layer (Natural, Delicate 40% Opacity hugging Surface)
     const cloudsGeometry = new THREE.SphereGeometry(earthRadius * 1.004, 64, 64);
     const cloudsMaterial = new THREE.MeshStandardMaterial({
       map: cloudsTexture,
@@ -358,65 +367,35 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     earthGroup.add(cloudsMesh);
     cloudsMeshRef.current = cloudsMesh;
 
-    // 10. Razor-Thin Natural Atmospheric Limb (Replaces thick ring with realistic 0.6% limb fade)
-    const atmosphereGeometry = new THREE.SphereGeometry(earthRadius * 1.007, 64, 64);
-    const atmosphereMaterial = new THREE.ShaderMaterial({
-      vertexShader: `
-        varying vec3 vNormal;
-        varying vec3 vViewPosition;
-        void main() {
-          vNormal = normalize(normalMatrix * normal);
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          vViewPosition = -mvPosition.xyz;
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: `
-        varying vec3 vNormal;
-        varying vec3 vViewPosition;
-        void main() {
-          vec3 viewDir = normalize(vViewPosition);
-          // Very sharp grazing angle falloff — visible ONLY as a thin delicate blue edge
-          float edge = pow(1.0 - max(0.0, dot(vNormal, viewDir)), 5.5);
-          vec3 atmosphereSky = vec3(0.35, 0.65, 0.95);
-          gl_FragColor = vec4(atmosphereSky, edge * 0.32);
-        }
-      `,
-      blending: THREE.AdditiveBlending,
-      side: THREE.BackSide,
-      transparent: true,
-      depthWrite: false,
-    });
-    const atmosphereMesh = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+    // 12. Razor-Thin Natural Atmospheric Limb (Twilight sunset glow on terminator, dark on shadow side)
+    const atmosphereGeometry = new THREE.SphereGeometry(earthRadius * 1.008, 64, 64);
+    const atmosphereMesh = new THREE.Mesh(atmosphereGeometry, earthShaders.atmosphereMaterial);
     earthGroup.add(atmosphereMesh);
 
-    // 11. Scientific Observation Markers Group
+    // 13. Scientific Observation Markers Group
     const markersGroup = new THREE.Group();
     earthGroup.add(markersGroup);
     markersGroupRef.current = markersGroup;
 
-    // 12. Geographic Place Names & Country Labels Group
+    // 14. Scalable GIS Place Names & Labels Group
     const labelsGroup = new THREE.Group();
     earthGroup.add(labelsGroup);
     labelsGroupRef.current = labelsGroup;
 
-    // Populate Geographic Labels onto the Globe
-    GEOGRAPHIC_PLACES.forEach((place) => {
+    // Populate Comprehensive GIS Labels onto the Globe
+    GIS_PLACES.forEach((place) => {
       const pos = latLonToVector3(place.lat, place.lon, earthRadius * 1.011);
-      const sprite = createTextSprite(place.name, place.fontSize || 24, place.color || '#f8fafc');
+      const sprite = createGISLabelSprite(place);
       sprite.position.copy(pos);
       sprite.userData = {
-        level: place.level,
-        name: place.name,
-        lat: place.lat,
-        lon: place.lon,
+        place,
       };
       labelsGroup.add(sprite);
     });
 
     setIsReady(true);
 
-    // 13. Render Animation Loop with Calm Majestic 9-Minute Revolution
+    // 15. Render Animation Loop with Serene Rotation & Multi-Resolution Tile Streamer
     let lastTimestamp = performance.now();
     const tempWorldPos = new THREE.Vector3();
     const tempNormal = new THREE.Vector3();
@@ -426,6 +405,16 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     const animate = (timestamp: number) => {
       const delta = Math.min((timestamp - lastTimestamp) / 1000, 0.1);
       lastTimestamp = timestamp;
+
+      if (!visibleRef.current) {
+        animFrameIdRef.current = requestAnimationFrame(animate);
+        return;
+      }
+
+      // Update cinematic celestial background & subtle dust drift
+      if (spaceEnvRef.current) {
+        spaceEnvRef.current.update(delta, timestamp);
+      }
 
       // Slower, serene rotation: 1 revolution every 9 minutes (~0.0116 rad/sec)
       const now = Date.now();
@@ -482,13 +471,27 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         cameraRef.current.position.x = currentCameraX.current;
       }
 
-      // Adaptive Zoom Level Calculation
+      // Adaptive Zoom Level & Resolution Scale Calculation
       const distNow = currentCameraDistance.current;
       let newLevel: ZoomLevel = 'global';
-      if (distNow < 3.1) newLevel = 'regional';
-      else if (distNow < 3.9) newLevel = 'country';
-      else if (distNow < 5.2) newLevel = 'continental';
-      else newLevel = 'global';
+      let resBadge = 'NASA Blue Marble (1km Base)';
+
+      if (distNow < 2.65) {
+        newLevel = 'regional';
+        resBadge = 'High-Res Satellite (15m LOD)';
+      } else if (distNow < 3.2) {
+        newLevel = 'regional';
+        resBadge = 'Regional Satellite (30m LOD)';
+      } else if (distNow < 3.8) {
+        newLevel = 'country';
+        resBadge = 'Country Satellite (60m LOD)';
+      } else if (distNow < 4.7) {
+        newLevel = 'continental';
+        resBadge = 'Continental Satellite (250m LOD)';
+      } else {
+        newLevel = 'global';
+        resBadge = 'NASA Blue Marble (1km Base)';
+      }
 
       if (newLevel !== currentZoomRef.current) {
         currentZoomRef.current = newLevel;
@@ -497,62 +500,153 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
           onZoomChangeRef.current(newLevel, distNow);
         }
       }
+      setImageryResolution(resBadge);
 
-      // Facing Center Coordinates Calculation (throttled every 300ms)
-      if (now - lastCenterCalcRef.current > 300) {
+      // Facing Center Coordinates Calculation (throttled every 250ms)
+      const centerLat = currentRotation.current.x * (180 / Math.PI);
+      let centerLon = -currentRotation.current.y * (180 / Math.PI) - 90;
+      centerLon = ((((centerLon + 180) % 360) + 360) % 360) - 180;
+
+      if (now - lastCenterCalcRef.current > 250) {
         lastCenterCalcRef.current = now;
-        const centerLat = currentRotation.current.x * (180 / Math.PI);
-        let centerLon = -currentRotation.current.y * (180 / Math.PI) - 90;
-        centerLon = ((((centerLon + 180) % 360) + 360) % 360) - 180;
         if (onCenterCoordsRef.current) {
           onCenterCoordsRef.current(centerLat, centerLon);
         }
       }
 
-      // 14. Geographic Labels Backface Culling & Zoom LOD Continuous Cross-Fade
+      // 16. Update Vector Boundaries LOD (States fade in at close orbit, Country borders adapt)
+      if (vectorBoundariesRef.current) {
+        vectorBoundariesRef.current.updateLOD(distNow);
+      }
+
+      // 17. Stream Spherical Satellite Imagery LOD Tiles Based on Viewpoint
+      if (imageryLODRef.current) {
+        imageryLODRef.current.update(distNow, centerLat, centerLon);
+      }
+
+      // 18. Scalable GIS Labels: Backface Culling, LOD Cross-Fade & 2D Screen-Space Collision Detection
       if (labelsGroupRef.current && cameraRef.current && earthMeshRef.current) {
-        const cameraPos = cameraRef.current.position;
+        const camera = cameraRef.current;
+        const cameraPos = camera.position;
         earthMeshRef.current.getWorldPosition(earthWorldPos);
         const dist = currentCameraDistance.current;
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+
+        interface LabelCandidate {
+          sprite: THREE.Sprite;
+          screenX: number;
+          screenY: number;
+          width: number;
+          height: number;
+          priority: number;
+          alpha: number;
+        }
+
+        const candidates: LabelCandidate[] = [];
 
         labelsGroupRef.current.children.forEach((child) => {
           const sprite = child as THREE.Sprite;
-          const data = sprite.userData as { level: number };
-
-          // Continuous Level of Detail (LOD) opacity cross-fading (no abrupt pop-in)
-          let lodAlpha = 1.0;
-          if (data.level === 1) {
-            lodAlpha = dist < 3.3 ? Math.max(0.15, (dist - 2.6) / 0.7) : 1.0;
-          } else if (data.level === 2) {
-            lodAlpha = Math.min(1.0, Math.max(0.0, (5.5 - dist) / 0.7));
-          } else if (data.level === 3) {
-            lodAlpha = Math.min(1.0, Math.max(0.0, (4.1 - dist) / 0.6));
-          }
-
-          if (lodAlpha <= 0.01) {
+          const place = sprite.userData?.place as GISPlace | undefined;
+          if (!place) {
             sprite.visible = false;
             return;
           }
 
-          // Backface Culling: check angle between surface normal and camera vector
+          // Continuous Level of Detail (LOD) opacity curves
+          let lodAlpha = 0.0;
+          if (place.level === 1) {
+            // Continents & Oceans: visible from deep space, gracefully softened up close
+            lodAlpha = dist < 3.2 ? Math.max(0.12, (dist - 2.5) / 0.7) : 1.0;
+          } else if (place.level === 2) {
+            // Sovereign Countries & Major Seas: visible when dist < 5.6
+            lodAlpha = Math.min(1.0, Math.max(0.0, (5.6 - dist) / 0.8));
+          } else if (place.level === 3) {
+            // First-Level Admin Divisions / States (e.g., Kerala, California, Bavaria): visible when dist < 4.2
+            lodAlpha = Math.min(1.0, Math.max(0.0, (4.2 - dist) / 0.7));
+          } else if (place.level === 4) {
+            // Cities / Ports / Populated Places (e.g., Kozhikode, Mumbai, NYC): visible when dist < 3.4
+            lodAlpha = Math.min(1.0, Math.max(0.0, (3.4 - dist) / 0.6));
+          }
+
+          if (lodAlpha <= 0.02) {
+            sprite.visible = false;
+            return;
+          }
+
+          // Backface Culling: check angle between surface normal and view direction
           sprite.getWorldPosition(tempWorldPos);
           tempNormal.copy(tempWorldPos).sub(earthWorldPos).normalize();
           tempViewDir.copy(cameraPos).sub(tempWorldPos).normalize();
           const dot = tempNormal.dot(tempViewDir);
 
-          // Visible only on front-facing hemisphere
-          if (dot > 0.18) {
-            sprite.visible = true;
-            // Smoothly soften opacity near the limb/horizon combined with zoom LOD
-            const limbFade = Math.min(1.0, Math.max(0.0, (dot - 0.18) * 3.5));
-            sprite.material.opacity = limbFade * 0.94 * lodAlpha;
-          } else {
+          if (dot <= 0.20) {
             sprite.visible = false;
+            return;
           }
+
+          // Project 3D position to 2D screen coordinates
+          tempWorldPos.project(camera);
+          const screenX = (tempWorldPos.x * 0.5 + 0.5) * screenWidth;
+          const screenY = (-(tempWorldPos.y * 0.5) + 0.5) * screenHeight;
+
+          // Discard offscreen points
+          if (screenX < -40 || screenX > screenWidth + 40 || screenY < -40 || screenY > screenHeight + 40) {
+            sprite.visible = false;
+            return;
+          }
+
+          // Soften opacity near the planetary limb/horizon
+          const limbFade = Math.min(1.0, Math.max(0.0, (dot - 0.20) * 3.5));
+          const finalAlpha = limbFade * 0.94 * lodAlpha;
+
+          // Bounding box approximation for 2D screen-space collision checks
+          const boxWidth = place.level === 1 ? 140 : place.level === 2 ? 110 : place.level === 3 ? 95 : 85;
+          const boxHeight = 24;
+
+          candidates.push({
+            sprite,
+            screenX,
+            screenY,
+            width: boxWidth,
+            height: boxHeight,
+            priority: place.priority || 50,
+            alpha: finalAlpha,
+          });
         });
+
+        // Sort candidates by priority descending (higher-tier labels take precedence)
+        candidates.sort((a, b) => b.priority - a.priority);
+
+        // 2D Screen-space collision detection (prevents overlapping text)
+        const occupiedBoxes: { left: number; right: number; top: number; bottom: number }[] = [];
+        const padding = 6;
+
+        for (const item of candidates) {
+          const left = item.screenX - item.width / 2 - padding;
+          const right = item.screenX + item.width / 2 + padding;
+          const top = item.screenY - item.height / 2 - padding;
+          const bottom = item.screenY + item.height / 2 + padding;
+
+          let collides = false;
+          for (const box of occupiedBoxes) {
+            if (left < box.right && right > box.left && top < box.bottom && bottom > box.top) {
+              collides = true;
+              break;
+            }
+          }
+
+          if (!collides) {
+            occupiedBoxes.push({ left, right, top, bottom });
+            item.sprite.visible = true;
+            item.sprite.material.opacity = item.alpha;
+          } else {
+            item.sprite.visible = false;
+          }
+        }
       }
 
-      // 15. Scientific Observation Layer Smooth Cross-Fade Animation
+      // 19. Scientific Observation Layer Smooth Cross-Fade Animation
       if (layerOpacityRef.current < 1.0 && markersGroupRef.current) {
         layerOpacityRef.current = Math.min(1.0, layerOpacityRef.current + delta * 3.8);
         markersGroupRef.current.children.forEach((child) => {
@@ -565,7 +659,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         });
       }
 
-      // 16. Selected Location Marker Subtle Organic Breathing Pulse
+      // 20. Selected Location Marker Subtle Organic Breathing Pulse
       if (selectedHaloRef.current) {
         const pulse = (Math.sin(timestamp * 0.004) + 1) * 0.5;
         selectedHaloRef.current.scale.setScalar(1.0 + pulse * 0.45);
@@ -596,19 +690,23 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
 
     window.addEventListener('resize', handleResize);
 
-    // Non-passive Native Wheel Handler (Fixes Zoom vs Scroll Disambiguation)
+    // Non-passive Native Wheel Handler (Altitude-Scaled Zoom Sensitivity)
     const onWindowWheel = (e: WheelEvent) => {
       // Zoom ONLY when pointer is hovering over Earth sphere!
       if (isPointerOverEarth(e.clientX, e.clientY)) {
         e.preventDefault();
-        const zoomFactor = e.deltaY * 0.0018;
+        // Scale zoom increment by camera altitude above Earth surface
+        const altitude = Math.max(0.18, currentCameraDistance.current - 1.9);
+        const altitudeRatio = Math.min(1.0, altitude / 4.5);
+        const zoomStep = 0.0018 * Math.pow(altitudeRatio, 0.65);
+        const zoomFactor = e.deltaY * zoomStep;
+
         targetCameraDistance.current = Math.max(
           minDistance,
           Math.min(maxDistance, targetCameraDistance.current + zoomFactor)
         );
         lastInteractionTime.current = Date.now();
       }
-      // If pointer is outside Earth, e.preventDefault() is NOT called, allowing normal page scrolling!
     };
 
     window.addEventListener('wheel', onWindowWheel, { passive: false });
@@ -624,14 +722,14 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         }
         rendererRef.current.dispose();
       }
+      spaceEnvRef.current?.dispose();
+      vectorBoundariesRef.current?.dispose();
+      imageryLODRef.current?.dispose();
+      earthShadersRef.current?.dispose();
       earthGeometry.dispose();
-      earthMaterial.dispose();
       cloudsGeometry.dispose();
       cloudsMaterial.dispose();
       atmosphereGeometry.dispose();
-      atmosphereMaterial.dispose();
-      starGeometry.dispose();
-      starMaterial.dispose();
     };
   }, []);
 
@@ -703,22 +801,23 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   useEffect(() => {
     if (!selectedFeature) return;
     const [lon, lat] = selectedFeature.geometry.coordinates;
-
-    const targetY = -((lon + 90) * (Math.PI / 180));
-    const targetX = lat * (Math.PI / 180);
-
-    flyToTarget.current = {
-      x: Math.max(-0.9, Math.min(0.9, targetX)),
-      y: targetY,
-    };
-    isFlyingToRef.current = true;
-    lastInteractionTime.current = Date.now();
-
-    // Zoom into country/regional view if currently pulled far back
-    if (targetCameraDistance.current > 3.8) {
-      targetCameraDistance.current = 3.3;
-    }
+    const targetDist = targetCameraDistance.current > 3.8 ? 3.2 : targetCameraDistance.current;
+    flyToCoordinates(lat, lon, targetDist);
   }, [selectedFeature]);
+
+  // Handle fly-to when selectedPlace changes
+  useEffect(() => {
+    if (!selectedPlace) return;
+    const targetDist =
+      selectedPlace.level === 4
+        ? 2.5
+        : selectedPlace.level === 3
+        ? 3.1
+        : selectedPlace.level === 2
+        ? 3.8
+        : 4.6;
+    flyToCoordinates(selectedPlace.lat, selectedPlace.lon, targetDist);
+  }, [selectedPlace]);
 
   // Synchronize selected observation marker halo for breathing pulse
   useEffect(() => {
@@ -741,7 +840,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     selectedHaloRef.current = hitHalo || null;
   }, [selectedFeature]);
 
-  // Mouse / Pointer Drag Handlers (Only active when starting over Earth or dragging)
+  // Mouse / Pointer Drag Handlers with Altitude-Scaled Pan Sensitivity
   const handlePointerDown = (e: React.PointerEvent) => {
     if (!isPointerOverEarth(e.clientX, e.clientY)) return;
     isDraggingRef.current = true;
@@ -757,11 +856,15 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     const deltaY = e.clientY - prevMousePos.current.y;
     prevMousePos.current = { x: e.clientX, y: e.clientY };
 
-    const sensitivity = 0.0055;
+    // Scale pan sensitivity with altitude above Earth surface
+    const altitude = Math.max(0.18, currentCameraDistance.current - 1.9);
+    const altitudeRatio = Math.min(1.0, altitude / 4.5);
+    const sensitivity = 0.0055 * Math.pow(altitudeRatio, 0.85);
+
     targetRotation.current.y += deltaX * sensitivity;
     targetRotation.current.x += deltaY * sensitivity;
 
-    targetRotation.current.x = Math.max(-1.1, Math.min(1.1, targetRotation.current.x));
+    targetRotation.current.x = Math.max(-1.25, Math.min(1.25, targetRotation.current.x));
     lastInteractionTime.current = Date.now();
   };
 
@@ -775,9 +878,34 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     }
   };
 
-  // Click on Observation Point Raycasting (Full Viewport Coordinates)
+  // Double-Click Raycasting: Smoothly zoom in towards the exact clicked coordinates
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (!cameraRef.current || !earthMeshRef.current) return;
+    const x = (e.clientX / window.innerWidth) * 2 - 1;
+    const y = -(e.clientY / window.innerHeight) * 2 + 1;
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(x, y), cameraRef.current);
+    const hits = raycaster.intersectObject(earthMeshRef.current);
+    if (hits.length > 0) {
+      const localHit = hits[0].point.clone();
+      if (earthGroupRef.current) {
+        earthGroupRef.current.worldToLocal(localHit);
+      }
+      const radius = localHit.length();
+      const phi = Math.acos(Math.max(-1, Math.min(1, localHit.y / radius)));
+      const lat = 90 - phi * (180 / Math.PI);
+      const theta = Math.atan2(localHit.z, -localHit.x);
+      let lon = theta * (180 / Math.PI) - 180;
+      lon = ((((lon + 180) % 360) + 360) % 360) - 180;
+
+      const newDist = Math.max(minDistance, targetCameraDistance.current - 1.25);
+      flyToCoordinates(lat, lon, newDist);
+    }
+  };
+
+  // Click Raycasting: Select observation point or GIS place label
   const handleClick = (e: React.MouseEvent) => {
-    if (!cameraRef.current || !markersGroupRef.current) return;
+    if (!cameraRef.current) return;
 
     const x = (e.clientX / window.innerWidth) * 2 - 1;
     const y = -(e.clientY / window.innerHeight) * 2 + 1;
@@ -785,23 +913,58 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(new THREE.Vector2(x, y), cameraRef.current);
 
-    const intersects = raycaster.intersectObjects(markersGroupRef.current.children);
-    if (intersects.length > 0 && onSelectFeature) {
-      const hit = intersects.find((i) => i.object.userData?.feature);
-      if (hit && hit.object.userData.feature) {
-        onSelectFeature(hit.object.userData.feature);
+    // 1. Raycast against scientific observation markers first
+    if (markersGroupRef.current) {
+      const intersects = raycaster.intersectObjects(markersGroupRef.current.children);
+      if (intersects.length > 0 && onSelectFeature) {
+        const hit = intersects.find((i) => i.object.userData?.feature);
+        if (hit && hit.object.userData.feature) {
+          onSelectFeature(hit.object.userData.feature);
+          return;
+        }
+      }
+    }
+
+    // 2. Raycast against visible GIS place labels
+    if (labelsGroupRef.current) {
+      const visibleSprites = labelsGroupRef.current.children.filter((c) => c.visible);
+      const labelHits = raycaster.intersectObjects(visibleSprites);
+      if (labelHits.length > 0) {
+        const hitSprite = labelHits[0].object as THREE.Sprite;
+        const place = hitSprite.userData?.place as GISPlace | undefined;
+        if (place) {
+          if (onSelectPlaceRef.current) {
+            onSelectPlaceRef.current(place);
+          }
+          const targetDist =
+            place.level === 4
+              ? 2.5
+              : place.level === 3
+              ? 3.1
+              : place.level === 2
+              ? 3.8
+              : 4.6;
+          flyToCoordinates(place.lat, place.lon, targetDist);
+          return;
+        }
       }
     }
   };
 
-  // Dedicated Unobtrusive Camera Controls
+  // Dedicated Precision Navigation Controls
   const zoomIn = () => {
-    targetCameraDistance.current = Math.max(minDistance, targetCameraDistance.current - 0.7);
+    const altitude = Math.max(0.18, currentCameraDistance.current - 1.9);
+    const altitudeRatio = Math.min(1.0, altitude / 4.5);
+    const step = Math.max(0.35, 0.85 * altitudeRatio);
+    targetCameraDistance.current = Math.max(minDistance, targetCameraDistance.current - step);
     lastInteractionTime.current = Date.now();
   };
 
   const zoomOut = () => {
-    targetCameraDistance.current = Math.min(maxDistance, targetCameraDistance.current + 0.7);
+    const altitude = Math.max(0.18, currentCameraDistance.current - 1.9);
+    const altitudeRatio = Math.min(1.0, altitude / 4.5);
+    const step = Math.max(0.35, 0.85 * altitudeRatio);
+    targetCameraDistance.current = Math.min(maxDistance, targetCameraDistance.current + step);
     lastInteractionTime.current = Date.now();
   };
 
@@ -812,10 +975,28 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     lastInteractionTime.current = Date.now();
   };
 
-  if (!visible) return null;
+  const orientNorthUp = () => {
+    targetRotation.current.x = 0; // Align equator directly with horizontal axis
+    lastInteractionTime.current = Date.now();
+  };
+
+  const recenterOnSelected = () => {
+    if (selectedFeature) {
+      const [lon, lat] = selectedFeature.geometry.coordinates;
+      flyToCoordinates(lat, lon, Math.max(2.6, targetCameraDistance.current));
+    } else if (selectedPlace) {
+      flyToCoordinates(selectedPlace.lat, selectedPlace.lon, Math.max(2.5, targetCameraDistance.current));
+    } else {
+      resetOrientation();
+    }
+  };
 
   return (
-    <>
+    <div
+      className={`transition-opacity duration-300 ${
+        visible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+      }`}
+    >
       {/* Full-Viewport Unrestricted 3D Earth Canvas Mount */}
       <div
         onPointerDown={handlePointerDown}
@@ -823,14 +1004,12 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
         className={`fixed inset-0 w-screen h-screen z-0 overflow-hidden select-none cursor-grab active:cursor-grabbing touch-none ${className}`}
         style={{ touchAction: 'none' }}
       >
         <div ref={canvasMountRef} className="absolute inset-0 w-full h-full pointer-events-none" />
       </div>
-
-      {/* Subtle Deep Space Vignette (Blends into #05070b) */}
-      <div className="fixed inset-0 pointer-events-none z-0 bg-radial from-transparent via-[#05070b]/10 to-[#05070b]/75" />
 
       {/* Observation Layer Updating Toast */}
       {loading && (
@@ -840,15 +1019,15 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         </div>
       )}
 
-      {/* Minimal Unobtrusive Camera Navigation Controls (Bottom-Left to avoid side panel collision) */}
-      <div className="fixed bottom-5 left-5 sm:bottom-6 sm:left-6 z-30 flex items-center space-x-2 pointer-events-auto">
+      {/* Precision Navigation Controls & Resolution Scale Bar (Bottom-Left) */}
+      <div className="fixed bottom-5 left-5 sm:bottom-6 sm:left-6 z-30 flex items-center space-x-2.5 pointer-events-auto">
         <div className="flex flex-col space-y-1 bg-[#090d16]/90 p-1.5 rounded-xl border border-slate-800/80 backdrop-blur-md shadow-2xl">
           <button
             onClick={(e) => {
               e.stopPropagation();
               zoomIn();
             }}
-            title="Zoom In"
+            title="Zoom In (or double-click surface)"
             className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
           >
             <ZoomIn className="h-4 w-4" />
@@ -866,22 +1045,54 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              resetOrientation();
+              recenterOnSelected();
             }}
-            title="Reset View"
+            title="Re-center on Selected Place"
             className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-cyan-400 transition-colors"
           >
-            <RotateCcw className="h-4 w-4" />
+            <Navigation className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              orientNorthUp();
+            }}
+            title="Reset Orientation (North Up)"
+            className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-cyan-400 transition-colors"
+          >
+            <Compass className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              resetOrientation();
+            }}
+            title="Reset Global View"
+            className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-cyan-400 transition-colors"
+          >
+            <GlobeIcon className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Subtle Scale & Zoom Level Pill */}
-        <div className="hidden sm:flex flex-col justify-center px-2.5 py-1.5 rounded-xl bg-[#090d16]/90 border border-slate-800/80 text-[10px] font-mono backdrop-blur-md shadow-2xl text-slate-400">
-          <span className="text-slate-500 uppercase tracking-widest text-[8px]">Scale</span>
-          <span className="text-cyan-400 font-semibold capitalize">{currentZoomLevel}</span>
+        {/* Imagery & Science Resolution Information Pill */}
+        <div className="hidden sm:flex flex-col justify-center px-3 py-2 rounded-xl bg-[#090d16]/90 border border-slate-800/80 text-[10px] font-mono backdrop-blur-md shadow-2xl text-slate-300 space-y-0.5">
+          <div className="flex items-center space-x-1.5 text-slate-400">
+            <Layers className="h-3 w-3 text-cyan-400" />
+            <span className="text-slate-500 uppercase tracking-wider text-[8px]">Imagery LOD:</span>
+            <span className="text-cyan-300 font-medium">{imageryResolution}</span>
+          </div>
+          <div className="flex items-center space-x-2 text-[9px] text-slate-400">
+            <span>Scale: <strong className="text-white capitalize">{currentZoomLevel}</strong></span>
+            {activeModule && (
+              <span className="text-slate-500">
+                • {activeModule === 'ocean' ? 'SWOT: ±2.4cm' : activeModule === 'atmosphere' ? 'GPM: 0.1°' : 'MODIS: 0.05°'}
+              </span>
+            )}
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 };
+
 export default EarthGlobe;

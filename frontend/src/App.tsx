@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Navbar, MainView } from './components/Navbar';
 import { EarthGlobe, EarthModule, ZoomLevel } from './components/EarthGlobe';
+import { MapView } from './components/MapView';
 import { ModuleSelector } from './components/ModuleSelector';
 import { AdaptiveSidePanel } from './components/AdaptiveSidePanel';
 import { TrendDrawer } from './components/TrendDrawer';
@@ -9,6 +10,7 @@ import { AboutView } from './components/AboutView';
 import { SearchBar } from './components/SearchBar';
 import { DatasetInfoModal } from './components/DatasetInfoModal';
 import { resolveGeographicContext } from './services/geography';
+import { GISPlace } from './services/gisDatabase';
 import {
   fetchSystemHealth,
   fetchAtmosphereGrid,
@@ -26,16 +28,18 @@ import {
   LandTimeSeriesResponse,
   CrossSystemResponse,
 } from './services/api';
-import { ArrowLeft, Compass } from 'lucide-react';
+import { ArrowLeft, Compass, Globe as GlobeIcon, Map as MapIcon } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<MainView>('explore');
+  const [explorationMode, setExplorationMode] = useState<'3d' | '2d'>('3d');
   const [activeModule, setActiveModule] = useState<EarthModule>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
 
   // Exploration states
   const [selectedDate, setSelectedDate] = useState('2026-03');
   const [selectedFeature, setSelectedFeature] = useState<GeoJSONFeature | null>(null);
+  const [selectedPlace, setSelectedPlace] = useState<GISPlace | null>(null);
   const [metricType, setMetricType] = useState<string>('accumulated');
   const [showTrends, setShowTrends] = useState<boolean>(false);
   const [dataLoading, setDataLoading] = useState<boolean>(false);
@@ -149,7 +153,7 @@ export const App: React.FC = () => {
       .catch(console.error);
   }, [activeModule, selectedDate]);
 
-  // Handle Point click on the 3D globe
+  // Handle Point click on the 3D globe or 2D map
   const handleFeatureSelect = (feat: GeoJSONFeature) => {
     setSelectedFeature(feat);
     setSidePanelOpen(true);
@@ -163,6 +167,12 @@ export const App: React.FC = () => {
     } else if (activeModule === 'land') {
       fetchLandTimeseries(lat, lon).then(setLandTimeseries);
     }
+  };
+
+  // Handle GIS place label click
+  const handlePlaceSelect = (place: GISPlace) => {
+    setSelectedPlace(place);
+    handleSelectPreset(place.lat, place.lon, place.name);
   };
 
   // Handle Preset selection with nearest authentic feature matching
@@ -253,19 +263,42 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#05070b] text-slate-100 flex flex-col font-sans selection:bg-cyan-500 selection:text-black overflow-x-hidden relative">
-      {/* Immersive Boundless 3D Earth Globe Canvas (Persistent full viewport, zero rectangular clipping) */}
+      {/* 3D Realistic Earth Globe Canvas (Full Viewport, zero rectangular clipping) */}
       <EarthGlobe
         activeModule={activeModule}
         data={getActiveData()}
         loading={dataLoading}
         onSelectFeature={handleFeatureSelect}
         selectedFeature={selectedFeature}
+        onSelectPlace={handlePlaceSelect}
+        selectedPlace={selectedPlace}
         metricType={metricType}
-        visible={currentView === 'explore'}
+        visible={currentView === 'explore' && explorationMode === '3d'}
         onZoomChange={handleZoomChange}
         onCenterCoordinatesChange={handleCenterCoordinatesChange}
         sidePanelOpen={sidePanelOpen}
       />
+
+      {/* 2D Planar Map Canvas (Strictly synchronized coordinates, active layer, and feature) */}
+      <div
+        className={`fixed inset-0 w-screen h-screen z-0 overflow-hidden transition-opacity duration-300 ${
+          currentView === 'explore' && explorationMode === '2d'
+            ? 'opacity-100 pointer-events-auto'
+            : 'opacity-0 pointer-events-none'
+        }`}
+      >
+        <MapView
+          module={activeModule || 'overview'}
+          data={getActiveData()}
+          loading={dataLoading}
+          selectedDate={selectedDate}
+          setSelectedDate={setSelectedDate}
+          onSelectFeature={handleFeatureSelect}
+          selectedFeature={selectedFeature}
+          activeMetric={metricType}
+          setActiveMetric={setMetricType}
+        />
+      </div>
 
       {/* Minimal Top Header */}
       <Navbar
@@ -275,6 +308,7 @@ export const App: React.FC = () => {
         onResetExplore={() => {
           setActiveModule(null);
           setSelectedFeature(null);
+          setSelectedPlace(null);
           setSidePanelOpen(false);
         }}
       />
@@ -324,8 +358,33 @@ export const App: React.FC = () => {
             {/* HOMEPAGE STATE: Realistic Satellite Earth Floating in Space */}
             {activeModule === null ? (
               <div className="flex-1 flex flex-col justify-between min-h-[calc(100vh-8.5rem)] py-2 sm:py-4 pointer-events-none">
-                {/* Simple Messaging & Global Geographic Search */}
+                {/* Simple Messaging, Global Geographic Search & 2D/3D Mode Switcher */}
                 <div className="text-center max-w-2xl mx-auto space-y-2 sm:space-y-3 pt-1 sm:pt-3 pointer-events-none">
+                  <div className="inline-flex items-center space-x-1 p-1 rounded-full bg-slate-900/90 border border-slate-800 backdrop-blur-md shadow-lg pointer-events-auto mb-1">
+                    <button
+                      onClick={() => setExplorationMode('3d')}
+                      className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                        explorationMode === '3d'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <GlobeIcon className="h-3.5 w-3.5" />
+                      <span>3D Globe</span>
+                    </button>
+                    <button
+                      onClick={() => setExplorationMode('2d')}
+                      className={`flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                        explorationMode === '2d'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      <MapIcon className="h-3.5 w-3.5" />
+                      <span>2D Map</span>
+                    </button>
+                  </div>
+
                   <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white drop-shadow-md">
                     Explore Earth's changing systems.
                   </h1>
@@ -359,6 +418,7 @@ export const App: React.FC = () => {
                       onClick={() => {
                         setActiveModule(null);
                         setSelectedFeature(null);
+                        setSelectedPlace(null);
                         setSidePanelOpen(false);
                       }}
                       className="flex items-center space-x-1.5 text-xs text-slate-300 hover:text-cyan-300 bg-slate-900/85 px-3 py-1.5 rounded-full border border-slate-800/80 backdrop-blur-md transition-colors"
@@ -370,6 +430,32 @@ export const App: React.FC = () => {
                     <span className="text-xs font-mono text-slate-300 bg-slate-900/85 px-3 py-1.5 rounded-full border border-slate-800/80 backdrop-blur-md">
                       Active System: <strong className="text-cyan-400 capitalize">{activeModule}</strong>
                     </span>
+
+                    {/* 2D/3D Mode Switcher */}
+                    <div className="inline-flex items-center p-0.5 rounded-full bg-slate-900/90 border border-slate-800/80 backdrop-blur-md">
+                      <button
+                        onClick={() => setExplorationMode('3d')}
+                        className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                          explorationMode === '3d'
+                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <GlobeIcon className="h-3 w-3" />
+                        <span>3D</span>
+                      </button>
+                      <button
+                        onClick={() => setExplorationMode('2d')}
+                        className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all ${
+                          explorationMode === '2d'
+                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        <MapIcon className="h-3 w-3" />
+                        <span>2D</span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="w-full sm:w-80 sm:mr-96 lg:sm:mr-[430px] transition-all">
