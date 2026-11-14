@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { GeoJSONFeatureCollection, GeoJSONFeature } from '../services/api';
-import { GIS_PLACES, GISPlace } from '../services/gisDatabase';
+import { GISPlace } from '../services/gisDatabase';
 import { ImageryLODManager } from '../services/imageryLOD';
 import { createCinematicSpaceEnvironment, SpaceEnvironment } from '../services/spaceEnvironment';
 import { createEarthDayNightShader, EarthDayNightShaderBundle } from '../services/earthShader';
 import { loadVectorBoundaries, VectorBoundariesMeshGroup } from '../services/vectorBoundaries';
 import { adaptiveQuality, QualityTier, QualityMode, QualityProfile } from '../services/adaptiveQuality';
+import { SurfaceLabelManager } from '../services/surfaceLabels';
 import {
   ZoomIn,
   ZoomOut,
@@ -72,84 +73,6 @@ interface CameraTransition {
   targetX: number;
   targetY: number;
   targetDist: number;
-}
-
-// Generate high-resolution 2D canvas text sprites with dark contrast halos and category styling
-function createGISLabelSprite(place: GISPlace): THREE.Sprite {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d')!;
-  canvas.width = 440;
-  canvas.height = 76;
-
-  let fontSize = 21;
-  let textColor = '#f8fafc';
-  let isUppercase = false;
-
-  if (place.level === 1) {
-    // Continents & Major Oceans: wide tracked out
-    fontSize = place.category === 'ocean' ? 22 : 23;
-    textColor = place.category === 'ocean' ? '#7dd3fc' : '#94a3b8';
-    isUppercase = true;
-  } else if (place.level === 2) {
-    // Sovereign Countries & Seas
-    fontSize = 20;
-    textColor = place.category === 'natural_feature' ? '#38bdf8' : '#ffffff';
-  } else if (place.level === 3) {
-    // States & Provinces (e.g., Kerala, California, Bavaria)
-    fontSize = 18;
-    textColor = '#fde047'; // warm amber tint for administrative divisions
-  } else if (place.level === 4) {
-    // Cities / Ports / Populated Places (e.g., Kozhikode, Mumbai, New York)
-    fontSize = 17;
-    textColor = '#e2e8f0';
-  }
-
-  const displayName = isUppercase ? place.name.toUpperCase() : place.name;
-
-  ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  const centerX = 220;
-  const centerY = 38;
-
-  // For cities, draw a small distinctive location dot
-  if (place.level === 4) {
-    ctx.beginPath();
-    ctx.arc(centerX - ctx.measureText(displayName).width / 2 - 12, centerY, 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = '#38bdf8';
-    ctx.fill();
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = '#05070b';
-    ctx.stroke();
-  }
-
-  // Crisp dark outline for universal contrast over deep oceans and bright sands
-  ctx.strokeStyle = 'rgba(5, 7, 11, 0.92)';
-  ctx.lineWidth = 5;
-  ctx.lineJoin = 'round';
-  ctx.strokeText(displayName, centerX, centerY);
-
-  // Core clean typography fill
-  ctx.fillStyle = textColor;
-  ctx.fillText(displayName, centerX, centerY);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.minFilter = THREE.LinearFilter;
-
-  const material = new THREE.SpriteMaterial({
-    map: texture,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-  });
-
-  const sprite = new THREE.Sprite(material);
-  // Sprite sizing in 3D world coordinates
-  const scaleX = place.level === 1 ? 0.48 : place.level === 2 ? 0.40 : place.level === 3 ? 0.35 : 0.32;
-  const scaleY = scaleX * (76 / 440);
-  sprite.scale.set(scaleX, scaleY, 1);
-  return sprite;
 }
 
 // Derive scientific marker color for 3D observation overlay points
@@ -239,10 +162,6 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const [qualityMode, setQualityMode] = useState<QualityMode>(adaptiveQuality.getMode());
   const qualityProfileRef = useRef<QualityProfile>(adaptiveQuality.getProfile());
 
-  // Throttled label collision and horizon check refs to eliminate per-frame CPU spikes
-  const lastLabelUpdateCheckRef = useRef<number>(0);
-  const lastLabelUpdateDistRef = useRef<number>(4.6);
-  const lastLabelUpdateRotRef = useRef<{ x: number; y: number }>({ x: 0.12, y: -0.6 });
 
   // Shared geometry instances for markers to eliminate memory fragmentation
   const sharedSphereGeomRef = useRef<THREE.SphereGeometry | null>(null);
@@ -263,7 +182,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   const earthGroupRef = useRef<THREE.Group | null>(null);
   const lodTilesGroupRef = useRef<THREE.Group | null>(null);
   const markersGroupRef = useRef<THREE.Group | null>(null);
-  const labelsGroupRef = useRef<THREE.Group | null>(null);
+  const surfaceLabelsRef = useRef<SurfaceLabelManager | null>(null);
   const imageryLODRef = useRef<ImageryLODManager | null>(null);
   const vectorBoundariesRef = useRef<VectorBoundariesMeshGroup | null>(null);
   const spaceEnvRef = useRef<SpaceEnvironment | null>(null);
@@ -458,36 +377,19 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     earthGroup.add(markersGroup);
     markersGroupRef.current = markersGroup;
 
-    // 14. Scalable GIS Place Names & Labels Group
-    const labelsGroup = new THREE.Group();
-    earthGroup.add(labelsGroup);
-    labelsGroupRef.current = labelsGroup;
-
-    // Populate Comprehensive GIS Labels onto the Globe:
-    // All sovereign nations and territories (Level 2), continents & oceans (Level 1),
-    // states/provinces (Level 3), and major world capitals and metropolises (Level 4)
-    const activeLabelPlaces = GIS_PLACES.filter(
-      (p) => p.level <= 3 || p.priority >= 67
-    );
-
-    activeLabelPlaces.forEach((place) => {
-      const pos = latLonToVector3(place.lat, place.lon, earthRadius * 1.011);
-      const sprite = createGISLabelSprite(place);
-      sprite.position.copy(pos);
-      sprite.userData = {
-        place,
-      };
-      labelsGroup.add(sprite);
+    // 14. Surface-Anchored Progressive GIS Labels (Google Earth-style progressive LOD)
+    const surfaceLabels = new SurfaceLabelManager({
+      earthRadius,
+      maxVisibleLabels: 48,
+      maxActivePoolSize: 90,
     });
+    earthGroup.add(surfaceLabels.group);
+    surfaceLabelsRef.current = surfaceLabels;
 
     setIsReady(true);
 
     // 15. Render Animation Loop with Serene Rotation & Multi-Resolution Tile Streamer
     lastTimestampRef.current = performance.now();
-    const tempWorldPos = new THREE.Vector3();
-    const tempNormal = new THREE.Vector3();
-    const tempViewDir = new THREE.Vector3();
-    const earthWorldPos = new THREE.Vector3();
 
     const animate = (timestamp: number) => {
       const delta = Math.min((timestamp - lastTimestampRef.current) / 1000, 0.1);
@@ -621,152 +523,16 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         imageryLODRef.current.update(delta, distNow, centerLat, centerLon);
       }
 
-      // 18. Scalable GIS Labels: Throttled Dirty-Flag Collision Detection
-      // Eliminates expensive per-frame CPU screen projections when viewpoint is stable
-      const labelInterval = qualityProfileRef.current.labelUpdateIntervalMs;
-      const distDelta = Math.abs(distNow - lastLabelUpdateDistRef.current);
-      const rotDelta = Math.hypot(
-        currentRotation.current.x - lastLabelUpdateRotRef.current.x,
-        currentRotation.current.y - lastLabelUpdateRotRef.current.y
-      );
-
-      const shouldRecalculateLabels =
-        (now - lastLabelUpdateCheckRef.current >= labelInterval && (distDelta > 0.02 || rotDelta > 0.012)) ||
-        lastLabelUpdateCheckRef.current === 0;
-
-      if (shouldRecalculateLabels && labelsGroupRef.current && cameraRef.current && earthMeshRef.current) {
-        lastLabelUpdateCheckRef.current = now;
-        lastLabelUpdateDistRef.current = distNow;
-        lastLabelUpdateRotRef.current = { x: currentRotation.current.x, y: currentRotation.current.y };
-
-        const camera = cameraRef.current;
-        const cameraPos = camera.position;
-        earthMeshRef.current.getWorldPosition(earthWorldPos);
-        const dist = currentCameraDistance.current;
-        const screenWidth = window.innerWidth;
-        const screenHeight = window.innerHeight;
-
-        // True geometric spherical horizon threshold: cos(theta_h) = R / d
-        const camDistToCenter = cameraPos.distanceTo(earthWorldPos);
-        const horizonThreshold = earthRadius / camDistToCenter;
-        tempViewDir.copy(cameraPos).sub(earthWorldPos).normalize(); // unit vector from Earth center to camera
-
-        interface LabelCandidate {
-          sprite: THREE.Sprite;
-          screenX: number;
-          screenY: number;
-          width: number;
-          height: number;
-          priority: number;
-          alpha: number;
-        }
-
-        const candidates: LabelCandidate[] = [];
-
-        labelsGroupRef.current.children.forEach((child) => {
-          const sprite = child as THREE.Sprite;
-          const place = sprite.userData?.place as GISPlace | undefined;
-          if (!place) {
-            sprite.visible = false;
-            return;
-          }
-
-          // Continuous Level of Detail (LOD) opacity curves
-          let lodAlpha = 0.0;
-          if (place.level === 1) {
-            // Continents & Oceans: visible from deep space, gracefully softened up close
-            lodAlpha = dist < 3.2 ? Math.max(0.12, (dist - 2.5) / 0.7) : 1.0;
-          } else if (place.level === 2) {
-            // Sovereign Countries & Major Seas: visible when dist < 5.6
-            lodAlpha = Math.min(1.0, Math.max(0.0, (5.6 - dist) / 0.8));
-          } else if (place.level === 3) {
-            // First-Level Admin Divisions / States (e.g., Kerala, California, Bavaria): visible when dist < 4.2
-            lodAlpha = Math.min(1.0, Math.max(0.0, (4.2 - dist) / 0.7));
-          } else if (place.level === 4) {
-            // Cities / Ports / Populated Places (e.g., Kozhikode, Mumbai, NYC): visible when dist < 3.4
-            lodAlpha = Math.min(1.0, Math.max(0.0, (3.4 - dist) / 0.6));
-          }
-
-          if (lodAlpha <= 0.02) {
-            sprite.visible = false;
-            return;
-          }
-
-          // True Spherical Geometric Horizon Culling:
-          // A surface point is visible if and only if dot(P_norm, V_cam) > R / d
-          sprite.getWorldPosition(tempWorldPos);
-          tempNormal.copy(tempWorldPos).sub(earthWorldPos).normalize();
-          const dotHorizon = tempNormal.dot(tempViewDir);
-
-          const horizonCutoff = horizonThreshold + 0.015;
-          if (dotHorizon <= horizonCutoff) {
-            sprite.visible = false;
-            return;
-          }
-
-          // Project 3D position to 2D screen coordinates
-          tempWorldPos.project(camera);
-          const screenX = (tempWorldPos.x * 0.5 + 0.5) * screenWidth;
-          const screenY = (-(tempWorldPos.y * 0.5) + 0.5) * screenHeight;
-
-          // Discard offscreen points
-          if (screenX < -40 || screenX > screenWidth + 40 || screenY < -40 || screenY > screenHeight + 40) {
-            sprite.visible = false;
-            return;
-          }
-
-          // Soften opacity near the planetary limb/horizon to eliminate hard popping
-          const limbFade = Math.min(1.0, Math.max(0.0, (dotHorizon - horizonCutoff) / 0.14));
-          const finalAlpha = limbFade * 0.94 * lodAlpha;
-
-          // Bounding box approximation for 2D screen-space collision checks
-          const boxWidth = place.level === 1 ? 140 : place.level === 2 ? 110 : place.level === 3 ? 95 : 85;
-          const boxHeight = 24;
-
-          candidates.push({
-            sprite,
-            screenX,
-            screenY,
-            width: boxWidth,
-            height: boxHeight,
-            // Small-country prioritization at continental/country zoom to prevent suppression by geographic giants
-            priority:
-              dist < 4.8 && place.level === 2 && (place.population || 0) < 15000000
-                ? (place.priority || 50) + 12
-                : place.priority || 50,
-            alpha: finalAlpha,
-          });
-        });
-
-        // Sort candidates by priority descending (higher-tier labels take precedence)
-        candidates.sort((a, b) => b.priority - a.priority);
-
-        // 2D Screen-space collision detection (prevents overlapping text)
-        const occupiedBoxes: { left: number; right: number; top: number; bottom: number }[] = [];
-        const padding = 6;
-
-        for (const item of candidates) {
-          const left = item.screenX - item.width / 2 - padding;
-          const right = item.screenX + item.width / 2 + padding;
-          const top = item.screenY - item.height / 2 - padding;
-          const bottom = item.screenY + item.height / 2 + padding;
-
-          let collides = false;
-          for (const box of occupiedBoxes) {
-            if (left < box.right && right > box.left && top < box.bottom && bottom > box.top) {
-              collides = true;
-              break;
-            }
-          }
-
-          if (!collides) {
-            occupiedBoxes.push({ left, right, top, bottom });
-            item.sprite.visible = true;
-            item.sprite.material.opacity = item.alpha;
-          } else {
-            item.sprite.visible = false;
-          }
-        }
+      // 18. Surface-Anchored Geographic Labels (Progressive LOD, Scale-Stabilization, Silky Fade)
+      if (surfaceLabelsRef.current && cameraRef.current) {
+        surfaceLabelsRef.current.update(
+          delta,
+          cameraRef.current,
+          distNow,
+          currentRotation.current,
+          window.innerWidth,
+          window.innerHeight
+        );
       }
 
       // 19. Scientific Observation Layer Smooth Cross-Fade Animation
@@ -919,6 +685,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       spaceEnvRef.current?.dispose();
       vectorBoundariesRef.current?.dispose();
       imageryLODRef.current?.dispose();
+      surfaceLabelsRef.current?.dispose();
       earthShadersRef.current?.dispose();
       earthGeometry.dispose();
       cloudsGeometry.dispose();
@@ -1275,9 +1042,9 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       }
     }
 
-    // 2. Raycast against visible GIS place labels
-    if (labelsGroupRef.current) {
-      const visibleSprites = labelsGroupRef.current.children.filter((c) => c.visible);
+    // 2. Raycast against visible surface-anchored GIS place labels
+    if (surfaceLabelsRef.current) {
+      const visibleSprites = surfaceLabelsRef.current.group.children.filter((c) => c.visible);
       const labelHits = raycaster.intersectObjects(visibleSprites);
       if (labelHits.length > 0) {
         const hitSprite = labelHits[0].object as THREE.Sprite;

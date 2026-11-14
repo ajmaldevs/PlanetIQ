@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { GeoJSONFeatureCollection, GeoJSONFeature } from '../services/api';
-import { GISPlace, findPlaceById } from '../services/gisDatabase';
+import { GISPlace, GIS_PLACES, findPlaceById } from '../services/gisDatabase';
 import { Calendar, Navigation, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export interface MapViewProps {
@@ -82,6 +82,29 @@ const OFFLINE_FALLBACK_STYLE: maplibregl.StyleSpecification = {
       paint: { 'line-color': '#f59e0b', 'line-width': 0.6, 'line-opacity': 0.45 },
     },
   ],
+  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+};
+
+// Authoritative GeoJSON FeatureCollection of all 1,214 global GIS places for progressive 2D labeling
+const GIS_PLACES_GEOJSON = {
+  type: 'FeatureCollection',
+  features: GIS_PLACES.map((p) => ({
+    type: 'Feature',
+    id: p.id,
+    geometry: {
+      type: 'Point',
+      coordinates: [p.lon, p.lat],
+    },
+    properties: {
+      id: p.id,
+      name: p.name,
+      formal_name: p.formal_name,
+      category: p.category,
+      level: p.level,
+      priority: p.priority,
+      population: p.population,
+    },
+  })),
 };
 
 export const MapView: React.FC<MapViewProps> = ({
@@ -414,6 +437,183 @@ export const MapView: React.FC<MapViewProps> = ({
       m.off('mouseleave', 'terralens-country-fills', onCountryMouseLeave);
       m.off('click', 'terralens-country-fills', onCountryClick);
       countryPopup.remove();
+    };
+  }, [mapLoaded, onSelectPlace]);
+
+  // Attach Surface-Anchored GIS Place Labels to 2D Map (Google Earth-style progressive LOD)
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
+    const m = map.current;
+    const sourceId = 'terralens-gis-places';
+
+    if (!m.getSource(sourceId)) {
+      m.addSource(sourceId, {
+        type: 'geojson',
+        data: GIS_PLACES_GEOJSON as any,
+      });
+    }
+
+    // 1. Continents & Major Oceans (Level 1: zoom < 3.8)
+    if (!m.getLayer('terralens-labels-continents')) {
+      m.addLayer({
+        id: 'terralens-labels-continents',
+        type: 'symbol',
+        source: sourceId,
+        filter: ['==', ['get', 'level'], 1],
+        maxzoom: 3.8,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 1, 11, 3, 15],
+          'text-transform': 'uppercase',
+          'text-letter-spacing': 0.15,
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+        },
+        paint: {
+          'text-color': ['case', ['==', ['get', 'category'], 'ocean'], '#7dd3fc', '#94a3b8'],
+          'text-halo-color': 'rgba(5, 7, 11, 0.95)',
+          'text-halo-width': 2,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 1, 1.0, 3.2, 0.8, 3.8, 0.0],
+        },
+      });
+    }
+
+    // 2. Sovereign Countries & Major Seas (Level 2: zoom 2.2 to 8.0)
+    if (!m.getLayer('terralens-labels-countries')) {
+      m.addLayer({
+        id: 'terralens-labels-countries',
+        type: 'symbol',
+        source: sourceId,
+        filter: ['==', ['get', 'level'], 2],
+        minzoom: 2.2,
+        maxzoom: 8.0,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 2.5, 10.5, 4.5, 13, 7, 15.5],
+          'symbol-sort-key': ['-', 1000, ['get', 'priority']],
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': 'rgba(5, 7, 11, 0.95)',
+          'text-halo-width': 2,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 2.2, 0.0, 3.0, 1.0, 6.5, 1.0, 8.0, 0.4],
+        },
+      });
+    }
+
+    // 3. States & Provinces (Level 3: zoom 4.2 to 10.0)
+    if (!m.getLayer('terralens-labels-states')) {
+      m.addLayer({
+        id: 'terralens-labels-states',
+        type: 'symbol',
+        source: sourceId,
+        filter: ['==', ['get', 'level'], 3],
+        minzoom: 4.2,
+        maxzoom: 10.0,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 4.5, 10.5, 7, 13.5],
+          'symbol-sort-key': ['-', 1000, ['get', 'priority']],
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+        },
+        paint: {
+          'text-color': '#fbbf24',
+          'text-halo-color': 'rgba(5, 7, 11, 0.95)',
+          'text-halo-width': 2,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 4.2, 0.0, 5.0, 1.0],
+        },
+      });
+    }
+
+    // 4. Cities Location Anchor Dots (Level 4: zoom >= 5.2)
+    if (!m.getLayer('terralens-labels-cities-points')) {
+      m.addLayer({
+        id: 'terralens-labels-cities-points',
+        type: 'circle',
+        source: sourceId,
+        filter: ['==', ['get', 'level'], 4],
+        minzoom: 5.2,
+        paint: {
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 5.2, 2.5, 8, 3.5],
+          'circle-color': '#38bdf8',
+          'circle-stroke-width': 1.5,
+          'circle-stroke-color': '#05070b',
+          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 5.2, 0.0, 6.0, 1.0],
+        },
+      });
+    }
+
+    // 5. Cities Text Labels (Level 4: zoom >= 5.2)
+    if (!m.getLayer('terralens-labels-cities')) {
+      m.addLayer({
+        id: 'terralens-labels-cities',
+        type: 'symbol',
+        source: sourceId,
+        filter: ['==', ['get', 'level'], 4],
+        minzoom: 5.2,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 5.2, 10, 8, 12.5, 11, 14.5],
+          'text-offset': [0.6, 0],
+          'text-anchor': 'left',
+          'symbol-sort-key': ['-', 1000, ['get', 'priority']],
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+        },
+        paint: {
+          'text-color': '#f1f5f9',
+          'text-halo-color': 'rgba(5, 7, 11, 0.95)',
+          'text-halo-width': 2,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 5.2, 0.0, 6.0, 1.0],
+        },
+      });
+    }
+
+    const interactiveLabelLayers = [
+      'terralens-labels-continents',
+      'terralens-labels-countries',
+      'terralens-labels-states',
+      'terralens-labels-cities',
+      'terralens-labels-cities-points',
+    ];
+
+    const onLabelClick = (e: maplibregl.MapMouseEvent) => {
+      // Observation points take precedence if clicked together
+      if (m.getLayer('observation-points')) {
+        const obs = m.queryRenderedFeatures(e.point, { layers: ['observation-points'] });
+        if (obs.length > 0) return;
+      }
+
+      const features = m.queryRenderedFeatures(e.point, { layers: interactiveLabelLayers });
+      if (features.length > 0) {
+        const placeId = features[0].properties?.id;
+        const place = findPlaceById(placeId) || GIS_PLACES.find((p) => p.id === placeId);
+        if (place && onSelectPlace) {
+          onSelectPlace(place);
+        }
+      }
+    };
+
+    interactiveLabelLayers.forEach((layerId) => {
+      m.on('mouseenter', layerId, () => {
+        m.getCanvas().style.cursor = 'pointer';
+      });
+      m.on('mouseleave', layerId, () => {
+        m.getCanvas().style.cursor = '';
+      });
+    });
+
+    m.on('click', onLabelClick);
+
+    return () => {
+      m.off('click', onLabelClick);
     };
   }, [mapLoaded, onSelectPlace]);
 
