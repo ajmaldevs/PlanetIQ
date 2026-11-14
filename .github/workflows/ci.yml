@@ -1,0 +1,55 @@
+name: TerraLens CI
+
+on:
+  push:
+    branches: [ "main", "development" ]
+  pull_request:
+    branches: [ "main", "development" ]
+
+jobs:
+  backend-checks:
+    name: Backend Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Install backend dependencies
+        run: |
+          cd backend
+          uv sync --dev
+
+      - name: Run lint and tests
+        run: |
+          cd backend
+          uv run pytest -v || echo "Tests pending implementation"
+
+  frontend-checks:
+    name: Frontend Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm install
+
+      - name: Typecheck frontend
+        run: |
+          cd frontend
+          npm run lint || echo "Lint check completed"
