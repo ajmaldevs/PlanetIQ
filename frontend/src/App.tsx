@@ -6,6 +6,8 @@ import { ExplorationPanel } from './components/ExplorationPanel';
 import { TrendDrawer } from './components/TrendDrawer';
 import { AssistantView } from './components/AssistantView';
 import { AboutView } from './components/AboutView';
+import { SearchBar } from './components/SearchBar';
+import { DatasetInfoModal } from './components/DatasetInfoModal';
 import {
   fetchSystemHealth,
   fetchAtmosphereGrid,
@@ -36,6 +38,8 @@ export const App: React.FC = () => {
   const [metricType, setMetricType] = useState<string>('accumulated');
   const [showTrends, setShowTrends] = useState<boolean>(false);
   const [dataLoading, setDataLoading] = useState<boolean>(false);
+  const [showDatasetInfo, setShowDatasetInfo] = useState<boolean>(false);
+  const [pendingAiPrompt, setPendingAiPrompt] = useState<string | undefined>(undefined);
 
   // Scientific data states
   const [atmosphereGrid, setAtmosphereGrid] = useState<GeoJSONFeatureCollection | null>(null);
@@ -175,6 +179,36 @@ export const App: React.FC = () => {
     }
   };
 
+  // Geographic search selection with automatic Earth-system context inference
+  const handleSearchSelect = (lat: number, lon: number, name: string) => {
+    if (!activeModule) {
+      const lower = name.toLowerCase();
+      if (
+        lower.includes('current') ||
+        lower.includes('ocean') ||
+        lower.includes('passage') ||
+        lower.includes('retroflection') ||
+        lower.includes('gulf') ||
+        lower.includes('kuroshio') ||
+        lower.includes('humboldt') ||
+        lower.includes('pacific')
+      ) {
+        handleSelectModule('ocean');
+      } else if (
+        lower.includes('rain') ||
+        lower.includes('convective') ||
+        lower.includes('monsoon') ||
+        lower.includes('itcz') ||
+        lower.includes('storm')
+      ) {
+        handleSelectModule('atmosphere');
+      } else {
+        handleSelectModule('land');
+      }
+    }
+    handleSelectPreset(lat, lon, name);
+  };
+
   const getActiveData = () => {
     if (activeModule === 'ocean') return oceanGrid;
     if (activeModule === 'atmosphere') return atmosphereGrid;
@@ -211,8 +245,8 @@ export const App: React.FC = () => {
             {/* HOMEPAGE STATE: Realistic Satellite Earth Floating in Space */}
             {activeModule === null ? (
               <div className="flex-1 flex flex-col justify-between min-h-[calc(100vh-8.5rem)] py-2 sm:py-4 pointer-events-none">
-                {/* Simple Messaging */}
-                <div className="text-center max-w-2xl mx-auto space-y-1.5 sm:space-y-2 pt-1 sm:pt-3 pointer-events-none">
+                {/* Simple Messaging & Global Geographic Search */}
+                <div className="text-center max-w-2xl mx-auto space-y-2 sm:space-y-3 pt-1 sm:pt-3 pointer-events-none">
                   <h1 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white drop-shadow-md">
                     Explore Earth's changing systems.
                   </h1>
@@ -220,10 +254,13 @@ export const App: React.FC = () => {
                     Discover how our oceans, atmosphere and land are changing through observations
                     from NASA satellites.
                   </p>
+                  <div className="pt-1 max-w-md mx-auto pointer-events-auto">
+                    <SearchBar onSelectLocation={handleSearchSelect} />
+                  </div>
                 </div>
 
                 {/* Open Space Viewport: Earth Floats Freely in Deep Space */}
-                <div className="flex-1 w-full min-h-[200px] pointer-events-none" />
+                <div className="flex-1 w-full min-h-[160px] pointer-events-none" />
 
                 {/* Three Exploration Options */}
                 <div className="w-full pt-2 pointer-events-auto">
@@ -237,18 +274,24 @@ export const App: React.FC = () => {
               /* EXPLORATION EXPERIENCE STATE: Expansive Orbit Viewport + Floating Panel + Expandable Trends */
               <div className="flex-1 flex flex-col justify-between min-h-[calc(100vh-8.5rem)] py-2 sm:py-4 space-y-4 pointer-events-none">
                 {/* Top Bar Controls */}
-                <div className="flex items-center justify-between px-1 pointer-events-auto">
-                  <button
-                    onClick={() => setActiveModule(null)}
-                    className="flex items-center space-x-1.5 text-xs text-slate-300 hover:text-cyan-300 bg-slate-900/85 px-3 py-1.5 rounded-full border border-slate-800/80 backdrop-blur-md transition-colors"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    <span>Back to Overview</span>
-                  </button>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 px-1 pointer-events-auto">
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => setActiveModule(null)}
+                      className="flex items-center space-x-1.5 text-xs text-slate-300 hover:text-cyan-300 bg-slate-900/85 px-3 py-1.5 rounded-full border border-slate-800/80 backdrop-blur-md transition-colors"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      <span>Back to Overview</span>
+                    </button>
 
-                  <span className="text-xs font-mono text-slate-300 bg-slate-900/85 px-3 py-1.5 rounded-full border border-slate-800/80 backdrop-blur-md">
-                    Active System: <strong className="text-cyan-400 capitalize">{activeModule}</strong>
-                  </span>
+                    <span className="text-xs font-mono text-slate-300 bg-slate-900/85 px-3 py-1.5 rounded-full border border-slate-800/80 backdrop-blur-md">
+                      Active System: <strong className="text-cyan-400 capitalize">{activeModule}</strong>
+                    </span>
+                  </div>
+
+                  <div className="w-full sm:w-80">
+                    <SearchBar onSelectLocation={handleSearchSelect} />
+                  </div>
                 </div>
 
                 {/* Floating Exploration Panel */}
@@ -265,6 +308,11 @@ export const App: React.FC = () => {
                     showTrends={showTrends}
                     setShowTrends={setShowTrends}
                     dataLoading={dataLoading}
+                    onExplainWithAI={(prompt) => {
+                      setPendingAiPrompt(prompt);
+                      setCurrentView('assistant');
+                    }}
+                    onOpenDatasetInfo={() => setShowDatasetInfo(true)}
                   />
                 </div>
 
@@ -300,6 +348,7 @@ export const App: React.FC = () => {
                 'Global Earth Systems'
               }
               selectedDate={selectedDate}
+              initialPrompt={pendingAiPrompt}
             />
           </div>
         )}
@@ -311,6 +360,14 @@ export const App: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* Authentic Dataset Provenance & Limitations Modal */}
+      {showDatasetInfo && activeModule && (
+        <DatasetInfoModal
+          activeModule={activeModule}
+          onClose={() => setShowDatasetInfo(false)}
+        />
+      )}
 
       {/* Minimal Footer */}
       <footer className="relative z-10 border-t border-slate-800/60 py-3.5 px-6 text-center text-xs text-slate-500 font-mono bg-[#05070b]/80 backdrop-blur-sm pointer-events-auto">

@@ -413,10 +413,14 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       if (isFlyingToRef.current && flyToTarget.current) {
         currentRotation.current.x += (flyToTarget.current.x - currentRotation.current.x) * 0.08;
         currentRotation.current.y += (flyToTarget.current.y - currentRotation.current.y) * 0.08;
+        targetRotation.current.x = currentRotation.current.x;
+        targetRotation.current.y = currentRotation.current.y;
         if (
           Math.abs(flyToTarget.current.x - currentRotation.current.x) < 0.002 &&
           Math.abs(flyToTarget.current.y - currentRotation.current.y) < 0.002
         ) {
+          targetRotation.current.x = flyToTarget.current.x;
+          targetRotation.current.y = flyToTarget.current.y;
           isFlyingToRef.current = false;
         }
       } else {

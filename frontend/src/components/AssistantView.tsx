@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { queryAssistant, AssistantQueryResponse, ScientificCitation } from '../services/api';
 import { Send, Sparkles, ExternalLink, User } from 'lucide-react';
 import { EarthModule } from './EarthGlobe';
@@ -7,6 +7,7 @@ interface AssistantViewProps {
   activeModule?: EarthModule;
   selectedLocationName?: string;
   selectedDate?: string;
+  initialPrompt?: string;
 }
 
 interface Message {
@@ -21,6 +22,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   activeModule = null,
   selectedLocationName = 'Global Earth Systems',
   selectedDate = '2026-03',
+  initialPrompt,
 }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -105,6 +107,15 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
       setLoading(false);
     }
   };
+
+  const autoPromptSentRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (initialPrompt && initialPrompt.trim() && autoPromptSentRef.current !== initialPrompt) {
+      autoPromptSentRef.current = initialPrompt;
+      handleSend(initialPrompt);
+    }
+  }, [initialPrompt]);
 
   return (
     <div className="max-w-4xl mx-auto w-full flex flex-col h-[680px] bg-[#090d16]/90 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
