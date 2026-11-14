@@ -284,13 +284,16 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
         />
       )}
 
-      {/* Docked Desktop Sidebar / Slide-Over Mobile Drawer */}
+      {/* Docked Desktop Sidebar / Slide-Over Tablet Drawer / Bottom Sheet Mobile Drawer */}
       <aside
-        className={`fixed inset-y-0 right-0 z-40 lg:static lg:z-20 flex flex-col w-full sm:w-[380px] lg:w-[390px] shrink-0 bg-[#080c16]/98 border-l border-slate-800/80 backdrop-blur-2xl shadow-2xl transition-transform duration-300 ease-in-out pointer-events-auto overflow-hidden ${
-          isOpen ? 'translate-x-0' : 'translate-x-full lg:hidden'
+        className={`fixed inset-x-0 bottom-0 top-auto rounded-t-3xl max-h-[82vh] border-t border-slate-800/80 border-l-0 z-40 sm:inset-y-0 sm:right-0 sm:left-auto sm:top-0 sm:rounded-none sm:border-l sm:border-t-0 sm:max-h-none sm:w-[380px] lg:static lg:w-[390px] lg:z-20 flex flex-col shrink-0 bg-[#080c16]/98 backdrop-blur-2xl shadow-2xl transition-transform duration-300 ease-in-out pointer-events-auto overflow-hidden ${
+          isOpen ? 'translate-y-0 sm:translate-x-0' : 'translate-y-full sm:translate-x-full lg:hidden'
         }`}
         aria-label="Adaptive Scientific Context Panel"
       >
+        {/* Mobile Swipe / Drag Pill Handle */}
+        <div className="w-12 h-1 rounded-full bg-slate-700/80 mx-auto my-2 sm:hidden shrink-0" />
+
         {/* ================= 1. HEADER: LOCATION & SCALE ================= */}
         <div className="p-4 border-b border-slate-800/80 bg-[#0a0f1c]/90 shrink-0">
           <div className="flex items-start justify-between gap-2">

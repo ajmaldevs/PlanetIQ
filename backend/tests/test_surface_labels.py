@@ -144,12 +144,13 @@ def test_map_view_2d_has_consistent_gis_place_symbol_layers():
     assert "terralens-labels-countries" in content
     # 3. States/Provinces (minzoom 4.2)
     assert "terralens-labels-states" in content
-    # 4. Major Cities (minzoom 4.8)
+    # 4. Major Cities (minzoom 4.4)
     assert "terralens-labels-cities-major" in content
-    assert "terralens-labels-cities-major-points" in content
-    # 5. Towns & Local Features (minzoom 7.0)
+    # 5. Towns & Local Features (minzoom 6.5)
     assert "terralens-labels-towns" in content
-    assert "terralens-labels-towns-points" in content
+    # Verify unwanted permanent point/pointer layers are cleaned up
+    assert "m.removeLayer('terralens-labels-cities-major-points')" in content
+    assert "m.removeLayer('terralens-labels-towns-points')" in content
 
     # Interactive click synchronization
     assert "onSelectPlace" in content

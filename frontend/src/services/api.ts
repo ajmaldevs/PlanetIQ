@@ -74,6 +74,8 @@ export interface AtmosphereTimeSeriesPoint {
 }
 
 export interface AtmosphereTimeSeriesResponse {
+  data_status: 'demonstration_model' | 'observations';
+  is_observation: boolean;
   dataset_id: string;
   dataset_name: string;
   location_name: string;
@@ -94,6 +96,8 @@ export interface OceanTimeSeriesPoint {
 }
 
 export interface OceanTimeSeriesResponse {
+  data_status: 'demonstration_model' | 'observations';
+  is_observation: boolean;
   dataset_id: string;
   dataset_name: string;
   region_name: string;
@@ -113,6 +117,8 @@ export interface LandTimeSeriesPoint {
 }
 
 export interface LandTimeSeriesResponse {
+  data_status: 'demonstration_model' | 'observations';
+  is_observation: boolean;
   dataset_id: string;
   dataset_name: string;
   region_name: string;
@@ -132,6 +138,8 @@ export interface CrossSystemCorrelationPoint {
 }
 
 export interface CrossSystemResponse {
+  data_status: 'demonstration_model' | 'observations';
+  is_observation: boolean;
   phenomenon_name: string;
   description: string;
   primary_ocean_metric: string;
@@ -381,6 +389,99 @@ export interface ConnectionCheckResult {
   error?: string;
   latencyMs?: number;
 }
+
+export interface PeriodObservation {
+  date: string;
+  value: number;
+  unit: string;
+  normal_or_baseline?: number;
+  anomaly?: number;
+  metadata?: Record<string, any>;
+}
+
+export interface RegionalDiffPoint {
+  name: string;
+  latitude: number;
+  longitude: number;
+  value_a: number;
+  value_b: number;
+  delta: number;
+  unit: string;
+  interpretation?: string;
+}
+
+export interface PeriodComparisonResponse {
+  data_status: 'demonstration_model' | 'observations';
+  is_observation: boolean;
+  module: 'atmosphere' | 'ocean' | 'land';
+  period_a: string;
+  period_b: string;
+  location_name: string;
+  latitude: number;
+  longitude: number;
+  unit: string;
+  metric_label: string;
+  observation_a: PeriodObservation;
+  observation_b: PeriodObservation;
+  absolute_difference: number;
+  percentage_difference?: number | null;
+  percentage_meaningful: boolean;
+  percentage_note?: string | null;
+  interpretation: string;
+  regional_differences: RegionalDiffPoint[];
+}
+
+export const fetchPeriodComparison = async (
+  module: string,
+  periodA: string,
+  periodB: string,
+  lat = 0.0,
+  lon = 0.0,
+  signal?: AbortSignal
+): Promise<PeriodComparisonResponse> => {
+  return cachedFetchJson<PeriodComparisonResponse>(
+    `${API_BASE_URL}/comparison/periods?module=${module}&period_a=${periodA}&period_b=${periodB}&latitude=${lat}&longitude=${lon}`,
+    { signal },
+    5 * 60 * 1000 // 5 minute TTL
+  );
+};
+
+export interface GeocodingResult {
+  id: string;
+  name: string;
+  formal_name?: string;
+  category: string;
+  level: number;
+  priority: number;
+  latitude: number;
+  longitude: number;
+  bbox?: [number, number, number, number];
+  iso_a2?: string;
+  iso_a3?: string;
+  parent_country?: string;
+  parent_state?: string;
+  parent_continent?: string;
+  population?: number;
+  detail?: string;
+}
+
+export interface GeocodingSearchResponse {
+  query: string;
+  total_results: number;
+  results: GeocodingResult[];
+}
+
+export const fetchGeocodingSearch = async (
+  query: string,
+  limit: number = 10,
+  signal?: AbortSignal
+): Promise<GeocodingSearchResponse> => {
+  return cachedFetchJson<GeocodingSearchResponse>(
+    `${API_BASE_URL}/geocoding/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+    { signal },
+    10 * 60 * 1000 // 10 minute cache TTL
+  );
+};
 
 export const checkBackendConnection = async (): Promise<ConnectionCheckResult> => {
   const start = performance.now();

@@ -226,6 +226,9 @@ class AtmosphereService:
         return GeoJSONFeatureCollection(
             features=features,
             metadata={
+                "data_status": "demonstration_model",
+                "is_observation": False,
+                "data_notice": "Generated seasonal example values; no NASA granules are loaded.",
                 "dataset_id": "GPM_3IMERGM",
                 "agency": "NASA GES DISC",
                 "temporal_resolution": "Monthly",
@@ -266,7 +269,7 @@ class AtmosphereService:
         total_normal = 0.0
 
         for year in range(start_year, end_year + 1):
-            max_month = 12 if year < 2026 else 11  # up to current date in 2026
+            max_month = 12
             for month in range(1, max_month + 1):
                 days_in_month = cls._compute_days_in_month(year, month)
                 hours_in_month = days_in_month * 24.0

@@ -79,7 +79,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
             </h1>
             <p className="text-base sm:text-lg text-slate-300 leading-relaxed font-normal">
               TerraLens is an interactive Earth observation platform that helps high school students, college researchers,
-              and the public understand how Earth's interconnected planetary systems are changing through authentic satellite measurements.
+              and the public explore Earth's interconnected systems. Current map layers and time series are demonstration models, not satellite measurements.
             </p>
           </div>
 
@@ -127,7 +127,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
             </div>
             <div className="space-y-3 text-xs text-slate-300 leading-relaxed">
               <p>
-                • <strong>No Fabricated Observations:</strong> TerraLens strictly presents authentic NASA Earth science observations. Synthetic or demonstration values are never displayed as genuine satellite measurements.
+                • <strong>Demonstration Data:</strong> This build displays modelled example values, not retrieved NASA observations. NASA dataset citations describe intended sources; generated values must not be interpreted as satellite measurements.
               </p>
               <p>
                 • <strong>Strict Unit Fidelity:</strong> Precipitation rates in mm/hr are never conflated with monthly accumulated liquid depth in mm (P_accum = P_rate × 24 × D_month). Sea surface heights are referenced to standard ellipsoids and Mean Sea Surface.

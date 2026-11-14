@@ -213,6 +213,9 @@ class LandService:
         return GeoJSONFeatureCollection(
             features=features,
             metadata={
+                "data_status": "demonstration_model",
+                "is_observation": False,
+                "data_notice": "Generated seasonal example values; no NASA MODIS granules are loaded.",
                 "dataset_id": "MOD13C2",
                 "agency": "NASA LP DAAC / USGS",
                 "sensor": "Moderate Resolution Imaging Spectroradiometer (MODIS)",
@@ -248,7 +251,7 @@ class LandService:
         ndvi_values = []
 
         for year in range(start_year, end_year + 1):
-            max_month = 12 if year < 2026 else 11
+            max_month = 12
             for month in range(1, max_month + 1):
                 month_offset = (month - peak + 6) % 12 - 6
                 seasonal = amp * math.cos(math.pi * month_offset / 6.0)

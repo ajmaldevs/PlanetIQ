@@ -208,19 +208,6 @@ export class SurfaceLabelManager {
     const centerX = 220;
     const centerY = 38;
 
-    // Anchor pin dot for cities
-    if (place.level === 4) {
-      const textWidth = ctx.measureText(displayName).width;
-      const dotX = centerX - textWidth / 2 - 12;
-      ctx.beginPath();
-      ctx.arc(dotX, centerY, 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#38bdf8';
-      ctx.fill();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = '#05070b';
-      ctx.stroke();
-    }
-
     // Heavy dark outline for universal contrast over deserts, clouds and deep water
     ctx.strokeStyle = 'rgba(4, 7, 14, 0.95)';
     ctx.lineWidth = 5;

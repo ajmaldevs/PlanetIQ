@@ -69,6 +69,8 @@ class AtmosphereTimeSeriesPoint(BaseModel):
 
 
 class AtmosphereTimeSeriesResponse(BaseModel):
+    data_status: str = "demonstration_model"
+    is_observation: bool = False
     dataset_id: str = "GPM_3IMERGM"
     dataset_name: str = "GPM IMERG Final Monthly Precipitation"
     location_name: Optional[str] = None
@@ -102,6 +104,8 @@ class OceanTimeSeriesPoint(BaseModel):
 
 
 class OceanTimeSeriesResponse(BaseModel):
+    data_status: str = "demonstration_model"
+    is_observation: bool = False
     dataset_id: str = "SWOT_L2_LR_SSH"
     dataset_name: str = "SWOT KaRIn Ocean Sea Surface Height (Option A)"
     region_name: str
@@ -133,6 +137,8 @@ class LandTimeSeriesPoint(BaseModel):
 
 
 class LandTimeSeriesResponse(BaseModel):
+    data_status: str = "demonstration_model"
+    is_observation: bool = False
     dataset_id: str = "MOD13C2"
     dataset_name: str = "MODIS Monthly Global Vegetation Indices"
     region_name: str
@@ -154,6 +160,8 @@ class CrossSystemCorrelationPoint(BaseModel):
 
 
 class CrossSystemResponse(BaseModel):
+    data_status: str = "demonstration_model"
+    is_observation: bool = False
     phenomenon_name: str
     description: str
     primary_ocean_metric: str
@@ -217,3 +225,47 @@ class DatasetCatalogItem(BaseModel):
     scientific_limitations: List[str]
     cmr_concept_id: str
     documentation_url: str
+
+
+# --- Historical Period Comparison Schemas ---
+
+class PeriodObservation(BaseModel):
+    date: str
+    value: float
+    unit: str
+    normal_or_baseline: Optional[float] = None
+    anomaly: Optional[float] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class RegionalDiffPoint(BaseModel):
+    name: str
+    latitude: float
+    longitude: float
+    value_a: float
+    value_b: float
+    delta: float
+    unit: str
+    interpretation: Optional[str] = None
+
+
+class PeriodComparisonResponse(BaseModel):
+    data_status: str = "demonstration_model"
+    is_observation: bool = False
+    module: str
+    period_a: str
+    period_b: str
+    location_name: str
+    latitude: float
+    longitude: float
+    unit: str
+    metric_label: str
+    observation_a: PeriodObservation
+    observation_b: PeriodObservation
+    absolute_difference: float
+    percentage_difference: Optional[float] = None
+    percentage_meaningful: bool = True
+    percentage_note: Optional[str] = None
+    interpretation: str
+    regional_differences: List[RegionalDiffPoint] = Field(default_factory=list)
+

@@ -26,8 +26,9 @@ export const AboutMethodologyView: React.FC = () => {
           <ShieldCheck className="h-5 w-5 text-cyan-400" />
           <h3 className="text-sm font-bold text-white">Scientific Accuracy First</h3>
           <p className="text-xs text-slate-400 leading-relaxed">
-            TerraLens never fabricates measurements or substitutes synthetic values as real observations. Every data
-            point maps directly to NASA Earthdata calibration standards.
+            This build uses modelled demonstration values for its scientific layers and time series. The NASA products
+            described below are the intended sources; their citations do not mean that observations have been ingested.
+            Do not use the demonstration values as scientific measurements.
           </p>
         </div>
 
@@ -62,7 +63,7 @@ export const AboutMethodologyView: React.FC = () => {
           <div className="border-l-2 border-cyan-500 pl-4 space-y-1">
             <h4 className="text-sm font-semibold text-white">1. Ocean: SWOT KaRIn Low Rate Ocean Products (Option A)</h4>
             <p className="leading-relaxed text-slate-400">
-              Ingested from NASA PO.DAAC / CNES at 2 km spatial resolution. Raw radar interferometric swaths undergo
+              Intended source: NASA PO.DAAC / CNES, at the product's stated 2 km grid resolution. A future ingestion pipeline would need to account for
               wet-tropospheric radiometer delays, sea state bias (SSB) adjustments, and GOT4.10c ocean tidal removal to
               isolate absolute dynamic topography and meso-scale vortex anomalies.
             </p>
@@ -71,18 +72,18 @@ export const AboutMethodologyView: React.FC = () => {
           <div className="border-l-2 border-blue-500 pl-4 space-y-1">
             <h4 className="text-sm font-semibold text-white">2. Atmosphere: GPM IMERG Final Monthly (GPM_3IMERGM v07)</h4>
             <p className="leading-relaxed text-slate-400">
-              Ingested from NASA GES DISC / JAXA at 0.1° × 0.1° spatial resolution. Multi-satellite passive microwave
-              retrievals and dual-frequency radar scans are calibrated against Global Precipitation Climatology Centre
-              (GPCC) rain gauges. Monthly accumulation is derived via P_accum = P_rate × 24 × D_month.
+              Intended source: NASA GES DISC / JAXA GPM IMERG Final Monthly (0.1° × 0.1°). The demonstration currently
+              uses a seasonal model; it does not ingest gauge calibrated retrievals. Monthly depth conversion follows
+              P_accum = P_rate × 24 × D_month when applied to a valid monthly mean rate.
             </p>
           </div>
 
           <div className="border-l-2 border-emerald-500 pl-4 space-y-1">
             <h4 className="text-sm font-semibold text-white">3. Land: MODIS Monthly Global Vegetation Indices (MOD13C2 v061)</h4>
             <p className="leading-relaxed text-slate-400">
-              Ingested from NASA LP DAAC / USGS at 0.05° Climate Modeling Grid resolution. Cloud-masked and
-              aerosol-screened 16-day composites are harmonized to calendar month NDVI and EVI. Vegetation Condition
-              Index (VCI %) isolates meteorological drought stress from baseline soil color variations.
+              Intended source: NASA LP DAAC / USGS MOD13C2 v061 (0.05° Climate Modeling Grid). The current demonstration
+              values are generated examples; QA filtered composites, monthly NDVI/EVI and a defensible historical VCI
+              baseline are not yet ingested or calculated from satellite pixels.
             </p>
           </div>
         </div>

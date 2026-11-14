@@ -187,6 +187,9 @@ class OceanService:
         return GeoJSONFeatureCollection(
             features=features,
             metadata={
+                "data_status": "demonstration_model",
+                "is_observation": False,
+                "data_notice": "Generated example values; no NASA SWOT granules are loaded.",
                 "dataset_id": "SWOT_L2_LR_SSH",
                 "mission": "Surface Water and Ocean Topography (SWOT)",
                 "instrument": "Ka-band Radar Interferometer (KaRIn)",
@@ -222,7 +225,7 @@ class OceanService:
         ssha_values = []
 
         for year in range(start_year, end_year + 1):
-            max_month = 12 if year < 2026 else 11
+            max_month = 12
             for month in range(1, max_month + 1):
                 seasonal = amp * math.sin(2.0 * math.pi * (month / 12.0))
                 # Interannual ocean oscillation (e.g. planetary Rossby wave propagation)

@@ -22,6 +22,8 @@ export interface GISPlace {
   parentState?: string;
   detail?: string;
   population?: number;
+  bbox?: [number, number, number, number]; // [minLon, minLat, maxLon, maxLat]
+  aliases?: string[];
 }
 
 /**
@@ -14084,46 +14086,71 @@ export const GIS_PLACES: GISPlace[] = [
 ];
 
 /**
- * Lookup a GIS place by its unique ID or ISO code
+ * Lookup a GIS place by its unique ID, name, formal name, or ISO code
  */
 export function findPlaceById(id: string): GISPlace | undefined {
+  if (!id) return undefined;
   const lower = id.toLowerCase();
   return GIS_PLACES.find(
     (p) =>
       p.id.toLowerCase() === lower ||
+      p.name.toLowerCase() === lower ||
       (p.iso_a3 && p.iso_a3.toLowerCase() === lower) ||
-      (p.iso_a2 && p.iso_a2.toLowerCase() === lower)
+      (p.iso_a2 && p.iso_a2.toLowerCase() === lower) ||
+      (p.formal_name && p.formal_name.toLowerCase() === lower)
   );
 }
 
 /**
- * Fast prefix & fuzzy search for countries, places, and geographical features
+ * Fast multi-field ranking search for countries, places, and geographical features
  */
 export function searchGISPlaces(query: string, limit = 15): GISPlace[] {
   if (!query || !query.trim()) return [];
   const q = query.trim().toLowerCase();
+  const tokens = q.split(/\s+/).filter(Boolean);
 
-  const exactMatches: GISPlace[] = [];
-  const startsWithMatches: GISPlace[] = [];
-  const containsMatches: GISPlace[] = [];
+  const scored: Array<{ place: GISPlace; score: number }> = [];
 
   for (const place of GIS_PLACES) {
     const nameLower = place.name.toLowerCase();
     const formalLower = place.formal_name?.toLowerCase() || '';
     const iso2Lower = place.iso_a2?.toLowerCase() || '';
     const iso3Lower = place.iso_a3?.toLowerCase() || '';
+    const detailLower = place.detail?.toLowerCase() || '';
+    const countryLower = place.parentCountry?.toLowerCase() || '';
+    const stateLower = place.parentState?.toLowerCase() || '';
 
-    if (nameLower === q || iso2Lower === q || iso3Lower === q) {
-      exactMatches.push(place);
-    } else if (nameLower.startsWith(q) || iso2Lower.startsWith(q) || iso3Lower.startsWith(q)) {
-      startsWithMatches.push(place);
+    let score = 0;
+
+    if (nameLower === q || iso2Lower === q || iso3Lower === q || formalLower === q) {
+      score += 2000;
+    } else if (nameLower.startsWith(q) || iso3Lower.startsWith(q)) {
+      score += 1000;
     } else if (nameLower.includes(q) || formalLower.includes(q)) {
-      containsMatches.push(place);
+      score += 500;
+    } else if (countryLower.includes(q) || stateLower.includes(q) || detailLower.includes(q)) {
+      score += 250;
+    } else if (
+      tokens.length > 1 &&
+      tokens.every(
+        (tok) =>
+          nameLower.includes(tok) ||
+          countryLower.includes(tok) ||
+          stateLower.includes(tok) ||
+          detailLower.includes(tok)
+      )
+    ) {
+      score += 400;
+    } else {
+      continue;
     }
+
+    score += place.priority * 2;
+    scored.push({ place, score });
   }
 
-  const results = [...exactMatches, ...startsWithMatches, ...containsMatches];
-  return results.slice(0, limit);
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map((s) => s.place);
 }
 
 /**

@@ -9,7 +9,13 @@ import { Calendar, Navigation, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export interface MapViewProps {
   module: 'ocean' | 'atmosphere' | 'land' | 'overview';
+  activeModules?: ('ocean' | 'atmosphere' | 'land')[];
   data: GeoJSONFeatureCollection | null;
+  multiData?: {
+    ocean?: GeoJSONFeatureCollection | null;
+    atmosphere?: GeoJSONFeatureCollection | null;
+    land?: GeoJSONFeatureCollection | null;
+  };
   loading: boolean;
   selectedDate: string;
   setSelectedDate: (date: string) => void;
@@ -113,7 +119,9 @@ const GIS_PLACES_GEOJSON = {
 
 export const MapView: React.FC<MapViewProps> = ({
   module,
+  activeModules = [],
   data,
+  multiData,
   loading,
   selectedDate,
   setSelectedDate,
@@ -180,6 +188,30 @@ export const MapView: React.FC<MapViewProps> = ({
 
       m.on('load', () => {
         setMapLoaded(true);
+        // Suppress Carto's faint built-in place layers to prevent collision suppression of authoritative labels
+        // and eliminate unwanted permanent dot/pointer artifacts
+        const cartoLayersToHide = [
+          'place_country_1',
+          'place_country_2',
+          'place_continent',
+          'place_state',
+          'place_city_r6',
+          'place_city_r5',
+          'place_city_dot_r7',
+          'place_city_dot_r4',
+          'place_city_dot_r2',
+          'place_city_dot_z7',
+          'place_capital_dot_z7',
+          'place_town',
+          'place_villages',
+          'place_suburbs',
+          'place_hamlet',
+        ];
+        cartoLayersToHide.forEach((layerId) => {
+          if (m.getLayer(layerId)) {
+            m.setLayoutProperty(layerId, 'visibility', 'none');
+          }
+        });
       });
 
       m.on('error', (e) => {
@@ -194,7 +226,7 @@ export const MapView: React.FC<MapViewProps> = ({
         }
       });
 
-      m.on('moveend', () => {
+      const reportCameraState = () => {
         if (!map.current || isInternalFlyRef.current) return;
         const c = map.current.getCenter();
         const z = map.current.getZoom();
@@ -204,16 +236,20 @@ export const MapView: React.FC<MapViewProps> = ({
         if (onZoomChangeRef.current) {
           const equivDist = mapZoomToDistance(z);
           const equivLevel: ZoomLevel =
-            equivDist >= 4.75
+            z < 2.3
               ? 'global'
-              : equivDist >= 3.8
+              : z < 3.8
               ? 'continental'
-              : equivDist >= 2.85
+              : z < 5.5
               ? 'country'
               : 'regional';
           onZoomChangeRef.current(equivLevel, equivDist);
         }
-      });
+      };
+
+      m.on('zoom', reportCameraState);
+      m.on('move', reportCameraState);
+      m.on('moveend', reportCameraState);
 
       map.current = m;
     } catch (e) {
@@ -304,28 +340,68 @@ export const MapView: React.FC<MapViewProps> = ({
     return () => clearTimeout(timer);
   }, [selectedFeature, mapLoaded]);
 
-  // Synchronize map center when selectedPlace changes
+  // Synchronize map center and bounds when selectedPlace changes
   useEffect(() => {
     if (!map.current || !mapLoaded || !selectedPlace) return;
     isInternalFlyRef.current = true;
-    const targetZoom =
-      selectedPlace.level === 4
-        ? 6.5
-        : selectedPlace.level === 3
-        ? 5.0
-        : selectedPlace.level === 2
-        ? 3.8
-        : 2.2;
-    map.current.flyTo({
-      center: [selectedPlace.lon, selectedPlace.lat],
-      zoom: targetZoom,
-      essential: true,
-    });
+
+    // Google Maps-style fitBounds if bounding box is available
+    if (selectedPlace.bbox && selectedPlace.bbox.length === 4) {
+      const [minLon, minLat, maxLon, maxLat] = selectedPlace.bbox;
+      const isDocked =
+        sidePanelOpen && typeof window !== 'undefined' && window.innerWidth >= 1024;
+      const padding = {
+        top: 90,
+        bottom: trendsOpen ? (trendsExpanded ? 460 : 320) : 80,
+        left: 50,
+        right: isDocked ? 430 : 50,
+      };
+
+      const maxZoom =
+        selectedPlace.level === 1
+          ? 4.0
+          : selectedPlace.level === 2
+          ? 6.5
+          : selectedPlace.level === 3
+          ? 8.5
+          : 12.0;
+
+      map.current.fitBounds(
+        [
+          [minLon, minLat],
+          [maxLon, maxLat],
+        ],
+        {
+          padding,
+          maxZoom,
+          duration: 1200,
+          essential: true,
+        }
+      );
+    } else {
+      // Point-based flyTo with LOD-scaled zoom
+      const targetZoom =
+        selectedPlace.level === 4
+          ? 7.2
+          : selectedPlace.level === 3
+          ? 5.5
+          : selectedPlace.level === 2
+          ? 3.8
+          : 2.2;
+
+      map.current.flyTo({
+        center: [selectedPlace.lon, selectedPlace.lat],
+        zoom: targetZoom,
+        duration: 1200,
+        essential: true,
+      });
+    }
+
     const timer = setTimeout(() => {
       isInternalFlyRef.current = false;
-    }, 700);
+    }, 1300);
     return () => clearTimeout(timer);
-  }, [selectedPlace, mapLoaded]);
+  }, [selectedPlace, mapLoaded, sidePanelOpen, trendsOpen, trendsExpanded]);
 
   // Attach Authoritative Global Natural Earth Country Boundaries & Interactivity
   useEffect(() => {
@@ -498,6 +574,14 @@ export const MapView: React.FC<MapViewProps> = ({
       });
     }
 
+    // Clean up any legacy point/pointer layers to ensure no unwanted permanent dots/indicators appear
+    if (m.getLayer('terralens-labels-cities-major-points')) {
+      m.removeLayer('terralens-labels-cities-major-points');
+    }
+    if (m.getLayer('terralens-labels-towns-points')) {
+      m.removeLayer('terralens-labels-towns-points');
+    }
+
     // 1. Continents & Major Oceans (Level 1: zoom < 3.8)
     if (!m.getLayer('terralens-labels-continents')) {
       m.addLayer({
@@ -508,152 +592,122 @@ export const MapView: React.FC<MapViewProps> = ({
         maxzoom: 3.8,
         layout: {
           'text-field': ['get', 'name'],
-          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
+          'text-font': ['Open Sans Bold', 'Noto Sans Regular'],
           'text-size': ['interpolate', ['linear'], ['zoom'], 1, 11, 3, 15],
           'text-transform': 'uppercase',
-          'text-letter-spacing': 0.15,
+          'text-letter-spacing': 0.16,
+          'text-variable-anchor': ['center', 'top', 'bottom'],
+          'text-padding': 4,
           'text-allow-overlap': false,
           'text-ignore-placement': false,
         },
         paint: {
-          'text-color': ['case', ['==', ['get', 'category'], 'ocean'], '#7dd3fc', '#94a3b8'],
+          'text-color': ['case', ['==', ['get', 'category'], 'ocean'], '#38bdf8', '#cbd5e1'],
           'text-halo-color': 'rgba(5, 7, 11, 0.95)',
-          'text-halo-width': 2,
-          'text-opacity': ['interpolate', ['linear'], ['zoom'], 1, 1.0, 3.2, 0.8, 3.8, 0.0],
+          'text-halo-width': 2.2,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 1, 1.0, 3.2, 0.85, 3.8, 0.0],
         },
       });
     }
 
-    // 2. Sovereign Countries & Major Seas (Level 2: zoom 2.2 to 8.0)
+    // 2. Sovereign Countries & Major Seas (Level 2: zoom 1.8 to 8.5)
     if (!m.getLayer('terralens-labels-countries')) {
       m.addLayer({
         id: 'terralens-labels-countries',
         type: 'symbol',
         source: sourceId,
         filter: ['==', ['get', 'level'], 2],
-        minzoom: 2.2,
-        maxzoom: 8.0,
+        minzoom: 1.8,
+        maxzoom: 8.5,
         layout: {
           'text-field': ['get', 'name'],
-          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 2.5, 10.5, 4.5, 13, 7, 15.5],
+          'text-font': ['Open Sans Bold', 'Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 2, 10.5, 3.5, 12, 5, 14, 7, 16],
           'symbol-sort-key': ['-', 1000, ['get', 'priority']],
+          'text-variable-anchor': ['center', 'top', 'bottom', 'left', 'right'],
+          'text-padding': 3,
           'text-allow-overlap': false,
           'text-ignore-placement': false,
         },
         paint: {
           'text-color': '#ffffff',
           'text-halo-color': 'rgba(5, 7, 11, 0.95)',
-          'text-halo-width': 2,
-          'text-opacity': ['interpolate', ['linear'], ['zoom'], 2.2, 0.0, 3.0, 1.0, 6.5, 1.0, 8.0, 0.4],
+          'text-halo-width': 2.2,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 1.8, 0.0, 2.4, 1.0, 6.5, 1.0, 8.5, 0.4],
         },
       });
     }
 
-    // 3. States & Provinces (Level 3: zoom 4.2 to 10.0)
+    // 3. States & Provinces (Level 3: zoom 3.8 to 10.0)
     if (!m.getLayer('terralens-labels-states')) {
       m.addLayer({
         id: 'terralens-labels-states',
         type: 'symbol',
         source: sourceId,
         filter: ['==', ['get', 'level'], 3],
-        minzoom: 4.2,
+        minzoom: 3.8,
         maxzoom: 10.0,
         layout: {
           'text-field': ['get', 'name'],
-          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 4.5, 10.5, 7, 13.5],
+          'text-font': ['Open Sans Regular', 'Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 4, 10, 6, 12, 8, 14],
           'symbol-sort-key': ['-', 1000, ['get', 'priority']],
+          'text-variable-anchor': ['center', 'top', 'bottom', 'left', 'right'],
+          'text-padding': 3,
           'text-allow-overlap': false,
           'text-ignore-placement': false,
         },
         paint: {
           'text-color': '#fbbf24',
           'text-halo-color': 'rgba(5, 7, 11, 0.95)',
-          'text-halo-width': 2,
-          'text-opacity': ['interpolate', ['linear'], ['zoom'], 4.2, 0.0, 5.0, 1.0],
+          'text-halo-width': 2.0,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 3.8, 0.0, 4.4, 1.0],
         },
       });
     }
 
-    // 4. Major Cities Location Anchor Dots (Capitals & Metropolises: zoom >= 4.8)
-    if (!m.getLayer('terralens-labels-cities-major-points')) {
-      m.addLayer({
-        id: 'terralens-labels-cities-major-points',
-        type: 'circle',
-        source: sourceId,
-        filter: ['all', ['==', ['get', 'level'], 4], ['>=', ['get', 'priority'], 70]],
-        minzoom: 4.8,
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 4.8, 2.5, 8, 3.5],
-          'circle-color': '#38bdf8',
-          'circle-stroke-width': 1.5,
-          'circle-stroke-color': '#05070b',
-          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 4.8, 0.0, 5.5, 1.0],
-        },
-      });
-    }
-
-    // 5. Major Cities Text Labels (Capitals & Metropolises: zoom >= 4.8)
+    // 4. Major Cities (Capitals & Metropolises: zoom >= 4.4)
     if (!m.getLayer('terralens-labels-cities-major')) {
       m.addLayer({
         id: 'terralens-labels-cities-major',
         type: 'symbol',
         source: sourceId,
         filter: ['all', ['==', ['get', 'level'], 4], ['>=', ['get', 'priority'], 70]],
-        minzoom: 4.8,
+        minzoom: 4.4,
         layout: {
           'text-field': ['get', 'name'],
-          'text-font': ['Open Sans Bold', 'Arial Unicode MS Bold'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 4.8, 10.5, 8, 13, 11, 15],
-          'text-offset': [0.6, 0],
-          'text-anchor': 'left',
+          'text-font': ['Open Sans Bold', 'Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 4.4, 10.5, 7, 12.5, 10, 15],
           'symbol-sort-key': ['-', 1000, ['get', 'priority']],
+          'text-variable-anchor': ['center', 'top', 'bottom', 'left', 'right'],
+          'text-padding': 3,
           'text-allow-overlap': false,
           'text-ignore-placement': false,
         },
         paint: {
           'text-color': '#f8fafc',
           'text-halo-color': 'rgba(5, 7, 11, 0.95)',
-          'text-halo-width': 2,
-          'text-opacity': ['interpolate', ['linear'], ['zoom'], 4.8, 0.0, 5.5, 1.0],
+          'text-halo-width': 2.2,
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 4.4, 0.0, 5.0, 1.0],
         },
       });
     }
 
-    // 6. Towns & Local Populated Places Anchor Dots (Regional density: zoom >= 7.0)
-    if (!m.getLayer('terralens-labels-towns-points')) {
-      m.addLayer({
-        id: 'terralens-labels-towns-points',
-        type: 'circle',
-        source: sourceId,
-        filter: ['all', ['==', ['get', 'level'], 4], ['<', ['get', 'priority'], 70]],
-        minzoom: 7.0,
-        paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 7.0, 2.0, 10, 3.0],
-          'circle-color': '#7dd3fc',
-          'circle-stroke-width': 1.2,
-          'circle-stroke-color': '#05070b',
-          'circle-opacity': ['interpolate', ['linear'], ['zoom'], 7.0, 0.0, 7.8, 0.9],
-        },
-      });
-    }
-
-    // 7. Towns & Local Populated Places Text Labels (Regional density: zoom >= 7.0)
+    // 5. Towns & Local Populated Places (Regional density: zoom >= 6.5)
     if (!m.getLayer('terralens-labels-towns')) {
       m.addLayer({
         id: 'terralens-labels-towns',
         type: 'symbol',
         source: sourceId,
         filter: ['all', ['==', ['get', 'level'], 4], ['<', ['get', 'priority'], 70]],
-        minzoom: 7.0,
+        minzoom: 6.5,
         layout: {
           'text-field': ['get', 'name'],
-          'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
-          'text-size': ['interpolate', ['linear'], ['zoom'], 7.0, 9.5, 9, 12, 11, 13.5],
-          'text-offset': [0.55, 0],
-          'text-anchor': 'left',
+          'text-font': ['Open Sans Regular', 'Noto Sans Regular'],
+          'text-size': ['interpolate', ['linear'], ['zoom'], 6.5, 9.5, 8.5, 11.5, 11, 13.5],
           'symbol-sort-key': ['-', 1000, ['get', 'priority']],
+          'text-variable-anchor': ['center', 'top', 'bottom', 'left', 'right'],
+          'text-padding': 2,
           'text-allow-overlap': false,
           'text-ignore-placement': false,
         },
@@ -661,7 +715,7 @@ export const MapView: React.FC<MapViewProps> = ({
           'text-color': '#e2e8f0',
           'text-halo-color': 'rgba(5, 7, 11, 0.95)',
           'text-halo-width': 1.8,
-          'text-opacity': ['interpolate', ['linear'], ['zoom'], 7.0, 0.0, 7.8, 0.95],
+          'text-opacity': ['interpolate', ['linear'], ['zoom'], 6.5, 0.0, 7.2, 0.95],
         },
       });
     }
@@ -671,9 +725,7 @@ export const MapView: React.FC<MapViewProps> = ({
       'terralens-labels-countries',
       'terralens-labels-states',
       'terralens-labels-cities-major',
-      'terralens-labels-cities-major-points',
       'terralens-labels-towns',
-      'terralens-labels-towns-points',
     ];
 
     const onLabelClick = (e: maplibregl.MapMouseEvent) => {
@@ -709,6 +761,39 @@ export const MapView: React.FC<MapViewProps> = ({
     };
   }, [mapLoaded, onSelectPlace]);
 
+function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricType: string): string {
+  if (moduleName === 'ocean') {
+    const ssha = feature.properties.ssha_karin_m ?? 0;
+    if (ssha <= -0.15) return '#2563eb';
+    if (ssha < 0) return '#38bdf8';
+    if (ssha <= 0.15) return '#f59e0b';
+    return '#ef4444';
+  }
+  if (moduleName === 'atmosphere') {
+    if (metricType === 'rate') {
+      const rate = feature.properties.precipitation_rate_mm_hr ?? 0;
+      if (rate < 0.1) return '#38bdf8';
+      if (rate < 0.3) return '#0284c7';
+      if (rate < 0.5) return '#6366f1';
+      return '#ec4899';
+    } else {
+      const acc = feature.properties.precipitation_accumulated_mm ?? 0;
+      if (acc < 80) return '#38bdf8';
+      if (acc < 200) return '#0284c7';
+      if (acc < 350) return '#6366f1';
+      return '#ec4899';
+    }
+  }
+  if (moduleName === 'land') {
+    const ndvi = feature.properties.ndvi ?? 0.5;
+    if (ndvi < 0.2) return '#d97706';
+    if (ndvi < 0.45) return '#ca8a04';
+    if (ndvi < 0.7) return '#84cc16';
+    return '#10b981';
+  }
+  return '#38bdf8';
+}
+
   // Update Data Layers & Highlight Ring
   useEffect(() => {
     if (!map.current || !mapLoaded) return;
@@ -718,7 +803,38 @@ export const MapView: React.FC<MapViewProps> = ({
     const highlightSourceId = 'terralens-selected-highlight';
     const highlightLayerId = 'selected-point-highlight';
 
-    if (!data || !data.features || data.features.length === 0) {
+    // Prepare unified multi-system features
+    const allFeatures: GeoJSONFeature[] = [];
+    if (multiData && activeModules.length > 0) {
+      activeModules.forEach((m) => {
+        const col = multiData[m];
+        if (col && col.features) {
+          col.features.forEach((feat) => {
+            allFeatures.push({
+              ...feat,
+              properties: {
+                ...feat.properties,
+                _system: m,
+                _color: getFeatureHexColor(feat, m, activeMetric),
+              },
+            });
+          });
+        }
+      });
+    } else if (data && data.features) {
+      data.features.forEach((feat) => {
+        allFeatures.push({
+          ...feat,
+          properties: {
+            ...feat.properties,
+            _system: module,
+            _color: getFeatureHexColor(feat, module, activeMetric),
+          },
+        });
+      });
+    }
+
+    if (allFeatures.length === 0) {
       if (map.current.getSource(sourceId)) {
         (map.current.getSource(sourceId) as maplibregl.GeoJSONSource).setData({
           type: 'FeatureCollection',
@@ -728,55 +844,16 @@ export const MapView: React.FC<MapViewProps> = ({
       return;
     }
 
-    // Dynamic color expression based on active module & metric
-    let circleColor: any = '#38bdf8';
-    let circleRadius: any = 7;
+    const featureCollectionData = {
+      type: 'FeatureCollection',
+      features: allFeatures,
+    };
 
-    if (module === 'atmosphere') {
-      if (activeMetric === 'rate') {
-        circleColor = [
-          'interpolate', ['linear'], ['get', 'precipitation_rate_mm_hr'],
-          0.02, '#38bdf8',
-          0.10, '#0284c7',
-          0.25, '#2563eb',
-          0.45, '#7c3aed',
-          0.70, '#db2777',
-        ];
-      } else {
-        circleColor = [
-          'interpolate', ['linear'], ['get', 'precipitation_accumulated_mm'],
-          20, '#38bdf8',
-          80, '#0284c7',
-          180, '#2563eb',
-          300, '#7c3aed',
-          500, '#db2777',
-        ];
-      }
-      circleRadius = 7.5;
-    } else if (module === 'ocean') {
-      circleColor = [
-        'interpolate', ['linear'], ['get', 'ssha_karin_m'],
-        -0.40, '#1d4ed8', // deep cyclonic cold
-        -0.10, '#38bdf8',
-        0.00, '#e2e8f0',  // neutral
-        0.15, '#f59e0b',
-        0.35, '#ef4444',  // anticyclonic warm
-      ];
-      circleRadius = 8;
-    } else if (module === 'land') {
-      circleColor = [
-        'interpolate', ['linear'], ['get', 'ndvi'],
-        0.05, '#d97706', // barren
-        0.20, '#eab308', // sparse
-        0.45, '#84cc16', // moderate
-        0.70, '#10b981', // dense
-        0.88, '#065f46', // lush canopy
-      ];
-      circleRadius = 8;
-    }
+    const circleColor: any = ['coalesce', ['get', '_color'], '#38bdf8'];
+    const circleRadius = 7.5;
 
     if (map.current.getSource(sourceId)) {
-      (map.current.getSource(sourceId) as maplibregl.GeoJSONSource).setData(data as any);
+      (map.current.getSource(sourceId) as maplibregl.GeoJSONSource).setData(featureCollectionData as any);
       if (map.current.getLayer(layerId)) {
         map.current.setPaintProperty(layerId, 'circle-color', circleColor);
         map.current.setPaintProperty(layerId, 'circle-radius', circleRadius);
@@ -785,7 +862,7 @@ export const MapView: React.FC<MapViewProps> = ({
       // Add GeoJSON Source and Layer
       map.current.addSource(sourceId, {
         type: 'geojson',
-        data: data as any,
+        data: featureCollectionData as any,
       });
 
       map.current.addLayer({
@@ -802,18 +879,28 @@ export const MapView: React.FC<MapViewProps> = ({
       });
     }
 
-    // Selected Feature Highlight Ring with setData updates
+    // Selected Feature or Selected Place Highlight Ring with setData updates
+    const highlightFeature = selectedFeature
+      ? (selectedFeature as any)
+      : selectedPlace
+      ? {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [selectedPlace.lon, selectedPlace.lat] },
+          properties: { name: selectedPlace.name, category: selectedPlace.category },
+        }
+      : null;
+
     if (map.current.getSource(highlightSourceId)) {
       (map.current.getSource(highlightSourceId) as maplibregl.GeoJSONSource).setData({
         type: 'FeatureCollection',
-        features: selectedFeature ? [selectedFeature as any] : [],
+        features: highlightFeature ? [highlightFeature] : [],
       });
-    } else if (selectedFeature) {
+    } else if (highlightFeature) {
       map.current.addSource(highlightSourceId, {
         type: 'geojson',
         data: {
           type: 'FeatureCollection',
-          features: [selectedFeature as any],
+          features: [highlightFeature],
         },
       });
 
@@ -865,16 +952,17 @@ export const MapView: React.FC<MapViewProps> = ({
         const name = props.location_name || props.region_name || 'Observation Point';
 
         let reading = '';
-        if (module === 'ocean') {
+        const featureSystem = props._system || module;
+        if (featureSystem === 'ocean') {
           const ssha = Number(props.ssha_karin_m);
           reading = `SSHA: ${ssha > 0 ? '+' : ''}${ssha?.toFixed(2)} m (±2.4cm)`;
-        } else if (module === 'atmosphere') {
+        } else if (featureSystem === 'atmosphere') {
           if (activeMetric === 'rate') {
             reading = `Rain Rate: ${Number(props.precipitation_rate_mm_hr)?.toFixed(2)} mm/hr`;
           } else {
             reading = `Accumulated: ${Number(props.precipitation_accumulated_mm)?.toFixed(0)} mm`;
           }
-        } else if (module === 'land') {
+        } else if (featureSystem === 'land') {
           reading = `NDVI: ${Number(props.ndvi)?.toFixed(2)} • ${props.drought_category || 'Vegetation'}`;
         }
 
@@ -907,7 +995,7 @@ export const MapView: React.FC<MapViewProps> = ({
       }
       popup.remove();
     };
-  }, [mapLoaded, data, module, activeMetric, selectedFeature]);
+  }, [mapLoaded, data, multiData, module, activeModules, activeMetric, selectedFeature, selectedPlace]);
 
   const flyToPreset = (lat: number, lon: number, zoom: number) => {
     if (!map.current) return;
@@ -953,7 +1041,7 @@ export const MapView: React.FC<MapViewProps> = ({
       )}
 
       {/* Bottom Floating Dynamic Scale Legend */}
-      <div className="absolute bottom-4 left-4 z-10 flex items-center space-x-2.5 pointer-events-auto">
+      <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 z-10 flex items-center space-x-2 sm:space-x-2.5 pointer-events-auto max-w-[calc(100vw-24px)] overflow-x-auto no-scrollbar">
         <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-[#090d16]/90 border border-slate-800/80 text-[11px] font-mono backdrop-blur-md shadow-2xl text-slate-300">
           <span className="text-[9px] uppercase text-slate-500 font-semibold tracking-wider">
             {module} Scale:
@@ -1064,22 +1152,24 @@ export const MapView: React.FC<MapViewProps> = ({
           )}
         </div>
 
-        {/* Date Selector Pill */}
-        <div className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-[#090d16]/90 border border-slate-800/80 backdrop-blur-md shadow-2xl text-[11px] font-mono text-slate-300">
-          <Calendar className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
-          <select
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="bg-transparent text-cyan-300 font-semibold focus:outline-hidden cursor-pointer"
-            title="Observation Date"
-          >
-            {dateOptions.map((d) => (
-              <option key={d} value={d} className="bg-slate-900 text-slate-200">
-                {d}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Date Selector Pill (visible only in overview mode when global timeline is not active) */}
+        {module === 'overview' && activeModules.length === 0 && (
+          <div className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-[#090d16]/90 border border-slate-800/80 backdrop-blur-md shadow-2xl text-[11px] font-mono text-slate-300">
+            <Calendar className="h-3.5 w-3.5 text-cyan-400 shrink-0" />
+            <select
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-transparent text-cyan-300 font-semibold focus:outline-hidden cursor-pointer"
+              title="Observation Date"
+            >
+              {dateOptions.map((d) => (
+                <option key={d} value={d} className="bg-slate-900 text-slate-200">
+                  {d}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Quick Region Presets Pill */}
         <div className="hidden lg:flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-[#090d16]/90 border border-slate-800/80 backdrop-blur-md text-[10px] font-mono">

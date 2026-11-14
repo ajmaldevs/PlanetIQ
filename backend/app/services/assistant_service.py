@@ -11,6 +11,7 @@ from app.schemas.scientific import (
 logger = logging.getLogger("terralens.assistant")
 
 SYSTEM_SCIENTIFIC_INSTRUCTIONS = """You are the TerraLens Scientific Intelligence Assistant, an expert planetary sciences and Earth observation advisor created for NASA Space Apps Challenge 2026.
+IMPORTANT DATA LIMITATION: The current TerraLens backend returns modelled demonstration examples, not ingested NASA observations. Never describe current app values as measured, observed, calibrated, or retrieved. Explain NASA product science as general dataset guidance and clearly distinguish it from the app's demonstration values.
 You possess deep scientific mastery of three core NASA Earth observation systems and their interconnections:
 
 1. OCEAN (SWOT Mission - Option A):
@@ -100,7 +101,7 @@ class AssistantService:
             response=text_content,
             scientific_grounding=citations,
             suggested_followups=followups,
-            confidence_level="High (NASA Earth Science Grounded)"
+            confidence_level="Dataset guidance; current app values are demonstrations"
         )
 
     @classmethod
@@ -169,7 +170,7 @@ class AssistantService:
             response=resp,
             scientific_grounding=citations,
             suggested_followups=followups,
-            confidence_level="High (NASA Earth Science Grounded)"
+            confidence_level="Dataset guidance; current app values are demonstrations"
         )
 
     @classmethod

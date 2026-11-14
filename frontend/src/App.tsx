@@ -5,12 +5,14 @@ import { MapView } from './components/MapView';
 import { ModuleSelector } from './components/ModuleSelector';
 import { AdaptiveSidePanel, TimeseriesDataPoint } from './components/AdaptiveSidePanel';
 import { TrendDrawer, TrendDrawerStatus } from './components/TrendDrawer';
+import { SharedTimeline } from './components/SharedTimeline';
 import { AssistantView } from './components/AssistantView';
 import { AboutView } from './components/AboutView';
-import { SearchBar } from './components/SearchBar';
+import { SearchBar, SearchResult } from './components/SearchBar';
 import { DatasetInfoModal } from './components/DatasetInfoModal';
+import { DataNotice } from './components/DataNotice';
 import { resolveGeographicContext } from './services/geography';
-import { GISPlace } from './services/gisDatabase';
+import { GISPlace, searchGISPlaces } from './services/gisDatabase';
 import {
   fetchSystemHealth,
   fetchAtmosphereGrid,
@@ -27,6 +29,7 @@ import {
   OceanTimeSeriesResponse,
   LandTimeSeriesResponse,
   CrossSystemResponse,
+  GeocodingResult,
 } from './services/api';
 import {
   ArrowLeft,
@@ -37,12 +40,15 @@ import {
   CloudRain,
   Trees,
   TrendingUp,
+  Layers,
 } from 'lucide-react';
 
 export const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<MainView>('explore');
   const [explorationMode, setExplorationMode] = useState<'3d' | '2d'>('3d');
   const [activeModule, setActiveModule] = useState<EarthModule>(null);
+  const [activeModules, setActiveModules] = useState<('ocean' | 'atmosphere' | 'land')[]>([]);
+  const [trendInitialTab, setTrendInitialTab] = useState<'trends' | 'comparison' | 'teleconnections'>('trends');
   const [health, setHealth] = useState<SystemHealth | null>(null);
 
   // Exploration states
@@ -149,20 +155,47 @@ export const App: React.FC = () => {
   // Set default metric type on module change while preserving spatial selections
   const handleSelectModule = (mod: EarthModule) => {
     setActiveModule(mod);
+    if (mod) {
+      setActiveModules((prev) => (prev.includes(mod) ? prev : [mod, ...prev]));
+    } else {
+      setActiveModules([]);
+    }
     setSidePanelOpen(true);
     if (mod === 'atmosphere') setMetricType('accumulated');
     if (mod === 'ocean') setMetricType('ssha');
     if (mod === 'land') setMetricType('ndvi');
   };
 
+  const handleToggleModule = (mod: 'ocean' | 'atmosphere' | 'land') => {
+    setActiveModules((prev) => {
+      let next: ('ocean' | 'atmosphere' | 'land')[];
+      if (prev.includes(mod)) {
+        if (prev.length <= 1) return prev; // keep at least one active
+        next = prev.filter((m) => m !== mod);
+      } else {
+        next = [...prev, mod];
+      }
+      setActiveModule(next[0] || null);
+      return next;
+    });
+  };
+
+  // Harmonized multi-system spatial data dictionary
+  const multiData = useMemo(() => ({
+    ocean: (activeModules.includes('ocean') || activeModule === 'ocean') ? oceanGrid : null,
+    atmosphere: (activeModules.includes('atmosphere') || activeModule === 'atmosphere') ? atmosphereGrid : null,
+    land: (activeModules.includes('land') || activeModule === 'land') ? landGrid : null,
+  }), [activeModules, activeModule, oceanGrid, atmosphereGrid, landGrid]);
+
   // Adaptive Zoom and Center Coordinate handlers with hysteresis and render throttling
   const handleZoomChange = useCallback((newZoom: ZoomLevel, dist: number) => {
     cameraDistanceRef.current = dist;
     setZoomLevel((prev) => (prev !== newZoom ? newZoom : prev));
     setIsIntroVisible((prev) => {
-      // Hysteresis: fade out when zoomed below 4.25, restore when zoomed above 4.35
-      if (prev && dist < 4.25) return false;
-      if (!prev && dist > 4.35) return true;
+      // Hysteresis: fade out when zoomed in past global view (dist < 4.50 or non-global zoom level)
+      // Restore when camera pulls all the way back out to deep space (dist > 4.65 && newZoom === 'global')
+      if (prev && (dist < 4.50 || newZoom !== 'global')) return false;
+      if (!prev && dist > 4.65 && newZoom === 'global') return true;
       return prev;
     });
   }, []);
@@ -221,99 +254,114 @@ export const App: React.FC = () => {
         }
       };
 
-      if (activeModule === 'atmosphere') {
-        fetchAtmosphereTimeseries(lat, lon, abortController.signal)
-          .then((ts) => {
+      const systemsToFetch = activeModules.length > 0 ? activeModules : (activeModule ? [activeModule] : []);
+      const promises: Promise<any>[] = [];
+
+      if (systemsToFetch.includes('atmosphere')) {
+        promises.push(
+          fetchAtmosphereTimeseries(lat, lon, abortController.signal).then((ts) => {
             if (reqId !== trendReqIdRef.current) return;
             setAtmosphereTimeseries(ts);
-            handleSuccess(Boolean(ts && Array.isArray(ts.timeseries) && ts.timeseries.length > 0));
           })
-          .catch(handleError);
-      } else if (activeModule === 'ocean') {
-        fetchOceanTimeseries(lat, lon, abortController.signal)
-          .then((ts) => {
+        );
+      }
+      if (systemsToFetch.includes('ocean')) {
+        promises.push(
+          fetchOceanTimeseries(lat, lon, abortController.signal).then((ts) => {
             if (reqId !== trendReqIdRef.current) return;
             setOceanTimeseries(ts);
-            handleSuccess(Boolean(ts && Array.isArray(ts.timeseries) && ts.timeseries.length > 0));
           })
-          .catch(handleError);
-      } else if (activeModule === 'land') {
-        fetchLandTimeseries(lat, lon, abortController.signal)
-          .then((ts) => {
+        );
+      }
+      if (systemsToFetch.includes('land')) {
+        promises.push(
+          fetchLandTimeseries(lat, lon, abortController.signal).then((ts) => {
             if (reqId !== trendReqIdRef.current) return;
             setLandTimeseries(ts);
-            handleSuccess(Boolean(ts && Array.isArray(ts.timeseries) && ts.timeseries.length > 0));
           })
-          .catch(handleError);
+        );
       }
+
+      if (promises.length === 0) {
+        setTrendStatus('idle');
+        return;
+      }
+
+      Promise.all(promises)
+        .then(() => {
+          if (reqId === trendReqIdRef.current) {
+            handleSuccess(true);
+          }
+        })
+        .catch(handleError);
     },
-    [activeModule]
+    [activeModule, activeModules]
   );
 
   // Automatically synchronize satellite timeseries with active location and module
   useEffect(() => {
-    if (activeModule) {
+    if (activeModule || activeModules.length > 0) {
       loadTrendTimeseries(activeLocation.lat, activeLocation.lon, activeLocation.name);
     } else {
       setTrendStatus('idle');
     }
-  }, [activeLocation.lat, activeLocation.lon, activeModule, loadTrendTimeseries]);
+  }, [activeLocation.lat, activeLocation.lon, activeModule, activeModules, loadTrendTimeseries]);
 
   // Fetch spatial observation grid when module or date changes
   useEffect(() => {
-    if (!activeModule) return;
+    if (activeModules.length === 0 && !activeModule) return;
     setDataLoading(true);
     const reqId = ++dataReqIdRef.current;
 
-    if (activeModule === 'atmosphere') {
-      fetchAtmosphereGrid(selectedDate)
-        .then((grid) => {
+    const gridPromises: Promise<any>[] = [];
+
+    if (activeModules.includes('atmosphere') || activeModule === 'atmosphere') {
+      gridPromises.push(
+        fetchAtmosphereGrid(selectedDate).then((grid) => {
           if (reqId !== dataReqIdRef.current) return;
           setAtmosphereGrid(grid);
           if (grid.features.length > 0 && !selectedFeature && !selectedPlace) {
             setSelectedFeature(grid.features[0]);
           }
         })
-        .catch(console.error)
-        .finally(() => {
-          if (reqId === dataReqIdRef.current) setDataLoading(false);
-        });
-    } else if (activeModule === 'ocean') {
-      fetchOceanObservations(selectedDate)
-        .then((grid) => {
+      );
+    }
+    if (activeModules.includes('ocean') || activeModule === 'ocean') {
+      gridPromises.push(
+        fetchOceanObservations(selectedDate).then((grid) => {
           if (reqId !== dataReqIdRef.current) return;
           setOceanGrid(grid);
           if (grid.features.length > 0 && !selectedFeature && !selectedPlace) {
             setSelectedFeature(grid.features[0]);
           }
         })
-        .catch(console.error)
-        .finally(() => {
-          if (reqId === dataReqIdRef.current) setDataLoading(false);
-        });
-    } else if (activeModule === 'land') {
-      fetchLandGrid(selectedDate)
-        .then((grid) => {
+      );
+    }
+    if (activeModules.includes('land') || activeModule === 'land') {
+      gridPromises.push(
+        fetchLandGrid(selectedDate).then((grid) => {
           if (reqId !== dataReqIdRef.current) return;
           setLandGrid(grid);
           if (grid.features.length > 0 && !selectedFeature && !selectedPlace) {
             setSelectedFeature(grid.features[0]);
           }
         })
-        .catch(console.error)
-        .finally(() => {
-          if (reqId === dataReqIdRef.current) setDataLoading(false);
-        });
+      );
     }
 
-    // Also fetch cross system teleconnection data for trends
-    fetchCrossSystemAnalysis('enso_walker')
-      .then((data) => {
+    gridPromises.push(
+      fetchCrossSystemAnalysis('enso_walker').then((data) => {
         if (reqId !== dataReqIdRef.current) return;
         setCrossSystemData(data);
       })
-      .catch(console.error);
-  }, [activeModule, selectedDate]);
+    );
+
+    Promise.all(gridPromises)
+      .catch(console.error)
+      .finally(() => {
+        if (reqId === dataReqIdRef.current) setDataLoading(false);
+      });
+  }, [activeModule, activeModules, selectedDate]);
 
   // Handle Point click on the 3D globe or 2D map
   const handleFeatureSelect = (feat: GeoJSONFeature) => {
@@ -346,8 +394,28 @@ export const App: React.FC = () => {
     setSidePanelOpen(true);
   };
 
-  // Search selection handler
-  const handleSearchSelect = (lat: number, lon: number, name: string) => {
+  // Helper to map search category strings to GISPlace categories
+  const mapPlaceCategory = (cat?: string): GISPlace['category'] => {
+    if (!cat) return 'city';
+    const c = cat.toLowerCase();
+    if (c.includes('country')) return 'country';
+    if (c.includes('state') || c.includes('province')) return 'state';
+    if (c.includes('continent')) return 'continent';
+    if (c.includes('ocean') || c.includes('sea')) return 'ocean';
+    if (c.includes('natural') || c.includes('river') || c.includes('lake') || c.includes('mountain')) {
+      return 'natural_feature';
+    }
+    return 'city';
+  };
+
+  // Search selection handler with Google Maps-style navigation & bounding boxes
+  const handleSearchSelect = (
+    lat: number,
+    lon: number,
+    name: string,
+    placeObj?: SearchResult | GISPlace | GeocodingResult
+  ) => {
+    // Auto-select relevant module if none is active and search target clearly belongs to a domain
     if (!activeModule) {
       const lower = name.toLowerCase();
       if (
@@ -367,11 +435,42 @@ export const App: React.FC = () => {
         lower.includes('storm')
       ) {
         handleSelectModule('atmosphere');
-      } else {
-        handleSelectModule('land');
       }
     }
-    handleSelectPreset(lat, lon, name);
+
+    let resolvedBbox = placeObj?.bbox;
+    let resolvedIsoA3 = (placeObj as any)?.iso_a3;
+    let resolvedIsoA2 = (placeObj as any)?.iso_a2;
+
+    // If no bbox provided in placeObj, check client-side GIS database
+    if (!resolvedBbox) {
+      const gisMatches = searchGISPlaces(name);
+      if (gisMatches.length > 0) {
+        resolvedBbox = gisMatches[0].bbox;
+        resolvedIsoA3 = resolvedIsoA3 || gisMatches[0].iso_a3;
+        resolvedIsoA2 = resolvedIsoA2 || gisMatches[0].iso_a2;
+      }
+    }
+
+    const canonicalPlace: GISPlace = {
+      id: (placeObj as any)?.id || `search-${lat}-${lon}`,
+      name,
+      formal_name: (placeObj as any)?.formal_name,
+      iso_a2: resolvedIsoA2,
+      iso_a3: resolvedIsoA3,
+      lat,
+      lon,
+      category: mapPlaceCategory((placeObj as any)?.category),
+      level: ((placeObj as any)?.level as 1 | 2 | 3 | 4) || 2,
+      priority: (placeObj as any)?.priority || 50,
+      parentCountry: (placeObj as any)?.parentCountry || (placeObj as any)?.parent_country,
+      parentState: (placeObj as any)?.parentState || (placeObj as any)?.parent_state,
+      parentContinent: (placeObj as any)?.parentContinent || (placeObj as any)?.parent_continent,
+      bbox: resolvedBbox,
+      detail: (placeObj as any)?.detail,
+    };
+
+    handlePlaceSelect(canonicalPlace);
   };
 
   const getActiveData = () => {
@@ -402,7 +501,9 @@ export const App: React.FC = () => {
       {/* 3D Realistic Earth Globe Canvas */}
       <EarthGlobe
         activeModule={activeModule}
+        activeModules={activeModules}
         data={getActiveData()}
+        multiData={multiData}
         loading={dataLoading}
         onSelectFeature={handleFeatureSelect}
         selectedFeature={selectedFeature}
@@ -429,7 +530,14 @@ export const App: React.FC = () => {
         style={{
           top: activeModule !== null ? '116px' : '64px',
           left: '0px',
-          right: sidePanelOpen && typeof window !== 'undefined' && window.innerWidth >= 768 ? '390px' : '0px',
+          right:
+            sidePanelOpen &&
+            activeModule !== null &&
+            currentView === 'explore' &&
+            typeof window !== 'undefined' &&
+            window.innerWidth >= 1024
+              ? '390px'
+              : '0px',
           bottom: showTrends
             ? trendsExpanded
               ? '520px'
@@ -441,7 +549,9 @@ export const App: React.FC = () => {
       >
         <MapView
           module={activeModule || 'overview'}
+          activeModules={activeModules}
           data={getActiveData()}
+          multiData={multiData}
           loading={dataLoading}
           selectedDate={selectedDate}
           setSelectedDate={setSelectedDate}
@@ -540,10 +650,10 @@ export const App: React.FC = () => {
           <div className="flex-1 relative flex flex-col justify-between overflow-hidden pointer-events-none">
             {/* Minimal Hero Header & Centered Search with smooth adaptive fade */}
             <div
-              className={`pt-8 sm:pt-12 pb-4 text-center max-w-2xl mx-auto px-4 z-10 transition-all duration-500 ease-out ${
+              className={`text-center max-w-2xl mx-auto px-4 z-10 transition-all duration-500 ease-out ${
                 isIntroVisible
-                  ? 'opacity-100 translate-y-0 pointer-events-auto'
-                  : 'opacity-0 -translate-y-8 pointer-events-none'
+                  ? 'opacity-100 translate-y-0 pt-8 sm:pt-12 pb-4 max-h-[500px] pointer-events-auto'
+                  : 'opacity-0 -translate-y-8 max-h-0 py-0 my-0 overflow-hidden pointer-events-none'
               }`}
             >
               <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white drop-shadow-lg">
@@ -625,10 +735,10 @@ export const App: React.FC = () => {
 
             {/* Three Clear Exploration Choices in a Clean Row with smooth adaptive fade */}
             <div
-              className={`pb-6 sm:pb-8 px-4 z-10 max-w-4xl mx-auto w-full transition-all duration-500 ease-out ${
+              className={`px-4 z-10 max-w-4xl mx-auto w-full transition-all duration-500 ease-out ${
                 isIntroVisible
-                  ? 'opacity-100 translate-y-0 pointer-events-auto'
-                  : 'opacity-0 translate-y-8 pointer-events-none'
+                  ? 'opacity-100 translate-y-0 pb-6 sm:pb-8 max-h-[500px] pointer-events-auto'
+                  : 'opacity-0 translate-y-8 max-h-0 py-0 my-0 overflow-hidden pointer-events-none'
               }`}
             >
               <div className="text-center mb-2.5">
@@ -644,8 +754,10 @@ export const App: React.FC = () => {
 
             {/* Clean Minimal Footer for Homepage */}
             <footer
-              className={`z-10 py-2.5 px-4 text-center text-xs text-slate-500 font-mono bg-[#05070b]/60 backdrop-blur-xs border-t border-slate-800/40 transition-all duration-500 ${
-                isIntroVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'
+              className={`z-10 px-4 text-center text-xs text-slate-500 font-mono bg-[#05070b]/60 backdrop-blur-xs border-t transition-all duration-500 ${
+                isIntroVisible
+                  ? 'opacity-100 py-2.5 max-h-12 border-slate-800/40'
+                  : 'opacity-0 py-0 max-h-0 border-transparent overflow-hidden pointer-events-none'
               }`}
             >
               TerraLens • NASA Space Apps Challenge 2026 • Earth Observation Intelligence
@@ -675,42 +787,67 @@ export const App: React.FC = () => {
 
                 <div className="h-5 w-px bg-slate-800 hidden sm:block" />
 
-                {/* Unified System Selector Tabs */}
+                {/* Unified System Selector Tabs & Multi-System Toggles */}
                 <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-900/90 border border-slate-800">
                   <button
-                    onClick={() => handleSelectModule('ocean')}
+                    onClick={() => handleToggleModule('ocean')}
                     className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                      activeModule === 'ocean'
+                      activeModules.includes('ocean')
                         ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
+                    title="Toggle Ocean (SWOT Altimetry)"
                   >
                     <Waves className="h-3.5 w-3.5 text-cyan-400" />
                     <span className="capitalize">Ocean</span>
                   </button>
 
                   <button
-                    onClick={() => handleSelectModule('atmosphere')}
+                    onClick={() => handleToggleModule('atmosphere')}
                     className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                      activeModule === 'atmosphere'
+                      activeModules.includes('atmosphere')
                         ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-sm'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
+                    title="Toggle Atmosphere (GPM Precipitation)"
                   >
                     <CloudRain className="h-3.5 w-3.5 text-blue-400" />
                     <span className="capitalize">Atmosphere</span>
                   </button>
 
                   <button
-                    onClick={() => handleSelectModule('land')}
+                    onClick={() => handleToggleModule('land')}
                     className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                      activeModule === 'land'
+                      activeModules.includes('land')
                         ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
+                    title="Toggle Land (MODIS Vegetation)"
                   >
                     <Trees className="h-3.5 w-3.5 text-emerald-400" />
                     <span className="capitalize">Land</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      if (activeModules.length === 3) {
+                        setActiveModules(['ocean']);
+                        setActiveModule('ocean');
+                      } else {
+                        setActiveModules(['ocean', 'atmosphere', 'land']);
+                        setActiveModule('ocean');
+                      }
+                      setSidePanelOpen(true);
+                    }}
+                    className={`hidden md:flex items-center space-x-1 px-2 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                      activeModules.length === 3
+                        ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                    title="Toggle All 3 Earth Systems Simultaneously"
+                  >
+                    <Layers className="h-3 w-3" />
+                    <span>All 3</span>
                   </button>
                 </div>
               </div>
@@ -735,7 +872,8 @@ export const App: React.FC = () => {
                     aria-label="Switch to 3D Globe View"
                   >
                     <GlobeIcon className="h-3.5 w-3.5" />
-                    <span>3D Globe</span>
+                    <span className="hidden sm:inline">3D Globe</span>
+                    <span className="sm:hidden">3D</span>
                   </button>
                   <button
                     onClick={() => setExplorationMode('2d')}
@@ -748,7 +886,8 @@ export const App: React.FC = () => {
                     aria-label="Switch to 2D Planar Map View"
                   >
                     <MapIcon className="h-3.5 w-3.5" />
-                    <span>2D Map</span>
+                    <span className="hidden sm:inline">2D Map</span>
+                    <span className="sm:hidden">2D</span>
                   </button>
                 </div>
 
@@ -757,7 +896,7 @@ export const App: React.FC = () => {
                 {/* Trends Drawer Toggle Button */}
                 <button
                   onClick={() => setShowTrends(!showTrends)}
-                  className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                  className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
                     showTrends
                       ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
                       : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
@@ -771,7 +910,7 @@ export const App: React.FC = () => {
                 {/* Context Panel Toggle Button */}
                 <button
                   onClick={() => setSidePanelOpen(!sidePanelOpen)}
-                  className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                  className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
                     sidePanelOpen
                       ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
                       : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
@@ -780,7 +919,7 @@ export const App: React.FC = () => {
                 >
                   <Compass className="h-3.5 w-3.5 text-cyan-400" />
                   <span className="hidden md:inline">Context</span>
-                  <span className="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-1.5 py-0.2 rounded-full capitalize">
+                  <span className="hidden sm:inline text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-1.5 py-0.2 rounded-full capitalize">
                     {zoomLevel}
                   </span>
                 </button>
@@ -791,9 +930,32 @@ export const App: React.FC = () => {
             <div className="flex-1 relative flex overflow-hidden pointer-events-none">
               {/* Viewport Area: Globe or 2D Map + Bottom TrendDrawer */}
               <div className="flex-1 h-full relative overflow-hidden pointer-events-none">
+                {(activeModule !== null || activeModules.length > 0) && (
+                  <div className="absolute z-40 top-3 left-3 right-3 sm:left-4 sm:right-auto sm:max-w-lg pointer-events-auto">
+                    <DataNotice type="demo" title="Demonstration data — not NASA observations">
+                      Scientific layers, time series, comparisons, and cross-system examples are modelled by this build. NASA product citations describe intended data sources; no NASA granules are currently loaded.
+                    </DataNotice>
+                  </div>
+                )}
+                {/* Unified Earth System Shared Timeline */}
+                <SharedTimeline
+                  selectedDate={selectedDate}
+                  onDateChange={(newDate) => setSelectedDate(newDate)}
+                  activeModules={activeModules.length > 0 ? activeModules : (activeModule ? [activeModule] : [])}
+                  sidePanelOpen={sidePanelOpen}
+                  trendsOpen={showTrends}
+                  onOpenPeriodComparison={() => {
+                    setShowTrends(true);
+                    setTrendsExpanded(true);
+                    setTrendInitialTab('comparison');
+                  }}
+                />
+
                 {/* Expandable Bottom Analysis Drawer (Trends & Teleconnections) */}
                 <TrendDrawer
                   activeModule={activeModule}
+                  activeModules={activeModules}
+                  onToggleModule={handleToggleModule}
                   atmosphereData={atmosphereTimeseries}
                   oceanData={oceanTimeseries}
                   landData={landTimeseries}
@@ -802,6 +964,9 @@ export const App: React.FC = () => {
                   status={trendStatus}
                   errorMessage={trendError}
                   selectedLocationName={activeLocation.name}
+                  activeLocationCoords={{ lat: activeLocation.lat, lon: activeLocation.lon }}
+                  selectedDate={selectedDate}
+                  initialTab={trendInitialTab}
                   onRetry={() => loadTrendTimeseries(activeLocation.lat, activeLocation.lon, activeLocation.name)}
                   isOpen={showTrends}
                   onClose={() => setShowTrends(false)}

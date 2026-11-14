@@ -23,7 +23,13 @@ export type ZoomLevel = 'global' | 'continental' | 'country' | 'regional';
 
 interface EarthGlobeProps {
   activeModule: EarthModule;
+  activeModules?: ('ocean' | 'atmosphere' | 'land')[];
   data: GeoJSONFeatureCollection | null;
+  multiData?: {
+    ocean?: GeoJSONFeatureCollection | null;
+    atmosphere?: GeoJSONFeatureCollection | null;
+    land?: GeoJSONFeatureCollection | null;
+  };
   loading?: boolean;
   onSelectFeature?: (feature: GeoJSONFeature) => void;
   selectedFeature?: GeoJSONFeature | null;
@@ -115,7 +121,9 @@ function getObservationColor(feature: GeoJSONFeature, activeModule: EarthModule,
 
 export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   activeModule,
+  activeModules = [],
   data,
+  multiData,
   loading = false,
   onSelectFeature,
   selectedFeature,
@@ -730,7 +738,19 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       }
     }
 
-    if (!data || !activeModule || !data.features || data.features.length === 0) return;
+    const collectionsToRender: Array<{ mod: 'ocean' | 'atmosphere' | 'land'; collection: GeoJSONFeatureCollection }> = [];
+    if (multiData && activeModules.length > 0) {
+      activeModules.forEach((m) => {
+        const col = multiData[m];
+        if (col && col.features && col.features.length > 0) {
+          collectionsToRender.push({ mod: m, collection: col });
+        }
+      });
+    } else if (data && activeModule && data.features && data.features.length > 0) {
+      collectionsToRender.push({ mod: activeModule as any, collection: data });
+    }
+
+    if (collectionsToRender.length === 0) return;
 
     const earthRadius = 1.9;
     const markerRadius = earthRadius * 1.008;
@@ -745,38 +765,40 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     const sphereGeom = sharedSphereGeomRef.current;
     const haloGeom = sharedHaloGeomRef.current;
 
-    data.features.forEach((feature) => {
-      const coords = feature.geometry.coordinates;
-      const lon = coords[0];
-      const lat = coords[1];
+    collectionsToRender.forEach(({ mod, collection }) => {
+      collection.features.forEach((feature) => {
+        const coords = feature.geometry.coordinates;
+        const lon = coords[0];
+        const lat = coords[1];
 
-      const pos = latLonToVector3(lat, lon, markerRadius);
-      const color = getObservationColor(feature, activeModule, metricType);
+        const pos = latLonToVector3(lat, lon, markerRadius);
+        const color = getObservationColor(feature, mod, metricType);
 
-      const markerMat = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.0,
+        const markerMat = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.0,
+        });
+
+        const marker = new THREE.Mesh(sphereGeom, markerMat);
+        marker.position.copy(pos);
+        marker.userData = { feature, module: mod, baseOpacity: 0.95 };
+        markersGroup.add(marker);
+
+        const haloMat = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.0,
+          side: THREE.DoubleSide,
+        });
+        const halo = new THREE.Mesh(haloGeom, haloMat);
+        halo.position.copy(pos);
+        halo.lookAt(0, 0, 0);
+        halo.userData = { feature, module: mod, baseOpacity: 0.45 };
+        markersGroup.add(halo);
       });
-
-      const marker = new THREE.Mesh(sphereGeom, markerMat);
-      marker.position.copy(pos);
-      marker.userData = { feature, baseOpacity: 0.95 };
-      markersGroup.add(marker);
-
-      const haloMat = new THREE.MeshBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 0.0,
-        side: THREE.DoubleSide,
-      });
-      const halo = new THREE.Mesh(haloGeom, haloMat);
-      halo.position.copy(pos);
-      halo.lookAt(0, 0, 0);
-      halo.userData = { feature, baseOpacity: 0.45 };
-      markersGroup.add(halo);
     });
-  }, [data, activeModule, metricType, isReady]);
+  }, [data, multiData, activeModule, activeModules, metricType, isReady]);
 
   // Lightweight synchronization of selected observation halo without scene reconstruction
   useEffect(() => {
@@ -823,18 +845,45 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     flyToCoordinates(lat, lon, targetDist);
   }, [selectedFeature]);
 
-  // Handle fly-to when selectedPlace changes
+  // Handle fly-to when selectedPlace changes with Google Earth-style dynamic altitude framing
   useEffect(() => {
     if (!selectedPlace) return;
-    const targetDist =
-      selectedPlace.level === 4
-        ? 2.5
-        : selectedPlace.level === 3
-        ? 3.1
-        : selectedPlace.level === 2
-        ? 3.8
-        : 4.6;
-    flyToCoordinates(selectedPlace.lat, selectedPlace.lon, targetDist);
+    let targetDist: number;
+
+    if (selectedPlace.bbox && selectedPlace.bbox.length === 4) {
+      const [minLon, minLat, maxLon, maxLat] = selectedPlace.bbox;
+      const spanLat = Math.abs(maxLat - minLat);
+      const spanLon = Math.abs(maxLon - minLon);
+      const maxSpan = Math.max(spanLat, spanLon);
+
+      if (maxSpan > 55) {
+        // Massive country / continent (e.g. Russia, Canada, Brazil, China, USA)
+        targetDist = 4.45;
+      } else if (maxSpan > 20) {
+        // Medium country / large basin (e.g. France, Germany, India, Egypt)
+        targetDist = 3.80;
+      } else if (maxSpan > 6) {
+        // Smaller country / state (e.g. UK, Japan, California, Madagascar)
+        targetDist = 3.30;
+      } else if (maxSpan > 2) {
+        // Small state / metro region (e.g. Switzerland, Lebanon, Kerala)
+        targetDist = 2.85;
+      } else {
+        // City / mountain / localized feature
+        targetDist = 2.50;
+      }
+    } else {
+      targetDist =
+        selectedPlace.level === 4
+          ? 2.55
+          : selectedPlace.level === 3
+          ? 3.10
+          : selectedPlace.level === 2
+          ? 3.80
+          : 4.60;
+    }
+
+    flyToCoordinates(selectedPlace.lat, selectedPlace.lon, targetDist, 1100);
   }, [selectedPlace]);
 
   // Synchronize 3D camera orientation with geographic center and distance when restoring from 2D mode

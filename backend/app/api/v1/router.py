@@ -7,12 +7,15 @@ from app.api.v1.endpoints import (
     cross_system,
     assistant,
     datasets,
+    comparison,
+    geocoding,
 )
 
 api_router = APIRouter()
 
 # System & Infrastructure
 api_router.include_router(health.router, tags=["System Health"])
+api_router.include_router(geocoding.router, prefix="/geocoding", tags=["Geographic Search & Geocoding"])
 
 # Scientific Core Modules
 api_router.include_router(atmosphere.router, prefix="/atmosphere", tags=["Atmosphere (GPM IMERG)"])
@@ -23,3 +26,6 @@ api_router.include_router(cross_system.router, prefix="/cross-system", tags=["Cr
 # AI Intelligence & Scientific Catalog
 api_router.include_router(assistant.router, prefix="/assistant", tags=["AI Scientific Assistant"])
 api_router.include_router(datasets.router, prefix="/datasets", tags=["Dataset Documentation & Provenance"])
+
+# Historical Period Comparison
+api_router.include_router(comparison.router, prefix="/comparison", tags=["Historical Period Comparison"])

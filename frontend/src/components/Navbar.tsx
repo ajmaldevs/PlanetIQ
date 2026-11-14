@@ -62,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
-            Dataset Catalog
+            <span className="hidden sm:inline">Dataset </span>Catalog
           </button>
 
           <button
@@ -73,7 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
-            AI Assistant
+            <span className="hidden sm:inline">AI </span>Assistant
           </button>
 
           <button

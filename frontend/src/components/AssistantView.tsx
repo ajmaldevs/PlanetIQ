@@ -28,7 +28,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
     {
       role: 'assistant',
       content:
-        "Welcome to the **TerraLens Scientific Assistant**.\n\nI can help you explore changes across Earth's oceans, atmosphere, and land using observations from NASA satellites—including SWOT sea surface height, GPM IMERG rainfall, and MODIS vegetation health.\n\nWhat would you like to discover?",
+        "Welcome to the **TerraLens Scientific Assistant**.\n\nI can explain the NASA SWOT, GPM IMERG, and MODIS products TerraLens is designed to use. This build's map layers and time series are modelled demonstrations, not retrieved satellite observations.\n\nWhat would you like to discover?",
       grounding: [
         {
           dataset_id: 'SWOT_L2_LR_SSH',
@@ -118,7 +118,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   }, [initialPrompt]);
 
   return (
-    <div className="max-w-4xl mx-auto w-full flex flex-col h-[680px] bg-[#090d16]/90 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
+    <div className="max-w-4xl mx-auto w-full flex flex-col h-[calc(100vh-140px)] min-h-[420px] max-h-[760px] bg-[#090d16]/90 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
       {/* Header */}
       <div className="bg-[#0b0f19] border-b border-slate-800/80 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center space-x-3">
@@ -128,7 +128,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           <div>
             <h3 className="text-sm font-semibold text-white">TerraLens AI Assistant</h3>
             <p className="text-[11px] text-slate-400">
-              Grounded in NASA satellite observations (SWOT, GPM IMERG, MODIS)
+              Dataset guidance for SWOT, GPM IMERG, and MODIS
             </p>
           </div>
         </div>
@@ -224,7 +224,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
         {loading && (
           <div className="flex items-center space-x-2 px-4 py-2.5 rounded-full bg-[#0f1422] border border-slate-800 text-xs font-mono text-cyan-400 w-fit">
             <div className="h-3 w-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-            <span>Consulting planetary observation records...</span>
+            <span>Preparing a scientific explanation...</span>
           </div>
         )}
       </div>
