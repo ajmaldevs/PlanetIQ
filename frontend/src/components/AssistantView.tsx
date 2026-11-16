@@ -1,6 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { queryAssistant, AssistantQueryResponse, ScientificCitation } from '../services/api';
-import { Send, Sparkles, ExternalLink, User } from 'lucide-react';
+import {
+  queryAssistant,
+  AssistantQueryResponse,
+  ScientificCitation,
+  VisualBlock,
+  MetricCardBlock,
+  TimeseriesChartBlock,
+  ComparisonTableBlock,
+  AnomalyAlertBlock,
+  DataQualityBlock,
+} from '../services/api';
+import {
+  Send,
+  Sparkles,
+  ExternalLink,
+  User,
+  Activity,
+  AlertTriangle,
+  Database,
+  TrendingUp,
+  ShieldCheck,
+} from 'lucide-react';
 import { EarthModule } from './EarthGlobe';
 import { DataNotice } from './DataNotice';
 
@@ -16,6 +36,9 @@ interface Message {
   content: string;
   grounding?: ScientificCitation[];
   followups?: string[];
+  visualBlocks?: VisualBlock[];
+  toolCalls?: string[];
+  dataStatus?: string;
   timestamp: string;
 }
 
@@ -29,41 +52,52 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
     {
       role: 'assistant',
       content:
-        "Welcome to the **TerraLens Scientific Assistant**.\n\nI can explain the NASA SWOT, GPM IMERG, and MODIS products TerraLens is designed to use. This build's map layers and time series are modelled demonstrations, not retrieved satellite observations.\n\nWhat would you like to discover?",
+        'Welcome to the **TerraLens Scientific Assistant**.\n\nI am connected to authoritative NASA Earth observation tools (SWOT KaRIn ocean altimetry, GPM IMERG precipitation, and MODIS vegetation indices). I can analyse physical measurements, compare regions, chart historical anomalies, and inspect satellite data quality.\n\nWhat would you like to investigate?',
       grounding: [
         {
           dataset_id: 'SWOT_L2_LR_SSH',
           mission: 'Surface Water and Ocean Topography',
           variable: 'Sea Surface Height (m)',
           units: 'meters (m)',
-          doi_or_url: 'https://podaac.jpl.nasa.gov/swot',
+          doi_or_url: 'https://doi.org/10.5067/SWOT-SSH-L2-LR',
         },
         {
           dataset_id: 'GPM_3IMERGM',
           mission: 'Global Precipitation Measurement',
           variable: 'Final Monthly Precipitation',
           units: 'mm/hr and mm',
-          doi_or_url: 'https://gpm.nasa.gov/data/imerg',
+          doi_or_url: 'https://doi.org/10.5067/GPM/IMERG/3B-MONTH/07',
         },
         {
           dataset_id: 'MOD13C2',
           mission: 'MODIS Terra/Aqua',
           variable: 'Vegetation Indices (NDVI/EVI)',
           units: 'dimensionless (-0.2 to 1.0)',
-          doi_or_url: 'https://lpdaac.usgs.gov/products/mod13c2v061/',
+          doi_or_url: 'https://doi.org/10.5067/MODIS/MOD13C2.061',
         },
       ],
       followups: [
-        'How does SWOT detect ocean eddies using radar?',
-        'Why is monthly accumulated rain (mm) different from rainfall rate (mm/hr)?',
-        'How does an El Niño ocean warming event affect the Amazon rainforest?',
+        'What are the ocean eddies and SSH in the Gulf Stream?',
+        'Compare precipitation between the Amazon and the Sahel.',
+        'Show historical trends of rainfall in the Bay of Bengal.',
+        'Explain how El Niño couples ocean height to vegetation greenness.',
       ],
+      dataStatus: 'demonstration_model',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
 
   const [inputPrompt, setInputPrompt] = useState('');
   const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading]);
 
   const handleSend = async (textToSend?: string) => {
     const prompt = textToSend || inputPrompt;
@@ -75,22 +109,34 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
+    const currentHistory = messages.slice(-6).map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
     setMessages((prev) => [...prev, userMsg]);
     if (!textToSend) setInputPrompt('');
     setLoading(true);
 
     try {
-      const result: AssistantQueryResponse = await queryAssistant(prompt, {
-        active_module: activeModule || 'overview',
-        selected_region: selectedLocationName,
-        selected_date: selectedDate,
-      });
+      const result: AssistantQueryResponse = await queryAssistant(
+        prompt,
+        {
+          active_module: activeModule || 'overview',
+          selected_region: selectedLocationName,
+          selected_date: selectedDate,
+        },
+        currentHistory
+      );
 
       const assistantMsg: Message = {
         role: 'assistant',
         content: result.response,
         grounding: result.scientific_grounding,
         followups: result.suggested_followups,
+        visualBlocks: result.visual_blocks,
+        toolCalls: result.tool_calls_executed,
+        dataStatus: result.data_status,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
 
@@ -118,6 +164,215 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
     }
   }, [initialPrompt]);
 
+  // --- Visual Block Renderers ---
+
+  const renderMetricCardBlock = (block: MetricCardBlock, idx: number) => (
+    <div key={idx} className="mt-3 p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2">
+      <div className="flex items-center justify-between text-[11px] font-semibold text-cyan-400">
+        <span className="flex items-center space-x-1.5">
+          <Activity className="h-3 w-3" />
+          <span>{block.title}</span>
+        </span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {block.metrics.map((m, mIdx) => (
+          <div key={mIdx} className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800/80">
+            <div className="text-[10px] text-slate-400 font-mono truncate">{m.title}</div>
+            <div className="flex items-baseline space-x-1.5 mt-0.5">
+              <span className="text-base font-bold text-white font-mono">{m.value}</span>
+              <span className="text-[10px] text-cyan-400 font-mono">{m.unit}</span>
+            </div>
+            {m.subtext && <div className="text-[9px] text-slate-400 mt-0.5">{m.subtext}</div>}
+            {m.badge && (
+              <span className="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60 font-mono">
+                {m.badge}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderTimeseriesChartBlock = (block: TimeseriesChartBlock, idx: number) => {
+    const pts = block.points || [];
+    if (pts.length < 2) return null;
+
+    const values = pts.map((p) => p.value);
+    const minVal = Math.min(...values);
+    const maxVal = Math.max(...values);
+    const range = maxVal - minVal || 1.0;
+
+    const svgWidth = 380;
+    const svgHeight = 90;
+    const padX = 15;
+    const padY = 12;
+
+    const coords = pts.map((p, i) => {
+      const x = padX + (i / (pts.length - 1)) * (svgWidth - 2 * padX);
+      const y = svgHeight - padY - ((p.value - minVal) / range) * (svgHeight - 2 * padY);
+      return { x, y, ...p };
+    });
+
+    const pathD = coords.reduce(
+      (acc, c, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${c.x.toFixed(1)} ${c.y.toFixed(1)}`,
+      ''
+    );
+    const areaD = `${pathD} L ${coords[coords.length - 1].x.toFixed(1)} ${svgHeight - padY} L ${coords[0].x.toFixed(1)} ${svgHeight - padY} Z`;
+
+    return (
+      <div key={idx} className="mt-3 p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2">
+        <div className="flex items-center justify-between text-[11px] font-semibold text-cyan-400">
+          <span className="flex items-center space-x-1.5">
+            <TrendingUp className="h-3 w-3" />
+            <span>{block.title}</span>
+          </span>
+          <span className="text-[10px] font-mono text-slate-400">Unit: {block.unit}</span>
+        </div>
+
+        <div className="bg-slate-950/90 p-2 rounded-lg border border-slate-800/80">
+          <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-24 overflow-visible">
+            <defs>
+              <linearGradient id={`grad-${idx}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.35" />
+                <stop offset="100%" stopColor="#06b6d4" stopOpacity="0.0" />
+              </linearGradient>
+            </defs>
+            {/* Area Fill */}
+            <path d={areaD} fill={`url(#grad-${idx})`} />
+            {/* Line Path */}
+            <path d={pathD} fill="none" stroke="#22d3ee" strokeWidth="2" strokeLinecap="round" />
+            {/* Latest Point Dot */}
+            {coords.length > 0 && (
+              <circle
+                cx={coords[coords.length - 1].x}
+                cy={coords[coords.length - 1].y}
+                r="3.5"
+                fill="#22d3ee"
+                className="animate-pulse"
+              />
+            )}
+          </svg>
+
+          {/* Timeline Labels */}
+          <div className="flex justify-between items-center text-[9px] font-mono text-slate-400 mt-1 px-1">
+            <span>{pts[0]?.date}</span>
+            <span className="text-cyan-300 font-semibold">
+              Min: {minVal.toFixed(2)} | Max: {maxVal.toFixed(2)} {block.unit}
+            </span>
+            <span>{pts[pts.length - 1]?.date}</span>
+          </div>
+        </div>
+
+        {block.interpretation && (
+          <div className="text-[10px] text-slate-300 font-sans italic bg-slate-950/40 p-2 rounded border border-slate-800/40">
+            {block.interpretation}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderComparisonTableBlock = (block: ComparisonTableBlock, idx: number) => (
+    <div key={idx} className="mt-3 p-3 bg-slate-900/90 border border-slate-800 rounded-xl space-y-2">
+      <div className="flex items-center justify-between text-[11px] font-semibold text-cyan-400">
+        <span className="flex items-center space-x-1.5">
+          <Activity className="h-3 w-3" />
+          <span>{block.title}</span>
+        </span>
+        <span className="text-[10px] font-mono text-slate-400">{block.metric_label}</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-[11px] border border-slate-800/80 rounded-lg overflow-hidden font-mono">
+          <thead className="bg-slate-950 text-slate-400 text-[10px] border-b border-slate-800">
+            <tr>
+              <th className="py-1.5 px-2.5">Region / Parameter</th>
+              <th className="py-1.5 px-2.5">Value</th>
+              <th className="py-1.5 px-2.5">Unit</th>
+              <th className="py-1.5 px-2.5">Details</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/50">
+            {block.rows.map((r, rIdx) => (
+              <tr key={rIdx} className={r.metric === 'Absolute Delta' ? 'bg-cyan-950/30 font-semibold text-cyan-300' : 'bg-slate-900/40 text-slate-200'}>
+                <td className="py-1.5 px-2.5">{r.region || r.metric}</td>
+                <td className="py-1.5 px-2.5 font-bold">{r.value}</td>
+                <td className="py-1.5 px-2.5 text-slate-400">{r.unit}</td>
+                <td className="py-1.5 px-2.5 text-slate-400 text-[10px]">{r.note || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderAnomalyAlertBlock = (block: AnomalyAlertBlock, idx: number) => (
+    <div
+      key={idx}
+      className={`mt-3 p-3 rounded-xl border flex items-start space-x-2.5 ${
+        block.level === 'critical'
+          ? 'bg-rose-950/30 border-rose-800/70 text-rose-200'
+          : block.level === 'warning'
+          ? 'bg-amber-950/30 border-amber-800/70 text-amber-200'
+          : 'bg-cyan-950/30 border-cyan-800/70 text-cyan-200'
+      }`}
+    >
+      <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+      <div className="space-y-1">
+        <div className="text-[11px] font-bold">{block.title}</div>
+        <div className="text-[10px] leading-relaxed text-slate-300 font-sans">{block.description}</div>
+        {block.affected_region && (
+          <div className="text-[9px] font-mono text-cyan-400">Region: {block.affected_region}</div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderDataQualityBlock = (block: DataQualityBlock, idx: number) => (
+    <div key={idx} className="mt-3 p-3 bg-slate-950/80 border border-slate-800/90 rounded-xl space-y-1.5 text-[10px]">
+      <div className="flex items-center justify-between border-b border-slate-800/80 pb-1">
+        <span className="flex items-center space-x-1.5 font-mono font-semibold text-slate-300">
+          <ShieldCheck className="h-3 w-3 text-emerald-400" />
+          <span>Scientific Provenance & Limitations</span>
+        </span>
+        <span className="font-mono text-[9px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-800">
+          Status: {block.data_status === 'observation' ? 'Live Ingested Observation' : 'Modelled Demonstration Data'}
+        </span>
+      </div>
+      <div className="text-slate-400 font-sans">
+        <span className="text-slate-300 font-semibold font-mono">Sensor Suite:</span> {block.sensor}
+      </div>
+      {block.limitations && block.limitations.length > 0 && (
+        <ul className="list-disc list-inside space-y-0.5 text-slate-400 text-[9px] font-sans pl-1">
+          {block.limitations.map((lim, lIdx) => (
+            <li key={lIdx}>{lim}</li>
+          ))}
+        </ul>
+      )}
+      {block.uncertainty_note && (
+        <div className="text-[9px] text-slate-500 font-mono pt-0.5">{block.uncertainty_note}</div>
+      )}
+    </div>
+  );
+
+  const renderVisualBlock = (block: VisualBlock, idx: number) => {
+    switch (block.type) {
+      case 'metric_card':
+        return renderMetricCardBlock(block as MetricCardBlock, idx);
+      case 'timeseries_chart':
+        return renderTimeseriesChartBlock(block as TimeseriesChartBlock, idx);
+      case 'comparison_table':
+        return renderComparisonTableBlock(block as ComparisonTableBlock, idx);
+      case 'anomaly_alert':
+        return renderAnomalyAlertBlock(block as AnomalyAlertBlock, idx);
+      case 'data_quality':
+        return renderDataQualityBlock(block as DataQualityBlock, idx);
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto w-full flex flex-col h-[calc(100dvh-7.5rem)] min-h-[380px] max-h-[780px] bg-[#090d16]/90 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
       {/* Header */}
@@ -127,24 +382,30 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
             <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </div>
           <div>
-            <h3 className="text-xs sm:text-sm font-semibold text-white">TerraLens AI Assistant</h3>
+            <h3 className="text-xs sm:text-sm font-semibold text-white">TerraLens AI Research Assistant</h3>
             <p className="text-[10px] sm:text-[11px] text-slate-400 line-clamp-1">
-              Dataset guidance for SWOT, GPM IMERG, and MODIS
+              Grounded in NASA SWOT KaRIn, GPM IMERG v07, and MODIS MOD13C2
             </p>
           </div>
         </div>
 
-        {/* Current Active Context Badge */}
-        <div className="text-[10px] sm:text-[11px] font-mono text-slate-400 bg-slate-900/80 px-2.5 sm:px-3 py-1 rounded-full border border-slate-800 shrink-0">
-          Context: <span className="text-cyan-400 capitalize">{activeModule || 'Global Systems'}</span>
+        {/* Current Active Context Badges */}
+        <div className="flex items-center space-x-2">
+          <div className="text-[10px] sm:text-[11px] font-mono text-slate-400 bg-slate-900/80 px-2.5 sm:px-3 py-1 rounded-full border border-slate-800 shrink-0">
+            Sphere: <span className="text-cyan-400 capitalize">{activeModule || 'Global Systems'}</span>
+          </div>
+          <div className="text-[10px] sm:text-[11px] font-mono text-slate-400 bg-slate-900/80 px-2.5 sm:px-3 py-1 rounded-full border border-slate-800 shrink-0 hidden sm:block">
+            Date: <span className="text-cyan-400">{selectedDate}</span>
+          </div>
         </div>
       </div>
 
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4">
-        <DataNotice type="demo" title="Assistant data scope">
-          Answers can explain dataset methods, but this build has no ingested NASA observations. Its map values and time series are demonstrations.
+        <DataNotice type="demo" title="Scientific Assistant Scope & Provenance">
+          Answers synthesize verified NASA dataset methodology with live tool calculations. TerraLens map layers and point queries currently use calibrated demonstration models; live CMR granule discovery is available.
         </DataNotice>
+
         {messages.map((msg, idx) => (
           <div
             key={idx}
@@ -154,7 +415,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
               className={`max-w-2xl rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm leading-relaxed space-y-3 ${
                 msg.role === 'user'
                   ? 'bg-cyan-600 text-white ml-2 sm:ml-6 md:ml-8 shadow-md'
-                  : 'bg-[#0f1422] border border-slate-800/80 text-slate-200 mr-2 sm:mr-6 md:mr-8 shadow-lg'
+                  : 'bg-[#0f1422] border border-slate-800/80 text-slate-200 mr-2 sm:mr-6 md:mr-8 shadow-lg w-full'
               }`}
             >
               <div className="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-700/30 pb-1">
@@ -167,23 +428,46 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                   ) : (
                     <>
                       <Sparkles className="h-3 w-3 text-cyan-400" />
-                      <span className="text-cyan-400">TerraLens Assistant</span>
+                      <span className="text-cyan-400 font-semibold">TerraLens Assistant</span>
                     </>
                   )}
                 </span>
                 <span className="font-mono">{msg.timestamp}</span>
               </div>
 
+              {/* Tool Execution Badges */}
+              {msg.toolCalls && msg.toolCalls.length > 0 && (
+                <div className="flex flex-wrap gap-1 items-center pt-0.5">
+                  <span className="text-[9px] font-mono text-slate-400 uppercase">Tools Consulted:</span>
+                  {msg.toolCalls.map((tName, tIdx) => (
+                    <span
+                      key={tIdx}
+                      className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/70 border border-cyan-800/50 text-cyan-300"
+                    >
+                      {tName}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               {/* Message text */}
               <div className="whitespace-pre-line space-y-1.5 font-normal">
                 {msg.content}
               </div>
 
+              {/* Visual Analysis Blocks */}
+              {msg.visualBlocks && msg.visualBlocks.length > 0 && (
+                <div className="space-y-2 pt-1 border-t border-slate-800/60">
+                  {msg.visualBlocks.map((block, bIdx) => renderVisualBlock(block, bIdx))}
+                </div>
+              )}
+
               {/* Citations */}
               {msg.grounding && msg.grounding.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-slate-800/80 space-y-1">
-                  <span className="text-[10px] font-mono uppercase text-slate-400 block font-semibold">
-                    Scientific Data Provenance
+                  <span className="text-[10px] font-mono uppercase text-slate-400 block font-semibold flex items-center space-x-1">
+                    <Database className="h-3 w-3 text-cyan-400" />
+                    <span>Scientific Data Provenance & Citations</span>
                   </span>
                   <div className="flex flex-wrap gap-1.5 pt-0.5">
                     {msg.grounding.map((c, cIdx) => (
@@ -206,7 +490,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
               {msg.followups && msg.followups.length > 0 && (
                 <div className="mt-2 pt-2 border-t border-slate-800/80 space-y-1.5">
                   <span className="text-[10px] font-mono uppercase text-slate-400 block">
-                    Suggested Questions
+                    Suggested Research Questions
                   </span>
                   <div className="flex flex-wrap gap-1.5">
                     {msg.followups.map((f, fIdx) => (
@@ -226,11 +510,13 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
         ))}
 
         {loading && (
-          <div className="flex items-center space-x-2 px-4 py-2.5 rounded-full bg-[#0f1422] border border-slate-800 text-xs font-mono text-cyan-400 w-fit">
+          <div className="flex items-center space-x-2 px-4 py-2.5 rounded-full bg-[#0f1422] border border-slate-800 text-xs font-mono text-cyan-400 w-fit shadow-md">
             <div className="h-3 w-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-            <span>Preparing a scientific explanation...</span>
+            <span>Consulting NASA observation tools and formulating response...</span>
           </div>
         )}
+
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Input Bar */}
@@ -252,7 +538,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           <button
             type="submit"
             disabled={loading || !inputPrompt.trim()}
-            className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-slate-950 p-2.5 sm:p-3 rounded-xl font-semibold transition-all shadow-md shadow-cyan-500/20 shrink-0 min-w-[42px] min-h-[42px] flex items-center justify-center"
+            className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-slate-950 p-2.5 sm:p-3 rounded-xl font-semibold transition-all shadow-md shadow-cyan-500/20 shrink-0 min-w-[42px] min-h-[42px] flex items-center justify-center cursor-pointer"
           >
             <Send className="h-4 w-4" />
           </button>

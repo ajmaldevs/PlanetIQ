@@ -164,11 +164,79 @@ export interface ScientificCitation {
   doi_or_url: string;
 }
 
+export interface MetricCardItem {
+  title: string;
+  value: number | string;
+  unit: string;
+  subtext?: string;
+  badge?: string;
+  trend?: 'up' | 'down' | 'neutral';
+}
+
+export interface MetricCardBlock {
+  type: 'metric_card';
+  title: string;
+  metrics: MetricCardItem[];
+}
+
+export interface TimeseriesPoint {
+  date: string;
+  value: number;
+  baseline?: number;
+  anomaly?: number;
+}
+
+export interface TimeseriesChartBlock {
+  type: 'timeseries_chart';
+  title: string;
+  module: string;
+  unit: string;
+  points: TimeseriesPoint[];
+  interpretation?: string;
+}
+
+export interface ComparisonTableBlock {
+  type: 'comparison_table';
+  title: string;
+  period_a: string;
+  period_b: string;
+  metric_label: string;
+  unit: string;
+  rows: Record<string, any>[];
+}
+
+export interface AnomalyAlertBlock {
+  type: 'anomaly_alert';
+  level: 'info' | 'warning' | 'critical';
+  title: string;
+  description: string;
+  affected_region?: string;
+}
+
+export interface DataQualityBlock {
+  type: 'data_quality';
+  data_status: string;
+  is_observation: boolean;
+  sensor: string;
+  limitations: string[];
+  uncertainty_note?: string;
+}
+
+export type VisualBlock =
+  | MetricCardBlock
+  | TimeseriesChartBlock
+  | ComparisonTableBlock
+  | AnomalyAlertBlock
+  | DataQualityBlock;
+
 export interface AssistantQueryResponse {
   response: string;
   scientific_grounding: ScientificCitation[];
   suggested_followups: string[];
   confidence_level: string;
+  data_status?: string;
+  visual_blocks?: VisualBlock[];
+  tool_calls_executed?: string[];
 }
 
 export interface DatasetCatalogItem {
@@ -367,13 +435,23 @@ export const fetchCrossSystemAnalysis = async (
 
 export const queryAssistant = async (
   prompt: string,
-  context?: { active_module?: string; latitude?: number; longitude?: number; selected_date?: string; selected_region?: string },
+  context?: {
+    active_module?: string;
+    latitude?: number;
+    longitude?: number;
+    selected_date?: string;
+    selected_region?: string;
+    active_layer?: string;
+    observation_value?: number;
+    observation_unit?: string;
+  },
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>,
   signal?: AbortSignal
 ): Promise<AssistantQueryResponse> => {
   const res = await fetch(`${API_BASE_URL}/assistant/query`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, context }),
+    body: JSON.stringify({ prompt, context, history }),
     signal,
   });
   if (!res.ok) throw new Error(`Assistant query failed: ${res.statusText}`);

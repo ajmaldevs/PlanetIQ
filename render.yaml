@@ -46,9 +46,11 @@ services:
           name: terralens-postgis
           property: database
       - key: GEMINI_API_KEY
-        value: ""
+        sync: false
       - key: GEMINI_MODEL
         value: gemini-1.5-flash
+      - key: NASA_EARTHDATA_BEARER_TOKEN
+        sync: false
 
   # TerraLens React Frontend (Static Site)
   - type: web

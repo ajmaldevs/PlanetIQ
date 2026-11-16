@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union, Literal
 from pydantic import BaseModel, Field
 
 
@@ -186,6 +186,9 @@ class AssistantContext(BaseModel):
     longitude: Optional[float] = None
     selected_date: Optional[str] = None
     selected_region: Optional[str] = None
+    active_layer: Optional[str] = None
+    observation_value: Optional[float] = None
+    observation_unit: Optional[str] = None
 
 
 class AssistantQueryRequest(BaseModel):
@@ -202,11 +205,72 @@ class ScientificCitation(BaseModel):
     doi_or_url: str
 
 
+class MetricCardItem(BaseModel):
+    title: str
+    value: Union[float, int, str]
+    unit: str
+    subtext: Optional[str] = None
+    badge: Optional[str] = None
+    trend: Optional[str] = None  # "up", "down", "neutral"
+
+
+class MetricCardBlock(BaseModel):
+    type: Literal["metric_card"] = "metric_card"
+    title: str
+    metrics: List[MetricCardItem]
+
+
+class TimeseriesPoint(BaseModel):
+    date: str
+    value: float
+    baseline: Optional[float] = None
+    anomaly: Optional[float] = None
+
+
+class TimeseriesChartBlock(BaseModel):
+    type: Literal["timeseries_chart"] = "timeseries_chart"
+    title: str
+    module: str
+    unit: str
+    points: List[TimeseriesPoint]
+    interpretation: Optional[str] = None
+
+
+class ComparisonTableBlock(BaseModel):
+    type: Literal["comparison_table"] = "comparison_table"
+    title: str
+    period_a: str
+    period_b: str
+    metric_label: str
+    unit: str
+    rows: List[Dict[str, Any]]
+
+
+class AnomalyAlertBlock(BaseModel):
+    type: Literal["anomaly_alert"] = "anomaly_alert"
+    level: str = "info"  # "info", "warning", "critical"
+    title: str
+    description: str
+    affected_region: Optional[str] = None
+
+
+class DataQualityBlock(BaseModel):
+    type: Literal["data_quality"] = "data_quality"
+    data_status: str = "demonstration_model"  # "observation" | "demonstration_model"
+    is_observation: bool = False
+    sensor: str
+    limitations: List[str]
+    uncertainty_note: Optional[str] = None
+
+
 class AssistantQueryResponse(BaseModel):
     response: str
-    scientific_grounding: List[ScientificCitation]
-    suggested_followups: List[str]
+    scientific_grounding: List[ScientificCitation] = Field(default_factory=list)
+    suggested_followups: List[str] = Field(default_factory=list)
     confidence_level: str = "High (NASA Earth Science Grounded)"
+    data_status: str = "demonstration_model"  # "observation" | "demonstration_model"
+    visual_blocks: List[Dict[str, Any]] = Field(default_factory=list)
+    tool_calls_executed: List[str] = Field(default_factory=list)
 
 
 # --- Dataset Documentation Schemas ---
