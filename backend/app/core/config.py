@@ -2,7 +2,6 @@ from functools import lru_cache
 from typing import List, Optional, Union
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy.engine import URL
 
 
 class Settings(BaseSettings):
@@ -70,25 +69,25 @@ class Settings(BaseSettings):
 
     @property
     def ASYNC_DATABASE_URL(self) -> str:
-        return URL.create(
-            "postgresql+asyncpg",
-            username=self.POSTGRES_USER,
-            password=self.POSTGRES_PASSWORD,
-            host=self.POSTGRES_SERVER,
-            port=self.POSTGRES_PORT,
-            database=self.POSTGRES_DB,
-        ).render_as_string(hide_password=False)
+        from urllib.parse import quote_plus
+        auth = ""
+        if self.POSTGRES_USER:
+            auth = quote_plus(self.POSTGRES_USER)
+            if self.POSTGRES_PASSWORD:
+                auth += f":{quote_plus(self.POSTGRES_PASSWORD)}"
+            auth += "@"
+        return f"postgresql+asyncpg://{auth}{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     @property
     def SYNC_DATABASE_URL(self) -> str:
-        return URL.create(
-            "postgresql+psycopg",
-            username=self.POSTGRES_USER,
-            password=self.POSTGRES_PASSWORD,
-            host=self.POSTGRES_SERVER,
-            port=self.POSTGRES_PORT,
-            database=self.POSTGRES_DB,
-        ).render_as_string(hide_password=False)
+        from urllib.parse import quote_plus
+        auth = ""
+        if self.POSTGRES_USER:
+            auth = quote_plus(self.POSTGRES_USER)
+            if self.POSTGRES_PASSWORD:
+                auth += f":{quote_plus(self.POSTGRES_PASSWORD)}"
+            auth += "@"
+        return f"postgresql+psycopg://{auth}{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
 
     # NASA Earthdata & Scientific APIs
     NASA_EARTHDATA_USERNAME: str = ""

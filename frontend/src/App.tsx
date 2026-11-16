@@ -353,10 +353,13 @@ export const App: React.FC = () => {
     [activeModule, activeModules]
   );
 
-  // Automatically synchronize satellite timeseries with active location and module
+  // Automatically synchronize satellite timeseries with active location and module (debounced to avoid rapid redundant API calls during panning)
   useEffect(() => {
     if (activeModule || activeModules.length > 0) {
-      loadTrendTimeseries(activeLocation.lat, activeLocation.lon, activeLocation.name);
+      const timer = setTimeout(() => {
+        loadTrendTimeseries(activeLocation.lat, activeLocation.lon, activeLocation.name);
+      }, 300);
+      return () => clearTimeout(timer);
     } else {
       setTrendStatus('idle');
     }

@@ -574,7 +574,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       if (sidePanelOpenRef.current && e.clientX > window.innerWidth - 390) {
         return;
       }
-      const trendDrawerHeight = trendsExpandedRef.current ? 520 : (typeof window !== 'undefined' && window.innerWidth >= 640 ? 390 : 330);
+      const trendDrawerHeight = trendsExpandedRef.current ? 580 : (typeof window !== 'undefined' && window.innerWidth >= 640 ? 390 : 330);
       if (trendsOpenRef.current && e.clientY > window.innerHeight - trendDrawerHeight) {
         return;
       }
@@ -909,7 +909,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     if (sidePanelOpenRef.current && e.clientX > window.innerWidth - 390) {
       return;
     }
-    const trendDrawerHeight = trendsExpandedRef.current ? 520 : (typeof window !== 'undefined' && window.innerWidth >= 640 ? 390 : 330);
+    const trendDrawerHeight = trendsExpandedRef.current ? 580 : (typeof window !== 'undefined' && window.innerWidth >= 640 ? 390 : 330);
     if (trendsOpenRef.current && e.clientY > window.innerHeight - trendDrawerHeight) {
       return;
     }
