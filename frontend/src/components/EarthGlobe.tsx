@@ -368,9 +368,10 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
     // 14. Surface-Anchored Progressive GIS Labels (Google Earth-style progressive LOD)
     const surfaceLabels = new SurfaceLabelManager({
       earthRadius,
-      maxVisibleLabels: 48,
-      maxActivePoolSize: 90,
+      maxVisibleLabels: 64,
+      maxActivePoolSize: 100,
     });
+    surfaceLabels.group.renderOrder = 10;
     earthGroup.add(surfaceLabels.group);
     surfaceLabelsRef.current = surfaceLabels;
 

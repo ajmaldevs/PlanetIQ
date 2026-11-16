@@ -116,13 +116,14 @@ export class SurfaceLabelManager {
 
   constructor(config: SurfaceLabelConfig) {
     this.earthRadius = config.earthRadius;
-    // Tightly hug surface (+0.22% above 1.900 radius) to completely eliminate parallax floating
-    this.surfaceRadius = config.earthRadius * 1.0022;
-    this.maxVisibleLabels = config.maxVisibleLabels || 48;
-    this.poolSize = config.maxActivePoolSize || 90;
+    // Sit cleanly above cloud mesh (clouds are at 1.004) with zero visible parallax float
+    this.surfaceRadius = config.earthRadius * 1.006;
+    this.maxVisibleLabels = config.maxVisibleLabels || 64;
+    this.poolSize = config.maxActivePoolSize || 100;
 
     this.group = new THREE.Group();
     this.group.name = 'surface-labels-group';
+    this.group.renderOrder = 10;
 
     this.initializePermanentLabels();
     this.initializeDynamicPool();
@@ -154,7 +155,12 @@ export class SurfaceLabelManager {
 
       this.group.add(sprite);
 
-      const targetPixelHeight = place.level === 1 ? 21 : 15.5;
+      // Calibrated target pixel height of sprite to achieve crisp 14-17px on-screen typography
+      const desiredOnScreenFontSize =
+        place.level === 1 ? (place.category === 'ocean' ? 15 : 17) : 13.8;
+      const canvasFontSize =
+        place.level === 1 ? (place.category === 'ocean' ? 32 : 36) : 34;
+      const targetPixelHeight = desiredOnScreenFontSize * (80 / canvasFontSize);
 
       this.permanentItems.push({
         place,
@@ -162,8 +168,8 @@ export class SurfaceLabelManager {
         targetOpacity: 0.0,
         currentOpacity: 0.0,
         worldPos: pos,
-        baseWidth: 440,
-        baseHeight: 76,
+        baseWidth: 512,
+        baseHeight: 80,
         targetPixelHeight,
       });
     }
@@ -191,9 +197,9 @@ export class SurfaceLabelManager {
         targetOpacity: 0,
         currentOpacity: 0,
         worldPos: new THREE.Vector3(),
-        baseWidth: 440,
-        baseHeight: 76,
-        targetPixelHeight: 13,
+        baseWidth: 512,
+        baseHeight: 80,
+        targetPixelHeight: 33.5,
       });
     }
   }
@@ -224,43 +230,53 @@ export class SurfaceLabelManager {
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
-    canvas.width = 440;
-    canvas.height = 76;
+    canvas.width = 512;
+    canvas.height = 80;
 
-    let fontSize = 21;
+    let fontSize = 34;
     let textColor = '#ffffff';
-    let letterSpacing = '0px';
+    let letterSpacing = '0.5px';
+    let fontWeight = '600';
 
     if (place.level === 1) {
-      fontSize = place.category === 'ocean' ? 22 : 23;
-      textColor = place.category === 'ocean' ? '#7dd3fc' : '#94a3b8';
+      fontSize = place.category === 'ocean' ? 32 : 36;
+      textColor = place.category === 'ocean' ? '#7dd3fc' : '#cbd5e1';
+      fontWeight = '700';
+      letterSpacing = '1.8px';
     } else if (place.level === 2) {
-      fontSize = 20;
+      fontSize = place.category === 'natural_feature' ? 32 : 34;
       textColor = place.category === 'natural_feature' ? '#38bdf8' : '#ffffff';
+      fontWeight = '600';
+      letterSpacing = '0.5px';
     } else if (place.level === 3) {
-      fontSize = 18;
+      fontSize = 30;
       textColor = '#fbbf24'; // Warm amber for administrative states/provinces
+      fontWeight = '600';
+      letterSpacing = '0.3px';
     } else if (place.level === 4) {
-      fontSize = 17;
-      textColor = '#f1f5f9';
+      fontSize = 28;
+      textColor = '#f8fafc';
+      fontWeight = '500';
+      letterSpacing = '0px';
     }
 
     const displayName = formatSurfacePlaceName(place.name);
 
-    ctx.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+    ctx.font = `${fontWeight} ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif`;
     if ('letterSpacing' in ctx) {
       (ctx as any).letterSpacing = letterSpacing;
     }
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    const centerX = 220;
-    const centerY = 38;
+    const centerX = 256;
+    const centerY = 40;
 
-    // Heavy dark outline for universal contrast over deserts, clouds and deep water
-    ctx.strokeStyle = 'rgba(4, 7, 14, 0.95)';
-    ctx.lineWidth = 5;
+    // Heavy dark outline for universal contrast over deserts, clouds, polar ice, and deep water
+    ctx.strokeStyle = 'rgba(5, 8, 16, 0.95)';
+    ctx.lineWidth = 6;
     ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
     ctx.strokeText(displayName, centerX, centerY);
 
     // Primary crisp text fill
@@ -310,69 +326,66 @@ export class SurfaceLabelManager {
 
     // Level 1: Continents & Major Oceans
     if (place.level === 1) {
-      if (dist >= 4.6) return 1.0;
-      if (dist <= 3.6) return 0.0;
-      // Fades out between 4.6 and 3.6 so continents yield focus to countries
-      return (dist - 3.6) / 1.0;
+      if (dist >= 4.5) return 1.0;
+      if (dist <= 3.2) return 0.0;
+      // Fades out between 4.5 and 3.2 so continents yield focus to countries
+      return (dist - 3.2) / 1.3;
     }
 
-    // Level 2: Sovereign Countries & Major Seas
+    // Level 2: Sovereign Countries & Major Natural Features
     if (place.level === 2) {
-      // Global view: completely hidden when d >= 5.2
-      if (dist >= 5.2) return 0.0;
+      const priority = place.priority || 50;
 
-      // Prominent global entities (top 15) fade in early between 5.2 and 4.75
-      const isGlobalProminent = (place.priority || 50) >= 88;
-      if (dist >= 4.75) {
-        if (!isGlobalProminent) return 0.0;
-        return ((5.2 - dist) / 0.45) * 0.55;
+      // Global overview (dist >= 5.0, including initial 5.35 overview):
+      // Display prominent sovereign nations (priority >= 80) across the globe
+      if (dist >= 5.0) {
+        if (priority < 80) return 0.0;
+        return 0.90;
       }
 
-      // Continental view (3.8 <= d < 4.75)
+      // Continental view (3.8 <= dist < 5.0)
       if (dist >= 3.8) {
-        const priority = place.priority || 50;
-        if (priority >= 75) return 1.0;
+        if (priority >= 70) return 0.95;
         if (priority >= 55) {
-          return Math.min(1.0, Math.max(0.0, (4.6 - dist) / 0.7));
+          return Math.min(0.95, Math.max(0.0, (4.8 - dist) / 0.8));
         }
-        // Small countries and island states fade in as d approaches 3.8
-        return Math.min(1.0, Math.max(0.0, (4.25 - dist) / 0.45));
+        return Math.min(0.9, Math.max(0.0, (4.4 - dist) / 0.6));
       }
 
-      // Country view (2.85 <= d < 3.8): Full clarity
+      // Country view (2.85 <= dist < 3.8): Full clarity
       if (dist >= 2.85) return 0.95;
 
-      // Regional view (d < 2.85): Soften slightly to let regional cities take focus
-      return Math.max(0.35, (dist - 2.15) / 0.7);
+      // Regional view (dist < 2.85): Soften slightly to let regional cities take focus
+      return Math.max(0.45, (dist - 2.15) / 0.7);
     }
 
     // Level 3: First-Level Administrative States & Provinces (e.g. Kerala, California, Bavaria)
     if (place.level === 3) {
-      if (dist >= 4.1) return 0.0;
-      if (dist >= 3.2) {
+      if (dist >= 4.2) return 0.0;
+      if (dist >= 3.3) {
         // Fades in as camera approaches country zoom
-        return Math.min(1.0, (4.1 - dist) / 0.85);
+        return Math.min(0.95, (4.2 - dist) / 0.9);
       }
       return 0.95;
     }
 
     // Level 4: Cities, Towns & Populated Places (e.g. Kozhikode, Mumbai, New York, Tokyo)
     if (place.level === 4) {
-      if (dist >= 3.5) return 0.0;
+      if (dist >= 3.8) return 0.0;
 
       const priority = place.priority || 50;
       const isMajorCity = priority >= 70;
 
-      // Major metropolises and national capitals fade in between 3.5 and 2.85
-      if (dist >= 2.85) {
+      // Major metropolises and national capitals fade in between 3.8 and 3.0
+      if (dist >= 3.0) {
         if (!isMajorCity) return 0.0;
-        return Math.min(0.95, Math.max(0.0, (3.5 - dist) / 0.6));
+        return Math.min(0.95, Math.max(0.0, (3.8 - dist) / 0.8));
       }
 
-      // Below 2.85 (Regional / Town view): Smaller cities, towns, and local features emerge
+      // Below 3.0 (Regional / Town view): Smaller cities, towns, and local features emerge
       if (isMajorCity) return 0.95;
 
-      let alpha = Math.min(1.0, Math.max(0.0, (2.85 - dist) / 0.55));
+      let alpha = Math.min(0.95, Math.max(0.0, (3.0 - dist) / 0.7));
 
       // Proximity boost to facing center: towns right under the camera are extra prominent
       if (angularDistFromCenter < 25) {
@@ -517,25 +530,23 @@ export class SurfaceLabelManager {
 
       const finalAlpha = limbFade * baseLod;
 
-      // Bounding box approximation on screen
-      const boxWidth =
-        place.level === 1 ? 130 : place.level === 2 ? 105 : place.level === 3 ? 92 : 82;
-      const boxHeight = 22;
+      // Accurate collision bounding box based on actual on-screen rendered text
+      const displayName = formatSurfacePlaceName(place.name);
+      const charWidth = place.level === 1 ? 9.5 : place.level === 2 ? 8.2 : 7.5;
+      const boxWidth = Math.min(180, Math.max(46, displayName.length * charWidth));
+      const boxHeight = place.level === 1 ? 24 : 20;
 
       // Priority boost for screen space sorting
       let effectivePriority = place.priority || 50;
-      if (place.level === 1) effectivePriority += 180;
-      else if (place.level === 2) {
-        effectivePriority += cameraDistance >= 3.8 ? 100 : 40;
-        // Small island developing states prioritized in continental view
-        if (cameraDistance < 4.8 && (place.population || 0) < 15000000) {
-          effectivePriority += 15;
-        }
+      if (place.level === 1) {
+        effectivePriority += 200;
+      } else if (place.level === 2) {
+        effectivePriority += cameraDistance >= 3.8 ? 100 : 50;
       } else if (place.level === 3) {
-        effectivePriority += 50;
+        effectivePriority += 40;
       } else if (place.level === 4) {
         // Boost cities close to the camera center
-        if (angularDist < 25) effectivePriority += 35;
+        if (angularDist < 25) effectivePriority += 25;
       }
 
       candidates.push({
@@ -649,7 +660,7 @@ export class SurfaceLabelManager {
         sprite.userData.place = place;
         sprite.userData.id = place.id;
 
-        const targetPixelHeight = place.level === 3 ? 14 : 13;
+        const targetPixelHeight = place.level === 3 ? 34.1 : 34.3;
         item.place = place;
         item.targetOpacity = 0;
         item.currentOpacity = sprite.material.opacity;
