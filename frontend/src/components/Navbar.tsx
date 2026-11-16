@@ -53,7 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               setCurrentView('explore');
               if (onResetExplore) onResetExplore();
             }}
-            className={`min-h-[36px] flex items-center justify-center px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 ${
+            className={`min-h-[36px] flex items-center justify-center px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all cursor-pointer focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-900 ${
               currentView === 'explore'
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
@@ -64,7 +64,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setCurrentView('catalog')}
-            className={`min-h-[36px] flex items-center justify-center px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 ${
+            className={`min-h-[36px] flex items-center justify-center px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all cursor-pointer focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-900 ${
               currentView === 'catalog'
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
@@ -75,7 +75,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setCurrentView('assistant')}
-            className={`min-h-[36px] flex items-center justify-center px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 ${
+            className={`min-h-[36px] flex items-center justify-center px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all cursor-pointer focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-900 ${
               currentView === 'assistant'
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
@@ -86,7 +86,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setCurrentView('about')}
-            className={`min-h-[36px] flex items-center justify-center px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 ${
+            className={`min-h-[36px] flex items-center justify-center px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all cursor-pointer focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-1 focus-visible:ring-offset-slate-900 ${
               currentView === 'about'
                 ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-sm'
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'

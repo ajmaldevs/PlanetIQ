@@ -1100,7 +1100,8 @@ function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricT
             <div className="flex items-center space-x-1 pl-1.5 border-l border-slate-800">
               <button
                 onClick={() => setActiveMetric('accumulated')}
-                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                aria-label="Display Accumulated Precipitation"
+                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none ${
                   activeMetric === 'accumulated'
                     ? 'bg-blue-500/20 text-blue-300 font-semibold'
                     : 'text-slate-400 hover:text-slate-200'
@@ -1110,7 +1111,8 @@ function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricT
               </button>
               <button
                 onClick={() => setActiveMetric('rate')}
-                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                aria-label="Display Precipitation Rate"
+                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none ${
                   activeMetric === 'rate'
                     ? 'bg-blue-500/20 text-blue-300 font-semibold'
                     : 'text-slate-400 hover:text-slate-200'
@@ -1125,7 +1127,8 @@ function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricT
             <div className="flex items-center space-x-1 pl-1.5 border-l border-slate-800">
               <button
                 onClick={() => setActiveMetric('ssha')}
-                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                aria-label="Display Sea Surface Height Anomaly (SSHA)"
+                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none ${
                   activeMetric === 'ssha'
                     ? 'bg-cyan-500/20 text-cyan-300 font-semibold'
                     : 'text-slate-400 hover:text-slate-200'
@@ -1135,7 +1138,8 @@ function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricT
               </button>
               <button
                 onClick={() => setActiveMetric('ssh')}
-                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                aria-label="Display Sea Surface Height (SSH)"
+                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none ${
                   activeMetric === 'ssh'
                     ? 'bg-cyan-500/20 text-cyan-300 font-semibold'
                     : 'text-slate-400 hover:text-slate-200'
@@ -1150,7 +1154,8 @@ function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricT
             <div className="flex items-center space-x-1 pl-1.5 border-l border-slate-800">
               <button
                 onClick={() => setActiveMetric('ndvi')}
-                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                aria-label="Display Normalized Difference Vegetation Index (NDVI)"
+                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none ${
                   activeMetric === 'ndvi'
                     ? 'bg-emerald-500/20 text-emerald-300 font-semibold'
                     : 'text-slate-400 hover:text-slate-200'
@@ -1160,7 +1165,8 @@ function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricT
               </button>
               <button
                 onClick={() => setActiveMetric('evi')}
-                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                aria-label="Display Enhanced Vegetation Index (EVI)"
+                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none ${
                   activeMetric === 'evi'
                     ? 'bg-emerald-500/20 text-emerald-300 font-semibold'
                     : 'text-slate-400 hover:text-slate-200'

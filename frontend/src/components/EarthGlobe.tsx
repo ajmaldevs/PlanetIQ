@@ -184,11 +184,24 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
 
   const [isReady, setIsReady] = useState(false);
 
-  // Time-based camera fly-to with cubic easing and shortest angular arc
+  // Time-based camera fly-to with cubic easing, shortest angular arc, and reduced-motion support
   const flyToCoordinates = (lat: number, lon: number, targetDist?: number, duration: number = 1100) => {
     const targetY = -((lon + 90) * (Math.PI / 180));
     const targetX = Math.max(-1.15, Math.min(1.15, lat * (Math.PI / 180)));
     const diffY = getShortestAngleDelta(currentRotation.current.y, targetY);
+    const resolvedDist = targetDist !== undefined ? Math.max(minDistance, Math.min(maxDistance, targetDist)) : currentCameraDistance.current;
+
+    // Respect WCAG 2.3.3 / OS prefers-reduced-motion preference: jump immediately without spinning
+    const isReducedMotion = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (isReducedMotion) {
+      currentRotation.current.x = targetX;
+      currentRotation.current.y = targetY;
+      currentCameraDistance.current = resolvedDist;
+      activeTransitionRef.current = null;
+      interactionStateRef.current = 'idle';
+      lastInteractionTime.current = Date.now();
+      return;
+    }
 
     activeTransitionRef.current = {
       startTime: performance.now(),
@@ -198,7 +211,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       startDist: currentCameraDistance.current,
       targetX,
       targetY: currentRotation.current.y + diffY,
-      targetDist: targetDist !== undefined ? Math.max(minDistance, Math.min(maxDistance, targetDist)) : currentCameraDistance.current,
+      targetDist: resolvedDist,
     };
     interactionStateRef.current = 'transitioning';
     lastInteractionTime.current = Date.now();
@@ -1223,7 +1236,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
               zoomIn();
             }}
             title="Zoom In (or double-click surface)"
-            className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
+            aria-label="Zoom in on 3D globe"
+            className="min-h-[36px] min-w-[36px] flex items-center justify-center p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
           >
             <ZoomIn className="h-4 w-4" />
           </button>
@@ -1233,7 +1247,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
               zoomOut();
             }}
             title="Zoom Out"
-            className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors"
+            aria-label="Zoom out of 3D globe"
+            className="min-h-[36px] min-w-[36px] flex items-center justify-center p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
           >
             <ZoomOut className="h-4 w-4" />
           </button>
@@ -1243,7 +1258,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
               recenterOnSelected();
             }}
             title="Re-center on Selected Place"
-            className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-cyan-400 transition-colors"
+            aria-label="Re-center camera on selected location"
+            className="min-h-[36px] min-w-[36px] flex items-center justify-center p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-cyan-400 transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
           >
             <Navigation className="h-4 w-4" />
           </button>
@@ -1253,7 +1269,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
               orientNorthUp();
             }}
             title="Reset Orientation (North Up)"
-            className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-cyan-400 transition-colors"
+            aria-label="Reset orientation to north-up"
+            className="min-h-[36px] min-w-[36px] flex items-center justify-center p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-cyan-400 transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
           >
             <Compass className="h-4 w-4" />
           </button>
@@ -1263,7 +1280,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
               resetOrientation();
             }}
             title="Reset Global View"
-            className="p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-cyan-400 transition-colors"
+            aria-label="Reset camera to global overview"
+            className="min-h-[36px] min-w-[36px] flex items-center justify-center p-2 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-cyan-400 transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
           >
             <GlobeIcon className="h-4 w-4" />
           </button>
