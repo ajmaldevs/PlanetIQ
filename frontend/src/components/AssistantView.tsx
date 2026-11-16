@@ -119,29 +119,29 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
   }, [initialPrompt]);
 
   return (
-    <div className="max-w-4xl mx-auto w-full flex flex-col h-[calc(100vh-140px)] min-h-[420px] max-h-[760px] bg-[#090d16]/90 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
+    <div className="max-w-4xl mx-auto w-full flex flex-col h-[calc(100dvh-7.5rem)] min-h-[380px] max-h-[780px] bg-[#090d16]/90 border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl backdrop-blur-md">
       {/* Header */}
-      <div className="bg-[#0b0f19] border-b border-slate-800/80 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="h-8 w-8 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400">
-            <Sparkles className="h-4 w-4" />
+      <div className="bg-[#0b0f19] border-b border-slate-800/80 px-3.5 sm:px-6 py-3 sm:py-4 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
+        <div className="flex items-center space-x-2.5 sm:space-x-3">
+          <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+            <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-white">TerraLens AI Assistant</h3>
-            <p className="text-[11px] text-slate-400">
+            <h3 className="text-xs sm:text-sm font-semibold text-white">TerraLens AI Assistant</h3>
+            <p className="text-[10px] sm:text-[11px] text-slate-400 line-clamp-1">
               Dataset guidance for SWOT, GPM IMERG, and MODIS
             </p>
           </div>
         </div>
 
         {/* Current Active Context Badge */}
-        <div className="text-[11px] font-mono text-slate-400 bg-slate-900/80 px-3 py-1 rounded-full border border-slate-800">
+        <div className="text-[10px] sm:text-[11px] font-mono text-slate-400 bg-slate-900/80 px-2.5 sm:px-3 py-1 rounded-full border border-slate-800 shrink-0">
           Context: <span className="text-cyan-400 capitalize">{activeModule || 'Global Systems'}</span>
         </div>
       </div>
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4">
         <DataNotice type="demo" title="Assistant data scope">
           Answers can explain dataset methods, but this build has no ingested NASA observations. Its map values and time series are demonstrations.
         </DataNotice>
@@ -151,10 +151,10 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
             className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
           >
             <div
-              className={`max-w-2xl rounded-2xl p-4 text-xs sm:text-sm leading-relaxed space-y-3 ${
+              className={`max-w-2xl rounded-2xl p-3.5 sm:p-4 text-xs sm:text-sm leading-relaxed space-y-3 ${
                 msg.role === 'user'
-                  ? 'bg-cyan-600 text-white ml-8 shadow-md'
-                  : 'bg-[#0f1422] border border-slate-800/80 text-slate-200 mr-8 shadow-lg'
+                  ? 'bg-cyan-600 text-white ml-2 sm:ml-6 md:ml-8 shadow-md'
+                  : 'bg-[#0f1422] border border-slate-800/80 text-slate-200 mr-2 sm:mr-6 md:mr-8 shadow-lg'
               }`}
             >
               <div className="flex items-center justify-between text-[10px] text-slate-400 border-b border-slate-700/30 pb-1">
@@ -234,7 +234,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
       </div>
 
       {/* Input Bar */}
-      <div className="p-4 bg-[#0b0f19] border-t border-slate-800/80">
+      <div className="p-3 sm:p-4 bg-[#0b0f19] border-t border-slate-800/80">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -247,12 +247,12 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
             value={inputPrompt}
             onChange={(e) => setInputPrompt(e.target.value)}
             placeholder="Ask anything about Earth's ocean, atmosphere, land, or satellite observations..."
-            className="flex-1 bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-hidden focus:border-cyan-500 font-sans"
+            className="flex-1 bg-slate-900 border border-slate-700/80 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-hidden focus:border-cyan-500 font-sans"
           />
           <button
             type="submit"
             disabled={loading || !inputPrompt.trim()}
-            className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-slate-950 p-3 rounded-xl font-semibold transition-all shadow-md shadow-cyan-500/20"
+            className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-40 text-slate-950 p-2.5 sm:p-3 rounded-xl font-semibold transition-all shadow-md shadow-cyan-500/20 shrink-0 min-w-[42px] min-h-[42px] flex items-center justify-center"
           >
             <Send className="h-4 w-4" />
           </button>

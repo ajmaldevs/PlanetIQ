@@ -293,3 +293,17 @@ test('timeline stays above the expanded trend workspace', async ({ page }) => {
   if (!timelineBounds || !drawerBounds) throw new Error('Timeline or trends drawer is not laid out');
   expect(timelineBounds.y + timelineBounds.height).toBeLessThanOrEqual(drawerBounds.y + 1);
 });
+
+test('workspace interface stays inside the viewport without overflow across all breakpoints', async ({ page }) => {
+  const targetWidths = [320, 375, 390, 430, 768, 1024, 1280, 1366, 1440, 1920];
+  await page.goto('/');
+  await page.getByRole('button', { name: /OCEAN/ }).click();
+  await expect(page.getByTitle('Return to global overview')).toBeVisible();
+
+  for (const width of targetWidths) {
+    const height = width < 768 ? 720 : width < 1440 ? 800 : 1080;
+    await page.setViewportSize({ width, height });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+    expect(overflow, `horizontal overflow in workspace at ${width}px`).toBeTruthy();
+  }
+});

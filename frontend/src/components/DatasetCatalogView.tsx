@@ -2,6 +2,76 @@ import React, { useEffect, useState } from 'react';
 import { fetchDatasetCatalog, DatasetCatalogItem } from '../services/api';
 import { BookOpen, ExternalLink, AlertCircle } from 'lucide-react';
 
+const FALLBACK_DATASETS: DatasetCatalogItem[] = [
+  {
+    id: 'SWOT_L2_LR_SSH',
+    name: 'SWOT KaRIn Low Rate Ocean Sea Surface Height (Option A)',
+    module: 'ocean',
+    agency: 'NASA PO.DAAC / CNES / CSA / UKSA',
+    sensor: 'Ka-band Radar Interferometer (KaRIn) and nadir altimeter',
+    spatial_resolution: '2 km gridded / 120 km swath with 20 km nadir gap',
+    temporal_resolution: '21-day repeat orbit (nominal science phase)',
+    variables: [
+      { name: 'ssha', description: 'Sea surface height anomaly relative to mean sea surface', unit: 'm' },
+      { name: 'eke', description: 'Eddy kinetic energy dissipation proxy', unit: 'cm²/s²' },
+    ],
+    units: ['meters (m)', 'cm²/s²'],
+    scientific_purpose: 'High-resolution 2D radar mapping of sub-mesoscale ocean eddies (15-100 km), kinetic energy dissipation, and boundary currents with ±2.4 cm target precision.',
+    scientific_limitations: [
+      'Nadir gap of approximately 20 km directly beneath satellite orbit track.',
+      'High sensitivity to sea-state bias (SSB) and significant wave height corrections.',
+      'Tidal model inaccuracies in shallow coastal waters and semi-enclosed seas.'
+    ],
+    cmr_concept_id: 'C2147820108-POCLOUD',
+    documentation_url: 'https://podaac.jpl.nasa.gov/swot',
+  },
+  {
+    id: 'GPM_3IMERGM',
+    name: 'GPM IMERG Final Monthly Precipitation (GPM_3IMERGM v07)',
+    module: 'atmosphere',
+    agency: 'NASA GES DISC / JAXA',
+    sensor: 'GPM Microwave Imager (GMI), Dual-frequency Radar (DPR) and constellation radiometers',
+    spatial_resolution: '0.1° × 0.1° (~10 km at the equator)',
+    temporal_resolution: 'Monthly (Final; GPCC gauge calibrated)',
+    variables: [
+      { name: 'precipitation', description: 'Monthly precipitation liquid depth accumulation', unit: 'mm' },
+      { name: 'precipitationCal', description: 'Multi-satellite calibrated precipitation rate', unit: 'mm/hr' },
+    ],
+    units: ['mm (depth)', 'mm/hr (rate)'],
+    scientific_purpose: 'Global precipitation measurement combining multi-satellite radar/radiometer observations with monthly ground gauge calibration for flood, drought, and monsoon climate analysis.',
+    scientific_limitations: [
+      'CRITICAL UNIT RULE: Precipitation rate (mm/hr) must never be conflated with monthly liquid accumulation depth (mm).',
+      'Complex mountainous topography can cause radar beam blockage and precipitation undercatch.',
+      'Passive microwave retrieval uncertainty over frozen or snow-covered land surfaces.'
+    ],
+    cmr_concept_id: 'C2723754864-GES_DISC',
+    documentation_url: 'https://gpm.nasa.gov/data/imerg',
+  },
+  {
+    id: 'MOD13C2',
+    name: 'MODIS Terra/Aqua Monthly Global Vegetation Indices (MOD13C2 v061)',
+    module: 'land',
+    agency: 'NASA LP DAAC / USGS',
+    sensor: 'Moderate Resolution Imaging Spectroradiometer (MODIS)',
+    spatial_resolution: '0.05° × 0.05° Climate Modeling Grid (~5.6 km at equator)',
+    temporal_resolution: 'Monthly composite',
+    variables: [
+      { name: 'NDVI', description: 'Normalized Difference Vegetation Index', unit: 'dimensionless' },
+      { name: 'EVI', description: 'Enhanced Vegetation Index with atmospheric resistance', unit: 'dimensionless' },
+      { name: 'VCI', description: 'Vegetation Condition Index relative to historical min/max', unit: 'percent' },
+    ],
+    units: ['dimensionless ratio (-0.20 to 1.00)', 'VCI percent (0-100%)'],
+    scientific_purpose: 'Continuous global monitoring of vegetative canopy phenology, agricultural crop conditions, deforestation, and vegetative drought stress.',
+    scientific_limitations: [
+      'Persistent cloud cover in equatorial rainforests requires temporal cloud-clearing compositing.',
+      'Atmospheric aerosols and biomass burning smoke can suppress surface reflectance in red bands.',
+      'Scale factor of 0.0001 is applied to convert raw HDF integers into physical dimensionless ratios.'
+    ],
+    cmr_concept_id: 'C203669660-LPDAAC_ECS',
+    documentation_url: 'https://lpdaac.usgs.gov/products/mod13c2v061/',
+  },
+];
+
 export const DatasetCatalogView: React.FC = () => {
   const [datasets, setDatasets] = useState<DatasetCatalogItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -9,11 +79,12 @@ export const DatasetCatalogView: React.FC = () => {
   useEffect(() => {
     fetchDatasetCatalog()
       .then((res) => {
-        setDatasets(res);
+        setDatasets(res && res.length > 0 ? res : FALLBACK_DATASETS);
         setLoading(false);
       })
       .catch((err) => {
-        console.error('Error fetching catalog:', err);
+        console.warn('Backend catalog offline, using built-in catalog documentation:', err);
+        setDatasets(FALLBACK_DATASETS);
         setLoading(false);
       });
   }, []);
@@ -40,7 +111,7 @@ export const DatasetCatalogView: React.FC = () => {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {datasets.map((ds) => (
             <div
               key={ds.id}

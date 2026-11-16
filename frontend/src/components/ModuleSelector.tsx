@@ -57,7 +57,7 @@ export const ModuleSelector: React.FC<ModuleSelectorProps> = ({
           <button
             key={m.id}
             onClick={() => onSelectModule(m.id)}
-            className={`text-left p-2.5 sm:p-4 md:p-5 rounded-xl border bg-[#0b0e17]/85 backdrop-blur-sm transition-all duration-200 group flex flex-col justify-between space-y-1.5 sm:space-y-4 shadow-lg cursor-pointer ${
+            className={`text-left p-2.5 sm:p-4 md:p-5 rounded-xl border bg-[#0b0e17]/85 backdrop-blur-sm transition-all duration-200 group flex flex-col justify-between space-y-1.5 sm:space-y-4 shadow-lg cursor-pointer min-h-[56px] sm:min-h-[80px] focus-visible:ring-2 focus-visible:ring-cyan-400 ${
               isSelected
                 ? `${m.activeBorder} shadow-cyan-500/5`
                 : `border-slate-800/80 ${m.color}`
@@ -73,7 +73,7 @@ export const ModuleSelector: React.FC<ModuleSelectorProps> = ({
                   <ArrowUpRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                 </span>
               </div>
-              <h3 className={`text-xs sm:text-sm font-bold tracking-wider ${m.accentText} truncate`}>
+              <h3 className={`text-xs sm:text-sm font-bold tracking-wide sm:tracking-wider ${m.accentText} truncate`}>
                 {m.title}
               </h3>
               <p className="hidden sm:block text-xs text-slate-400 leading-relaxed font-normal">

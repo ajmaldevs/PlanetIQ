@@ -16,52 +16,52 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
   return (
     <div className="max-w-5xl mx-auto w-full space-y-6 py-4">
       {/* Tab Navigation Pill Bar */}
-      <div className="flex flex-wrap items-center gap-2 p-1.5 rounded-2xl bg-[#090d16]/90 border border-slate-800/80 backdrop-blur-md">
+      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 p-1.5 rounded-2xl bg-[#090d16]/90 border border-slate-800/80 backdrop-blur-md">
         <button
           onClick={() => setActiveTab('overview')}
-          className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+          className={`flex items-center space-x-2 px-3 sm:px-3.5 py-2 min-h-[38px] rounded-xl text-xs font-semibold transition-all ${
             activeTab === 'overview'
               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
           }`}
         >
-          <BookOpen className="h-3.5 w-3.5" />
+          <BookOpen className="h-3.5 w-3.5 shrink-0" />
           <span>Platform Overview</span>
         </button>
 
         <button
           onClick={() => setActiveTab('catalog')}
-          className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+          className={`flex items-center space-x-2 px-3 sm:px-3.5 py-2 min-h-[38px] rounded-xl text-xs font-semibold transition-all ${
             activeTab === 'catalog'
               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
           }`}
         >
-          <Layers className="h-3.5 w-3.5" />
+          <Layers className="h-3.5 w-3.5 shrink-0" />
           <span>Dataset Catalog & CMR</span>
         </button>
 
         <button
           onClick={() => setActiveTab('methodology')}
-          className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+          className={`flex items-center space-x-2 px-3 sm:px-3.5 py-2 min-h-[38px] rounded-xl text-xs font-semibold transition-all ${
             activeTab === 'methodology'
               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
           }`}
         >
-          <Cpu className="h-3.5 w-3.5" />
+          <Cpu className="h-3.5 w-3.5 shrink-0" />
           <span>Methodology & Pipelines</span>
         </button>
 
         <button
           onClick={() => setActiveTab('teleconnections')}
-          className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+          className={`flex items-center space-x-2 px-3 sm:px-3.5 py-2 min-h-[38px] rounded-xl text-xs font-semibold transition-all ${
             activeTab === 'teleconnections'
               ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
               : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
           }`}
         >
-          <Orbit className="h-3.5 w-3.5" />
+          <Orbit className="h-3.5 w-3.5 shrink-0" />
           <span>Planetary Teleconnections</span>
         </button>
       </div>
