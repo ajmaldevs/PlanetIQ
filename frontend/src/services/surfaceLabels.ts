@@ -116,8 +116,8 @@ export class SurfaceLabelManager {
 
   constructor(config: SurfaceLabelConfig) {
     this.earthRadius = config.earthRadius;
-    // Sit cleanly above cloud mesh (clouds are at 1.004) with zero visible parallax float
-    this.surfaceRadius = config.earthRadius * 1.006;
+    // Tightly hug surface (+0.22% above 1.900 radius, 1.0022x) with zero visible parallax float
+    this.surfaceRadius = config.earthRadius * 1.0022;
     this.maxVisibleLabels = config.maxVisibleLabels || 64;
     this.poolSize = config.maxActivePoolSize || 100;
 
@@ -326,25 +326,24 @@ export class SurfaceLabelManager {
 
     // Level 1: Continents & Major Oceans
     if (place.level === 1) {
-      if (dist >= 4.5) return 1.0;
-      if (dist <= 3.2) return 0.0;
-      // Fades out between 4.5 and 3.2 so continents yield focus to countries
-      return (dist - 3.2) / 1.3;
+      if (dist >= 4.6) return 1.0;
+      if (dist <= 3.6) return 0.0;
+      // Fades out between 4.6 and 3.6 so continents yield focus to countries
+      return (dist - 3.6) / 1.0;
     }
 
     // Level 2: Sovereign Countries & Major Natural Features
     if (place.level === 2) {
-      const priority = place.priority || 50;
-
-      // Global overview (dist >= 5.0, including initial 5.35 overview):
+      // In deep space overview (dist >= 5.2):
       // Display prominent sovereign nations (priority >= 80) across the globe
-      if (dist >= 5.0) {
-        if (priority < 80) return 0.0;
-        return 0.90;
+      if (dist >= 5.2) {
+        const priority = place.priority || 50;
+        return priority >= 80 ? 0.90 : 0.0;
       }
 
-      // Continental view (3.8 <= dist < 5.0)
+      // Continental view (3.8 <= dist < 5.2)
       if (dist >= 3.8) {
+        const priority = place.priority || 50;
         if (priority >= 70) return 0.95;
         if (priority >= 55) {
           return Math.min(0.95, Math.max(0.0, (4.8 - dist) / 0.8));
@@ -361,31 +360,31 @@ export class SurfaceLabelManager {
 
     // Level 3: First-Level Administrative States & Provinces (e.g. Kerala, California, Bavaria)
     if (place.level === 3) {
-      if (dist >= 4.2) return 0.0;
-      if (dist >= 3.3) {
+      if (dist >= 4.1) return 0.0;
+      if (dist >= 3.2) {
         // Fades in as camera approaches country zoom
-        return Math.min(0.95, (4.2 - dist) / 0.9);
+        return Math.min(0.95, (4.1 - dist) / 0.9);
       }
       return 0.95;
     }
 
     // Level 4: Cities, Towns & Populated Places (e.g. Kozhikode, Mumbai, New York, Tokyo)
     if (place.level === 4) {
-      if (dist >= 3.8) return 0.0;
+      if (dist >= 3.5) return 0.0;
 
       const priority = place.priority || 50;
       const isMajorCity = priority >= 70;
 
-      // Major metropolises and national capitals fade in between 3.8 and 3.0
-      if (dist >= 3.0) {
+      // Major metropolises and national capitals fade in between 3.5 and 2.85
+      if (dist >= 2.85) {
         if (!isMajorCity) return 0.0;
-        return Math.min(0.95, Math.max(0.0, (3.8 - dist) / 0.8));
+        return Math.min(0.95, Math.max(0.0, (3.5 - dist) / 0.65));
       }
 
-      // Below 3.0 (Regional / Town view): Smaller cities, towns, and local features emerge
+      // Below 2.85 (Regional / Town view): Smaller cities, towns, and local features emerge
       if (isMajorCity) return 0.95;
 
-      let alpha = Math.min(0.95, Math.max(0.0, (3.0 - dist) / 0.7));
+      let alpha = Math.min(0.95, Math.max(0.0, (2.85 - dist) / 0.7));
 
       // Proximity boost to facing center: towns right under the camera are extra prominent
       if (angularDistFromCenter < 25) {
