@@ -186,7 +186,7 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
     <aside
       className={`fixed bottom-0 left-0 z-25 bg-[#080c16]/98 border-t border-slate-800/90 shadow-2xl backdrop-blur-2xl transition-all duration-300 ease-in-out flex flex-col pointer-events-auto ${
         sidePanelOpen ? 'right-0 lg:right-[390px]' : 'right-0'
-      } ${isExpanded ? 'h-[580px] max-h-[90vh]' : 'h-88 sm:h-96'}`}
+      } ${isExpanded ? 'h-[580px] max-h-[88dvh]' : 'h-80 sm:h-96 max-h-[60dvh]'}`}
       aria-label="Unified Earth System Time & Trends Workspace"
     >
       {/* Drawer Top Header Bar */}
@@ -204,34 +204,35 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
           <div className="flex bg-slate-900/90 p-0.5 rounded-lg border border-slate-800 text-[11px] font-medium shrink-0">
             <button
               onClick={() => setActiveTab('trends')}
-              className={`px-2.5 py-1 rounded-md transition-all ${
+              className={`px-2 sm:px-2.5 py-1 rounded-md transition-all cursor-pointer ${
                 activeTab === 'trends'
                   ? 'bg-cyan-500/20 text-cyan-300 font-semibold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Synchronized Trends
+              <span className="hidden sm:inline">Synchronized </span>Trends
             </button>
             <button
               onClick={() => setActiveTab('comparison')}
-              className={`px-2.5 py-1 rounded-md transition-all flex items-center space-x-1 ${
+              className={`px-2 sm:px-2.5 py-1 rounded-md transition-all flex items-center space-x-1 cursor-pointer ${
                 activeTab === 'comparison'
                   ? 'bg-cyan-500/20 text-cyan-300 font-semibold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <ArrowRightLeft className="h-3 w-3" />
-              <span>Compare Periods (A vs B)</span>
+              <ArrowRightLeft className="h-3 w-3 shrink-0" />
+              <span className="hidden sm:inline">Compare Periods (A vs B)</span>
+              <span className="sm:hidden">Compare</span>
             </button>
             <button
               onClick={() => setActiveTab('teleconnections')}
-              className={`px-2.5 py-1 rounded-md transition-all ${
+              className={`px-2 sm:px-2.5 py-1 rounded-md transition-all cursor-pointer ${
                 activeTab === 'teleconnections'
                   ? 'bg-cyan-500/20 text-cyan-300 font-semibold shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              Coupled Teleconnections
+              <span className="hidden sm:inline">Coupled </span>Teleconnections
             </button>
           </div>
         </div>

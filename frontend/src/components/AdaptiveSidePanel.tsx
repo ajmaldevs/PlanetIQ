@@ -286,7 +286,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
 
       {/* Docked Desktop Sidebar / Slide-Over Tablet Drawer / Bottom Sheet Mobile Drawer */}
       <aside
-        className={`fixed inset-x-0 bottom-0 top-auto rounded-t-3xl max-h-[82vh] border-t border-slate-800/80 border-l-0 z-40 sm:inset-y-0 sm:right-0 sm:left-auto sm:top-0 sm:rounded-none sm:border-l sm:border-t-0 sm:max-h-none sm:w-[380px] lg:static lg:w-[390px] lg:z-20 flex flex-col shrink-0 bg-[#080c16]/98 backdrop-blur-2xl shadow-2xl transition-transform duration-300 ease-in-out pointer-events-auto overflow-hidden ${
+        className={`fixed inset-x-0 bottom-0 top-auto rounded-t-3xl max-h-[82dvh] border-t border-slate-800/80 border-l-0 z-40 sm:inset-y-0 sm:right-0 sm:left-auto sm:top-0 sm:rounded-none sm:border-l sm:border-t-0 sm:max-h-none sm:w-[380px] lg:static lg:w-[390px] lg:z-20 flex flex-col shrink-0 bg-[#080c16]/98 backdrop-blur-2xl shadow-2xl transition-transform duration-300 ease-in-out pointer-events-auto overflow-hidden ${
           isOpen ? 'translate-y-0 sm:translate-x-0' : 'translate-y-full sm:translate-x-full lg:hidden'
         }`}
         aria-label="Adaptive Scientific Context Panel"
@@ -295,7 +295,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
         <div className="w-12 h-1 rounded-full bg-slate-700/80 mx-auto my-2 sm:hidden shrink-0" />
 
         {/* ================= 1. HEADER: LOCATION & SCALE ================= */}
-        <div className="p-4 border-b border-slate-800/80 bg-[#0a0f1c]/90 shrink-0">
+        <div className="p-3.5 sm:p-4 border-b border-slate-800/80 bg-[#0a0f1c]/90 shrink-0">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
               <div className="flex items-center space-x-2 mb-1">
@@ -321,7 +321,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                 <button
                   onClick={onOpenDatasetInfo}
                   title="NASA Dataset Documentation"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition-colors"
+                  className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition-colors"
                 >
                   <FileText className="h-4 w-4" />
                 </button>
@@ -329,14 +329,14 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
               <button
                 onClick={() => setIsMinimized(!isMinimized)}
                 title={isMinimized ? 'Expand full details' : 'Collapse panel'}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
               >
                 {isMinimized ? <Maximize2 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
               </button>
               <button
                 onClick={onClose}
                 title="Close context panel"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
               >
                 <X className="h-4 w-4" />
               </button>

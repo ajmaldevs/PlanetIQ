@@ -88,6 +88,7 @@ export const App: React.FC = () => {
     }
   }, []);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
+  const [dataNoticeDismissed, setDataNoticeDismissed] = useState(false);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
   const [qualityMode, setQualityMode] = useState<QualityMode>(() => adaptiveQuality.getMode());
   const [sidePanelOpen, setSidePanelOpen] = useState<boolean>(false);
@@ -595,9 +596,10 @@ export const App: React.FC = () => {
               ? 'bottom-[min(520px,75dvh)]'
               : 'bottom-[min(320px,55dvh)] sm:bottom-[min(384px,60dvh)]'
             : 'bottom-0'
+        } ${
+          activeModule !== null ? 'top-[156px] md:top-[116px]' : 'top-16'
         }`}
         style={{
-          top: activeModule !== null ? '116px' : '64px',
           left: '0px',
         }}
       >
@@ -642,9 +644,9 @@ export const App: React.FC = () => {
       />
 
       {/* 2. Main Content Area */}
-      {/* Compact Left-Side Module Selector (Active during exploration or when zoomed in) */}
-      {(activeModule !== null || !isIntroVisible) && currentView === 'explore' && (
-        <div className="fixed left-3 sm:left-6 top-20 sm:top-24 z-30 flex flex-col space-y-1.5 p-1.5 rounded-2xl bg-[#080c16]/90 border border-slate-800/80 backdrop-blur-md shadow-2xl animate-fade-scale">
+      {/* Compact Left-Side Module Selector (Active on global overview when intro is dismissed or zoomed in) */}
+      {activeModule === null && !isIntroVisible && currentView === 'explore' && (
+        <div className="fixed left-3 sm:left-6 top-24 sm:top-28 z-30 flex flex-col space-y-1.5 p-1.5 rounded-2xl bg-[#080c16]/90 border border-slate-800/80 backdrop-blur-md shadow-2xl animate-fade-scale">
           <div className="px-2 py-0.5 text-[9px] font-mono uppercase tracking-wider text-slate-500 font-semibold hidden sm:block">
             Systems
           </div>
@@ -711,7 +713,7 @@ export const App: React.FC = () => {
                   : 'opacity-0 -translate-y-8 max-h-0 py-0 my-0 overflow-hidden pointer-events-none'
               }`}
             >
-              <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white drop-shadow-lg">
+              <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight text-white drop-shadow-lg">
                 Explore Earth's changing systems.
               </h1>
               <p className="mt-2 inline-block rounded-lg bg-[#05070b]/65 px-3 py-2 text-sm sm:text-base text-slate-200 font-normal leading-relaxed max-w-lg mx-auto shadow-lg backdrop-blur-sm">
@@ -822,194 +824,230 @@ export const App: React.FC = () => {
           /* ================= EXPLORE WORKSPACE STATE ================= */
           <div className="flex-1 flex flex-col overflow-hidden relative pointer-events-none">
             {/* Dedicated Workspace Sub-Header Bar (Toolbar) */}
-            <div className="h-13 bg-[#080c16]/95 border-b border-slate-800/80 px-3 sm:px-4 flex items-center justify-between gap-2 z-30 shrink-0 backdrop-blur-md pointer-events-auto">
-              {/* Left: Overview back + Module switcher pills */}
-              <div className="flex items-center space-x-2 shrink-0">
-                <button
-                  onClick={() => {
-                    setActiveModule(null);
-                    setActiveModules([]);
-                    setSelectedFeature(null);
-                    setSelectedPlace(null);
-                    setSidePanelOpen(false);
-                    setShowTrends(false);
-                    setTrendsExpanded(false);
-                  }}
-                  className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-800 transition-colors"
-                  title="Return to global overview"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Overview</span>
-                </button>
-
-                <div className="h-5 w-px bg-slate-800 hidden sm:block" />
-
-                {/* Unified System Selector Tabs & Multi-System Toggles */}
-                <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-900/90 border border-slate-800">
+            <div className="bg-[#080c16]/95 border-b border-slate-800/80 px-2 sm:px-4 py-1.5 md:py-0 md:h-13 flex flex-col md:flex-row md:items-center justify-between gap-1.5 md:gap-2 z-30 shrink-0 backdrop-blur-md pointer-events-auto">
+              {/* Row 1 on mobile: Overview back + Systems switcher + (on mobile: 2D/3D switch) */}
+              <div className="flex items-center justify-between w-full md:w-auto shrink-0 gap-1 sm:gap-2">
+                <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
                   <button
-                    onClick={() => handleToggleModule('ocean')}
-                    className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                      activeModules.includes('ocean')
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                    title="Toggle Ocean (SWOT Altimetry)"
+                    onClick={() => {
+                      setActiveModule(null);
+                      setActiveModules([]);
+                      setSelectedFeature(null);
+                      setSelectedPlace(null);
+                      setSidePanelOpen(false);
+                      setShowTrends(false);
+                      setTrendsExpanded(false);
+                    }}
+                    className="flex items-center space-x-1 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-300 hover:text-white bg-slate-900/90 hover:bg-slate-800 border border-slate-800 transition-colors"
+                    title="Return to global overview"
                   >
-                    <Waves className="h-3.5 w-3.5 text-cyan-400" />
-                    <span className="capitalize">Ocean</span>
+                    <ArrowLeft className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Overview</span>
                   </button>
 
-                  <button
-                    onClick={() => handleToggleModule('atmosphere')}
-                    className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                      activeModules.includes('atmosphere')
-                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                    title="Toggle Atmosphere (GPM Precipitation)"
-                  >
-                    <CloudRain className="h-3.5 w-3.5 text-blue-400" />
-                    <span className="capitalize">Atmosphere</span>
-                  </button>
+                  <div className="h-5 w-px bg-slate-800 hidden sm:block" />
 
-                  <button
-                    onClick={() => handleToggleModule('land')}
-                    className={`flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
-                      activeModules.includes('land')
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                    title="Toggle Land (MODIS Vegetation)"
-                  >
-                    <Trees className="h-3.5 w-3.5 text-emerald-400" />
-                    <span className="capitalize">Land</span>
-                  </button>
+                  {/* Unified System Selector Tabs & Multi-System Toggles */}
+                  <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                    <button
+                      onClick={() => handleToggleModule('ocean')}
+                      className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                        activeModules.includes('ocean')
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Toggle Ocean (SWOT Altimetry)"
+                    >
+                      <Waves className="h-3.5 w-3.5 text-cyan-400" />
+                      <span className="capitalize">Ocean</span>
+                    </button>
 
+                    <button
+                      onClick={() => handleToggleModule('atmosphere')}
+                      className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                        activeModules.includes('atmosphere')
+                          ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Toggle Atmosphere (GPM Precipitation)"
+                    >
+                      <CloudRain className="h-3.5 w-3.5 text-blue-400" />
+                      <span className="capitalize">Atmosphere</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleToggleModule('land')}
+                      className={`flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                        activeModules.includes('land')
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Toggle Land (MODIS Vegetation)"
+                    >
+                      <Trees className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="capitalize">Land</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mobile-only 2D/3D switcher docked on right side of Row 1 */}
+                <div className="flex md:hidden items-center shrink-0">
+                  <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                    <button
+                      onClick={() => setExplorationMode('3d')}
+                      className={`flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-semibold transition-all ${
+                        explorationMode === '3d'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Switch to 3D Spherical Earth Globe"
+                      aria-label="Switch to 3D Globe View"
+                    >
+                      <GlobeIcon className="h-3.5 w-3.5" />
+                      <span>3D</span>
+                    </button>
+                    <button
+                      onClick={() => setExplorationMode('2d')}
+                      className={`flex items-center space-x-1 px-2 py-1 rounded-md text-xs font-semibold transition-all ${
+                        explorationMode === '2d'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Switch to 2D Planar Map"
+                      aria-label="Switch to 2D Planar Map View"
+                    >
+                      <MapIcon className="h-3.5 w-3.5" />
+                      <span>2D</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Center: Geographic Search Bar */}
-              <div className="flex-1 max-w-xs sm:max-w-sm md:max-w-md mx-2">
-                <SearchBar onSelectLocation={handleSearchSelect} />
-              </div>
-
-              {/* Right: 3D/2D Mode Switcher + Trends + Context Panel Toggles */}
-              <div className="flex items-center space-x-1.5 shrink-0">
-                {/* 2D / 3D Switch */}
-                <div className="inline-flex items-center p-0.5 rounded-lg bg-slate-900/90 border border-slate-800">
-                  <button
-                    onClick={() => setExplorationMode('3d')}
-                    className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
-                      explorationMode === '3d'
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                    title="Switch to 3D Spherical Earth Globe"
-                    aria-label="Switch to 3D Globe View"
-                  >
-                    <GlobeIcon className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">3D Globe</span>
-                    <span className="sm:hidden">3D</span>
-                  </button>
-                  <button
-                    onClick={() => setExplorationMode('2d')}
-                    className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
-                      explorationMode === '2d'
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                    title="Switch to 2D Planar Map"
-                    aria-label="Switch to 2D Planar Map View"
-                  >
-                    <MapIcon className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">2D Map</span>
-                    <span className="sm:hidden">2D</span>
-                  </button>
+              {/* Row 2 on mobile: SearchBar + Trends + Context + Tools (On desktop: Search in center, Controls on right) */}
+              <div className="flex items-center gap-1.5 w-full md:w-auto md:flex-1 md:justify-between">
+                {/* Search Bar */}
+                <div className="flex-1 md:max-w-xs lg:max-w-md md:mx-auto">
+                  <SearchBar onSelectLocation={handleSearchSelect} />
                 </div>
 
-                <div className="h-5 w-px bg-slate-800 hidden sm:block" />
+                {/* Controls Group */}
+                <div className="flex items-center space-x-1 sm:space-x-1.5 shrink-0">
+                  {/* Desktop-only 2D/3D Switcher */}
+                  <div className="hidden md:inline-flex items-center p-0.5 rounded-lg bg-slate-900/90 border border-slate-800">
+                    <button
+                      onClick={() => setExplorationMode('3d')}
+                      className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                        explorationMode === '3d'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Switch to 3D Spherical Earth Globe"
+                      aria-label="Switch to 3D Globe View"
+                    >
+                      <GlobeIcon className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline">3D Globe</span>
+                      <span className="lg:hidden">3D</span>
+                    </button>
+                    <button
+                      onClick={() => setExplorationMode('2d')}
+                      className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                        explorationMode === '2d'
+                          ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}
+                      title="Switch to 2D Planar Map"
+                      aria-label="Switch to 2D Planar Map View"
+                    >
+                      <MapIcon className="h-3.5 w-3.5" />
+                      <span className="hidden lg:inline">2D Map</span>
+                      <span className="lg:hidden">2D</span>
+                    </button>
+                  </div>
 
-                {/* Trends Drawer Toggle Button */}
-                <button
-                  onClick={() => setShowTrends(!showTrends)}
-                  className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
-                    showTrends
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
-                      : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
-                  }`}
-                  title="Toggle Historical Trends & Teleconnections"
-                >
-                  <TrendingUp className="h-3.5 w-3.5 text-cyan-400" />
-                  <span className="hidden md:inline">Trends</span>
-                </button>
+                  <div className="h-5 w-px bg-slate-800 hidden md:block" />
 
-                {/* Context Panel Toggle Button */}
-                <button
-                  onClick={() => setSidePanelOpen(!sidePanelOpen)}
-                  className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
-                    sidePanelOpen
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
-                      : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
-                  }`}
-                  title="Toggle Scientific Context Panel"
-                >
-                  <Compass className="h-3.5 w-3.5 text-cyan-400" />
-                  <span className="hidden md:inline">Context</span>
-                  <span className="hidden sm:inline text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-1.5 py-0.2 rounded-full capitalize">
-                    {zoomLevel}
-                  </span>
-                </button>
-
-                <div className="relative" ref={toolsMenuRef}>
+                  {/* Trends Drawer Toggle Button */}
                   <button
-                    onClick={() => setShowToolsMenu((open) => !open)}
-                    className={`flex items-center justify-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${showToolsMenu ? 'bg-cyan-500/20 text-cyan-200 border-cyan-500/50' : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'}`}
-                    title="Tools and additional options"
-                    aria-label="Tools and additional options"
-                    aria-expanded={showToolsMenu}
-                    aria-controls="terralens-tools-menu"
+                    onClick={() => setShowTrends(!showTrends)}
+                    className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                      showTrends
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                        : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
+                    }`}
+                    title="Toggle Historical Trends & Teleconnections"
                   >
-                    <Wrench className="h-3.5 w-3.5 text-cyan-400" />
-                    <span className="hidden md:inline">Tools</span>
+                    <TrendingUp className="h-3.5 w-3.5 text-cyan-400" />
+                    <span className="hidden md:inline">Trends</span>
                   </button>
-                  {showToolsMenu && (
-                    <div id="terralens-tools-menu" className="absolute top-full right-0 mt-2 w-[min(18rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-xl border border-slate-700/80 bg-[#080c16]/98 p-2 shadow-2xl backdrop-blur-xl z-50" aria-label="Additional exploration tools">
-                      <p className="px-2 py-1 text-[10px] uppercase tracking-widest text-slate-500">Systems</p>
-                      <button
-                        onClick={() => { toggleAllModules(); setShowToolsMenu(false); }}
-                        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
-                        aria-pressed={activeModules.length === 3}
-                      >
-                        <Layers className="h-4 w-4 text-purple-300" />
-                        {activeModules.length === 3 ? 'Show Ocean only' : 'Show all Earth systems'}
-                      </button>
-                      <div className="my-1 border-t border-slate-800" />
-                      <p className="px-2 py-1 text-[10px] uppercase tracking-widest text-slate-500">Data and help</p>
-                      <button
-                        onClick={() => { setCurrentView(activeModule ? 'explore' : 'catalog'); if (activeModule) setShowDatasetInfo(true); setShowToolsMenu(false); }}
-                        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
-                      >
-                        <Database className="h-4 w-4 text-cyan-300" />
-                        {activeModule ? 'Dataset details and provenance' : 'Dataset catalog'}
-                      </button>
-                      <button
-                        onClick={() => { setCurrentView('about'); setShowToolsMenu(false); }}
-                        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
-                      >
-                        <HelpCircle className="h-4 w-4 text-slate-300" />
-                        About and introduction
-                      </button>
-                      <div className="my-1 border-t border-slate-800" />
-                      <p className="px-2 py-1 text-[10px] uppercase tracking-widest text-slate-500">Rendering</p>
-                      <button
-                        onClick={() => { cycleQualityMode(); setShowToolsMenu(false); }}
-                        className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
-                      >
-                        <span className="flex items-center gap-2"><Wrench className="h-4 w-4 text-amber-300" />Rendering quality</span>
-                        <span className="font-mono text-cyan-300 capitalize">{qualityMode}</span>
-                      </button>
-                    </div>
-                  )}
+
+                  {/* Context Panel Toggle Button */}
+                  <button
+                    onClick={() => setSidePanelOpen(!sidePanelOpen)}
+                    className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+                      sidePanelOpen
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow-sm'
+                        : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'
+                    }`}
+                    title="Toggle Scientific Context Panel"
+                  >
+                    <Compass className="h-3.5 w-3.5 text-cyan-400" />
+                    <span className="hidden md:inline">Context</span>
+                    <span className="hidden sm:inline text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-1.5 py-0.2 rounded-full capitalize">
+                      {zoomLevel}
+                    </span>
+                  </button>
+
+                  <div className="relative" ref={toolsMenuRef}>
+                    <button
+                      onClick={() => setShowToolsMenu((open) => !open)}
+                      className={`flex items-center justify-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${showToolsMenu ? 'bg-cyan-500/20 text-cyan-200 border-cyan-500/50' : 'bg-slate-900/90 text-slate-300 border-slate-800 hover:bg-slate-800 hover:text-white'}`}
+                      title="Tools and additional options"
+                      aria-label="Tools and additional options"
+                      aria-expanded={showToolsMenu}
+                      aria-controls="terralens-tools-menu"
+                    >
+                      <Wrench className="h-3.5 w-3.5 text-cyan-400" />
+                      <span className="hidden md:inline">Tools</span>
+                    </button>
+                    {showToolsMenu && (
+                      <div id="terralens-tools-menu" className="absolute top-full right-0 mt-2 w-[min(18rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-xl border border-slate-700/80 bg-[#080c16]/98 p-2 shadow-2xl backdrop-blur-xl z-50" aria-label="Additional exploration tools">
+                        <p className="px-2 py-1 text-[10px] uppercase tracking-widest text-slate-500">Systems</p>
+                        <button
+                          onClick={() => { toggleAllModules(); setShowToolsMenu(false); }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
+                          aria-pressed={activeModules.length === 3}
+                        >
+                          <Layers className="h-4 w-4 text-purple-300" />
+                          {activeModules.length === 3 ? 'Show Ocean only' : 'Show all Earth systems'}
+                        </button>
+                        <div className="my-1 border-t border-slate-800" />
+                        <p className="px-2 py-1 text-[10px] uppercase tracking-widest text-slate-500">Data and help</p>
+                        <button
+                          onClick={() => { setCurrentView(activeModule ? 'explore' : 'catalog'); if (activeModule) setShowDatasetInfo(true); setShowToolsMenu(false); }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
+                        >
+                          <Database className="h-4 w-4 text-cyan-300" />
+                          {activeModule ? 'Dataset details and provenance' : 'Dataset catalog'}
+                        </button>
+                        <button
+                          onClick={() => { setCurrentView('about'); setShowToolsMenu(false); }}
+                          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
+                        >
+                          <HelpCircle className="h-4 w-4 text-slate-300" />
+                          About and introduction
+                        </button>
+                        <div className="my-1 border-t border-slate-800" />
+                        <p className="px-2 py-1 text-[10px] uppercase tracking-widest text-slate-500">Rendering</p>
+                        <button
+                          onClick={() => { cycleQualityMode(); setShowToolsMenu(false); }}
+                          className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
+                        >
+                          <span className="flex items-center gap-2"><Wrench className="h-4 w-4 text-amber-300" />Rendering quality</span>
+                          <span className="font-mono text-cyan-300 capitalize">{qualityMode}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1018,9 +1056,14 @@ export const App: React.FC = () => {
             <div className="flex-1 relative flex overflow-hidden pointer-events-none">
               {/* Viewport Area: Globe or 2D Map + Bottom TrendDrawer */}
               <div className="flex-1 h-full relative overflow-hidden pointer-events-none">
-                {(activeModule !== null || activeModules.length > 0) && (
-                  <div className="absolute z-40 top-3 left-16 right-3 sm:left-20 sm:right-3 sm:max-w-lg pointer-events-auto">
-                    <DataNotice type="demo" title="Demonstration data — not NASA observations">
+                {(activeModule !== null || activeModules.length > 0) && !dataNoticeDismissed && (
+                  <div className="absolute z-40 top-3 left-3 right-3 sm:left-4 sm:right-auto sm:max-w-md pointer-events-auto">
+                    <DataNotice
+                      type="demo"
+                      title="Demonstration data — not NASA observations"
+                      dismissible
+                      onDismiss={() => setDataNoticeDismissed(true)}
+                    >
                       Scientific layers, time series, comparisons, and cross-system examples are modelled by this build. NASA product citations describe intended data sources; no NASA granules are currently loaded.
                     </DataNotice>
                   </div>

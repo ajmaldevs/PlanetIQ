@@ -136,7 +136,7 @@ export const SharedTimeline: React.FC<SharedTimelineProps> = ({
   return (
     <div
       aria-label="Shared earth observation timeline"
-      className={`fixed z-20 transition-all duration-300 pointer-events-none ${
+      className={`fixed z-20 transition-all duration-150 pointer-events-none ${
         sidePanelOpen ? 'left-3 sm:left-6 right-3 lg:right-[400px]' : 'left-3 sm:left-6 right-3 sm:right-6'
       } ${trendsOpen ? (trendsExpanded ? 'bottom-[596px] max-[799px]:hidden' : 'bottom-[335px] sm:bottom-[395px]') : 'bottom-16 sm:bottom-6'}`}
     >
@@ -234,10 +234,11 @@ export const SharedTimeline: React.FC<SharedTimelineProps> = ({
             {onOpenPeriodComparison && (
               <button
                 onClick={onOpenPeriodComparison}
-                className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-[11px] font-semibold text-slate-200 hover:text-white transition-colors"
+                className="px-2.5 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-[11px] font-semibold text-slate-200 hover:text-white transition-colors cursor-pointer"
                 title="Compare Two Historical Periods (Period A vs Period B)"
               >
-                Compare Periods
+                <span className="hidden sm:inline">Compare Periods</span>
+                <span className="sm:hidden">Compare</span>
               </button>
             )}
           </div>

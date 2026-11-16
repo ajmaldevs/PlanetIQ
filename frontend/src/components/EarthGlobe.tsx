@@ -1250,9 +1250,11 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         className={`fixed left-4 sm:left-6 z-30 ${introMode ? 'top-[4.5rem] right-3 left-auto hidden sm:flex justify-end' : 'flex'} items-center space-x-2.5 pointer-events-auto transition-all duration-300 ease-out ${
           trendsOpen
             ? trendsExpanded
-              ? 'bottom-[min(535px,calc(100dvh-120px))]'
-              : 'bottom-[335px] sm:bottom-[395px]'
-            : 'bottom-4 sm:bottom-6'
+              ? 'bottom-[min(596px,calc(100dvh-120px))]'
+              : 'bottom-[350px] sm:bottom-[410px]'
+            : introMode
+            ? 'bottom-4 sm:bottom-6'
+            : 'bottom-36 sm:bottom-36 md:bottom-40'
         }`}
         style={introMode ? { bottom: 'auto' } : undefined}
       >

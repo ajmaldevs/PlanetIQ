@@ -18,21 +18,29 @@ export const Navbar: React.FC<NavbarProps> = ({
   onResetExplore,
 }) => {
   return (
-    <header className="sticky top-0 z-50 bg-[#05070b]/80 backdrop-blur-md border-b border-slate-800/60">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <header className="sticky top-0 z-50 bg-[#05070b]/90 backdrop-blur-md border-b border-slate-800/80">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
         {/* Brand */}
         <button
           onClick={() => {
             setCurrentView('explore');
             if (onResetExplore) onResetExplore();
           }}
-          className="flex items-center space-x-2 text-left focus:outline-hidden group"
+          className="flex items-center space-x-2 text-left focus:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-lg group shrink-0 cursor-pointer"
+          aria-label="TerraLens Home"
         >
-          <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-slate-900 border border-slate-700/80 flex items-center justify-center text-cyan-400 group-hover:border-cyan-500/50 transition-colors">
-            <Globe className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <div className="h-8 w-8 rounded-full bg-slate-900 border border-slate-700/80 flex items-center justify-center text-cyan-400 group-hover:border-cyan-500/50 transition-colors relative">
+            <Globe className="h-4 w-4" />
+            {/* Mobile Connection Status Dot */}
+            <span
+              className={`absolute -top-0.5 -right-0.5 sm:hidden h-2 w-2 rounded-full border border-[#05070b] ${
+                health ? 'bg-emerald-400' : 'bg-amber-400'
+              }`}
+              title={health ? 'Live Data Connected' : 'Offline Mode'}
+            />
           </div>
           <div className="hidden sm:block">
-            <span className="text-base sm:text-lg font-semibold tracking-tight text-white group-hover:text-cyan-300 transition-colors">
+            <span className="text-base sm:text-lg font-bold tracking-tight text-white group-hover:text-cyan-300 transition-colors">
               Terra<span className="text-cyan-400">Lens</span>
             </span>
           </div>
@@ -45,10 +53,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               setCurrentView('explore');
               if (onResetExplore) onResetExplore();
             }}
-            className={`px-1.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
+            className={`min-h-[36px] flex items-center justify-center px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 ${
               currentView === 'explore'
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             Explore
@@ -56,10 +64,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setCurrentView('catalog')}
-            className={`px-1.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
+            className={`min-h-[36px] flex items-center justify-center px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 ${
               currentView === 'catalog'
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <span className="hidden sm:inline">Dataset </span>Catalog
@@ -67,10 +75,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setCurrentView('assistant')}
-            className={`px-1.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
+            className={`min-h-[36px] flex items-center justify-center px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 ${
               currentView === 'assistant'
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <span className="hidden sm:inline">AI </span>Assistant
@@ -78,18 +86,18 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={() => setCurrentView('about')}
-            className={`px-1.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all ${
+            className={`min-h-[36px] flex items-center justify-center px-2.5 sm:px-3.5 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all cursor-pointer focus-visible:ring-2 focus-visible:ring-cyan-400 ${
               currentView === 'about'
-                ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             About
           </button>
         </nav>
 
-        {/* Subtle Status Indicator */}
-        <div className="hidden sm:flex items-center space-x-2 text-xs text-slate-400">
+        {/* Desktop Status Indicator */}
+        <div className="hidden sm:flex items-center space-x-2 text-xs text-slate-400 shrink-0">
           <span
             className={`h-2 w-2 rounded-full ${
               health ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'

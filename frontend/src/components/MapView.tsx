@@ -183,6 +183,34 @@ export const MapView: React.FC<MapViewProps> = ({
 
     const startCenter: [number, number] = center ? [center.lon, center.lat] : [0, 20];
 
+    const reportZoomState = () => {
+      if (!map.current) return;
+      const c = map.current.getCenter();
+      const z = map.current.getZoom();
+      mapContainer.current?.setAttribute('data-map-zoom', z.toFixed(2));
+      mapContainer.current?.setAttribute('data-map-detail-level', getMapDetailLevel(z));
+      mapContainer.current?.setAttribute('data-map-center', `${c.lat.toFixed(3)},${c.lng.toFixed(3)}`);
+      if (!isInternalFlyRef.current && onZoomChangeRef.current) {
+        const equivDist = mapZoomToDistance(z);
+        const equivLevel: ZoomLevel =
+          z < 2.3
+            ? 'global'
+            : z < 3.8
+            ? 'continental'
+            : z < 5.5
+            ? 'country'
+            : 'regional';
+        onZoomChangeRef.current(equivLevel, equivDist);
+      }
+    };
+
+    const reportSettledCenter = () => {
+      if (!map.current) return;
+      const { lat, lng } = map.current.getCenter();
+      mapContainer.current?.setAttribute('data-map-center', `${lat.toFixed(3)},${lng.toFixed(3)}`);
+      if (!isInternalFlyRef.current) onCenterChangeRef.current?.(lat, lng);
+    };
+
     try {
       const m = new maplibregl.Map({
         container: mapContainer.current,
@@ -240,36 +268,9 @@ export const MapView: React.FC<MapViewProps> = ({
         }
       });
 
-      const reportZoomState = () => {
-        if (!map.current) return;
-        const c = map.current.getCenter();
-        const z = map.current.getZoom();
-        mapContainer.current?.setAttribute('data-map-zoom', z.toFixed(2));
-        mapContainer.current?.setAttribute('data-map-detail-level', getMapDetailLevel(z));
-        mapContainer.current?.setAttribute('data-map-center', `${c.lat.toFixed(3)},${c.lng.toFixed(3)}`);
-        if (!isInternalFlyRef.current && onZoomChangeRef.current) {
-          const equivDist = mapZoomToDistance(z);
-          const equivLevel: ZoomLevel =
-            z < 2.3
-              ? 'global'
-              : z < 3.8
-              ? 'continental'
-              : z < 5.5
-              ? 'country'
-              : 'regional';
-          onZoomChangeRef.current(equivLevel, equivDist);
-        }
-      };
-
-      const reportSettledCenter = () => {
-        if (!map.current) return;
-        const { lat, lng } = map.current.getCenter();
-        mapContainer.current?.setAttribute('data-map-center', `${lat.toFixed(3)},${lng.toFixed(3)}`);
-        if (!isInternalFlyRef.current) onCenterChangeRef.current?.(lat, lng);
-      };
-
       m.on('zoom', reportZoomState);
       m.on('moveend', reportSettledCenter);
+      m.on('dragend', reportSettledCenter);
 
       map.current = m;
     } catch (e) {
@@ -292,6 +293,9 @@ export const MapView: React.FC<MapViewProps> = ({
           const initialCenter = m.getCenter();
           mapContainer.current?.setAttribute('data-map-center', `${initialCenter.lat.toFixed(3)},${initialCenter.lng.toFixed(3)}`);
         });
+        m.on('zoom', reportZoomState);
+        m.on('moveend', reportSettledCenter);
+        m.on('dragend', reportSettledCenter);
         map.current = m;
         setUsingFallbackStyle(true);
       } catch (err) {
@@ -1079,7 +1083,13 @@ function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricT
       )}
 
       {/* Bottom Floating Dynamic Scale Legend */}
-      <div className={`absolute bottom-3 sm:bottom-4 left-3 sm:left-4 z-10 flex items-center space-x-2 sm:space-x-2.5 pointer-events-auto max-w-[calc(100vw-24px)] overflow-x-auto no-scrollbar ${introMode && module === 'overview' ? 'hidden' : ''}`}>
+      <div className={`absolute left-3 sm:left-4 z-10 flex items-center space-x-2 sm:space-x-2.5 pointer-events-auto max-w-[calc(100vw-24px)] overflow-x-auto no-scrollbar transition-all duration-300 ${
+        trendsOpen
+          ? trendsExpanded
+            ? 'bottom-[min(596px,calc(100dvh-120px))]'
+            : 'bottom-[335px] sm:bottom-[395px]'
+          : 'bottom-3 sm:bottom-4'
+      } ${introMode && module === 'overview' ? 'hidden' : ''}`}>
         <div className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-[#090d16]/90 border border-slate-800/80 text-[11px] font-mono backdrop-blur-md shadow-2xl text-slate-300">
           <span className="text-[9px] uppercase text-slate-500 font-semibold tracking-wider">
             {module} Scale:
