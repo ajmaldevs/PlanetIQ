@@ -7,7 +7,7 @@ import { TrendDrawer, TrendDrawerStatus } from './components/TrendDrawer';
 import { SharedTimeline } from './components/SharedTimeline';
 import { AssistantView } from './components/AssistantView';
 import { AboutView } from './components/AboutView';
-import { SearchBar, SearchResult } from './components/SearchBar';
+import { SearchBar } from './components/SearchBar';
 import { DatasetInfoModal } from './components/DatasetInfoModal';
 import { DataNotice } from './components/DataNotice';
 import { adaptiveQuality, QualityMode } from './services/adaptiveQuality';
@@ -32,7 +32,7 @@ import {
   OceanTimeSeriesResponse,
   LandTimeSeriesResponse,
   CrossSystemResponse,
-  GeocodingResult,
+  SearchPlaceTarget,
 } from './services/api';
 import {
   ArrowLeft,
@@ -465,7 +465,7 @@ export const App: React.FC = () => {
     lat: number,
     lon: number,
     name: string,
-    placeObj?: SearchResult | GISPlace | GeocodingResult
+    placeObj?: SearchPlaceTarget
   ) => {
     dismissIntro();
     // Auto-select relevant module if none is active and search target clearly belongs to a domain
@@ -491,41 +491,43 @@ export const App: React.FC = () => {
       }
     }
 
-    let resolvedBbox = placeObj?.bbox;
-    let resolvedIsoA3 = (placeObj as any)?.iso_a3;
-    let resolvedIsoA2 = (placeObj as any)?.iso_a2;
+    const target = placeObj;
+    let resolvedBbox = target?.bbox;
+    let resolvedIsoA3 = target?.iso_a3;
+    let resolvedIsoA2 = target?.iso_a2;
 
     // Match the exact result first; name-only matching can select a different
     // place when several countries or cities share the same name.
     const gisMatches = searchGISPlaces(name);
-    const localPlace = ((placeObj as any)?.id ? findPlaceById((placeObj as any).id) : undefined) ||
+    const targetParentCountry = target?.parentCountry || target?.parent_country;
+    const localPlace = (target?.id ? findPlaceById(target.id) : undefined) ||
       gisMatches.find((candidate) =>
         Math.abs(candidate.lat - lat) < 0.5 && Math.abs(candidate.lon - lon) < 0.5
       ) || gisMatches.find((candidate) =>
         candidate.name.toLowerCase() === name.toLowerCase() &&
-        (!((placeObj as any)?.parentCountry || (placeObj as any)?.parent_country) ||
-          candidate.parentCountry?.toLowerCase() === String((placeObj as any)?.parentCountry || (placeObj as any)?.parent_country).toLowerCase())
+        (!targetParentCountry ||
+          candidate.parentCountry?.toLowerCase() === String(targetParentCountry).toLowerCase())
       );
     resolvedBbox = resolvedBbox || localPlace?.bbox;
     resolvedIsoA3 = resolvedIsoA3 || localPlace?.iso_a3;
     resolvedIsoA2 = resolvedIsoA2 || localPlace?.iso_a2;
 
     const canonicalPlace: GISPlace = {
-      id: (placeObj as any)?.id || `search-${lat}-${lon}`,
+      id: target?.id || `search-${lat}-${lon}`,
       name,
-      formal_name: (placeObj as any)?.formal_name || localPlace?.formal_name,
+      formal_name: target?.formal_name || localPlace?.formal_name,
       iso_a2: resolvedIsoA2,
       iso_a3: resolvedIsoA3,
       lat,
       lon,
-      category: mapPlaceCategory((placeObj as any)?.category || localPlace?.category),
-      level: ((placeObj as any)?.level as 1 | 2 | 3 | 4) || 2,
-      priority: (placeObj as any)?.priority || localPlace?.priority || 50,
-      parentCountry: (placeObj as any)?.parentCountry || (placeObj as any)?.parent_country || localPlace?.parentCountry,
-      parentState: (placeObj as any)?.parentState || (placeObj as any)?.parent_state,
-      parentContinent: (placeObj as any)?.parentContinent || (placeObj as any)?.parent_continent || localPlace?.parentContinent,
+      category: mapPlaceCategory(target?.category || localPlace?.category),
+      level: (target?.level as 1 | 2 | 3 | 4) || (localPlace?.level as 1 | 2 | 3 | 4) || 2,
+      priority: target?.priority || localPlace?.priority || 50,
+      parentCountry: targetParentCountry || localPlace?.parentCountry,
+      parentState: target?.parentState || target?.parent_state,
+      parentContinent: target?.parentContinent || target?.parent_continent || localPlace?.parentContinent,
       bbox: resolvedBbox,
-      detail: (placeObj as any)?.detail,
+      detail: target?.detail,
     };
 
     handlePlaceSelect(canonicalPlace);
