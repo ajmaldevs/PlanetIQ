@@ -326,7 +326,9 @@ export class SurfaceLabelManager {
 
     // Level 1: Continents & Major Oceans
     if (place.level === 1) {
-      if (dist >= 4.6) return 1.0;
+      // In deep space overview (dist >= 5.2), full globe is seen cleanly without place names
+      if (dist >= 5.2) return 0.0;
+      if (dist >= 4.6) return (5.2 - dist) / 0.6; // Smoothly fades in as camera approaches globe
       if (dist <= 3.6) return 0.0;
       // Fades out between 4.6 and 3.6 so continents yield focus to countries
       return (dist - 3.6) / 1.0;
@@ -335,10 +337,9 @@ export class SurfaceLabelManager {
     // Level 2: Sovereign Countries & Major Natural Features
     if (place.level === 2) {
       // In deep space overview (dist >= 5.2):
-      // Display prominent sovereign nations (priority >= 80) across the globe
+      // Completely hidden when dist >= 5.2 in deep space so full globe has no labels
       if (dist >= 5.2) {
-        const priority = place.priority || 50;
-        return priority >= 80 ? 0.90 : 0.0;
+        return 0.0;
       }
 
       // Continental view (3.8 <= dist < 5.2)

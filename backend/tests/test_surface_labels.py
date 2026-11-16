@@ -56,7 +56,8 @@ def test_surface_labels_zoom_regimes_and_lod_thresholds():
     # Regional view
     assert "return 'regional'" in content
 
-    # Level 1 Continents fade when zooming deeper than 4.6
+    # Level 1 Continents fade when zooming deeper than 4.6, hidden in full globe view (dist >= 5.2)
+    assert "if (dist >= 5.2) return 0.0" in content
     assert "dist >= 4.6" in content
     assert "dist <= 3.6" in content
 
