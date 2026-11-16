@@ -5,6 +5,7 @@ import { GeoJSONFeatureCollection, GeoJSONFeature } from '../services/api';
 import { GISPlace, GIS_PLACES, findPlaceById } from '../services/gisDatabase';
 import { distanceToMapZoom, mapZoomToDistance } from '../services/surfaceLabels';
 import { ZoomLevel } from './EarthGlobe';
+import { getScientificObservationHexColor } from '../services/geography';
 import { Calendar, Navigation, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export interface MapViewProps {
@@ -804,36 +805,7 @@ export const MapView: React.FC<MapViewProps> = ({
   }, [mapLoaded, onSelectPlace]);
 
 function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricType: string): string {
-  if (moduleName === 'ocean') {
-    const ssha = feature.properties.ssha_karin_m ?? 0;
-    if (ssha <= -0.15) return '#2563eb';
-    if (ssha < 0) return '#38bdf8';
-    if (ssha <= 0.15) return '#f59e0b';
-    return '#ef4444';
-  }
-  if (moduleName === 'atmosphere') {
-    if (metricType === 'rate') {
-      const rate = feature.properties.precipitation_rate_mm_hr ?? 0;
-      if (rate < 0.1) return '#38bdf8';
-      if (rate < 0.3) return '#0284c7';
-      if (rate < 0.5) return '#6366f1';
-      return '#ec4899';
-    } else {
-      const acc = feature.properties.precipitation_accumulated_mm ?? 0;
-      if (acc < 80) return '#38bdf8';
-      if (acc < 200) return '#0284c7';
-      if (acc < 350) return '#6366f1';
-      return '#ec4899';
-    }
-  }
-  if (moduleName === 'land') {
-    const ndvi = feature.properties.ndvi ?? 0.5;
-    if (ndvi < 0.2) return '#d97706';
-    if (ndvi < 0.45) return '#ca8a04';
-    if (ndvi < 0.7) return '#84cc16';
-    return '#10b981';
-  }
-  return '#38bdf8';
+  return getScientificObservationHexColor(feature.properties, moduleName, metricType);
 }
 
   // Update Data Layers & Highlight Ring

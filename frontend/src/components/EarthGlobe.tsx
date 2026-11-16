@@ -8,6 +8,7 @@ import { createEarthDayNightShader, EarthDayNightShaderBundle } from '../service
 import { loadVectorBoundaries, VectorBoundariesMeshGroup } from '../services/vectorBoundaries';
 import { adaptiveQuality, QualityTier, QualityMode, QualityProfile } from '../services/adaptiveQuality';
 import { SurfaceLabelManager } from '../services/surfaceLabels';
+import { latLonToVector3, getScientificObservationHexColor } from '../services/geography';
 import {
   ZoomIn,
   ZoomOut,
@@ -48,17 +49,6 @@ interface EarthGlobeProps {
   introMode?: boolean;
 }
 
-// Convert (Lat, Lon) in degrees to 3D Cartesian coordinates on sphere
-function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lon + 180) * (Math.PI / 180);
-  return new THREE.Vector3(
-    -radius * Math.sin(phi) * Math.cos(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta)
-  );
-}
-
 // Smooth cubic ease-in-out easing function for time-based camera animations
 function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -83,41 +73,9 @@ interface CameraTransition {
   targetDist: number;
 }
 
-// Derive scientific marker color for 3D observation overlay points
+// Derive scientific marker color for 3D observation overlay points using unified colormap
 function getObservationColor(feature: GeoJSONFeature, activeModule: EarthModule, metricType: string): THREE.Color {
-  if (activeModule === 'ocean') {
-    const ssha = feature.properties.ssha_karin_m ?? 0;
-    if (ssha <= -0.15) return new THREE.Color(0x2563eb); // cold cyclonic upwelling
-    if (ssha < 0) return new THREE.Color(0x38bdf8);
-    if (ssha <= 0.15) return new THREE.Color(0xf59e0b);
-    return new THREE.Color(0xef4444); // warm anticyclonic eddy
-  }
-
-  if (activeModule === 'atmosphere') {
-    if (metricType === 'rate') {
-      const rate = feature.properties.precipitation_rate_mm_hr ?? 0;
-      if (rate < 0.1) return new THREE.Color(0x38bdf8);
-      if (rate < 0.3) return new THREE.Color(0x0284c7);
-      if (rate < 0.5) return new THREE.Color(0x6366f1);
-      return new THREE.Color(0xec4899);
-    } else {
-      const acc = feature.properties.precipitation_accumulated_mm ?? 0;
-      if (acc < 80) return new THREE.Color(0x38bdf8);
-      if (acc < 200) return new THREE.Color(0x0284c7);
-      if (acc < 350) return new THREE.Color(0x6366f1);
-      return new THREE.Color(0xec4899);
-    }
-  }
-
-  if (activeModule === 'land') {
-    const ndvi = feature.properties.ndvi ?? 0.5;
-    if (ndvi < 0.2) return new THREE.Color(0xd97706); // arid/barren
-    if (ndvi < 0.45) return new THREE.Color(0xca8a04); // savanna
-    if (ndvi < 0.7) return new THREE.Color(0x84cc16); // temperate
-    return new THREE.Color(0x10b981); // dense lush canopy
-  }
-
-  return new THREE.Color(0x38bdf8);
+  return new THREE.Color(getScientificObservationHexColor(feature.properties, activeModule, metricType));
 }
 
 export const EarthGlobe: React.FC<EarthGlobeProps> = ({
