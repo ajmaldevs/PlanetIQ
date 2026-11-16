@@ -465,6 +465,29 @@ export interface GeocodingResult {
   detail?: string;
 }
 
+export interface SearchPlaceTarget {
+  id?: string;
+  name: string;
+  formal_name?: string;
+  category?: string;
+  level?: number;
+  priority?: number;
+  lat?: number;
+  lon?: number;
+  latitude?: number;
+  longitude?: number;
+  bbox?: [number, number, number, number];
+  iso_a2?: string;
+  iso_a3?: string;
+  parentCountry?: string;
+  parent_country?: string;
+  parentState?: string;
+  parent_state?: string;
+  parentContinent?: string;
+  parent_continent?: string;
+  detail?: string;
+}
+
 export interface GeocodingSearchResponse {
   query: string;
   total_results: number;

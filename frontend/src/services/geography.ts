@@ -1,3 +1,5 @@
+import * as THREE from 'three';
+
 export type ZoomLevel = 'global' | 'continental' | 'country' | 'regional';
 
 export interface GeographicContext {
@@ -211,4 +213,64 @@ export function resolveGeographicContext(
     spatialResolution: resolutionStr,
     coverageNote: limitationStr,
   };
+}
+
+/**
+ * Converts geographic (lat, lon) in degrees to a 3D Cartesian Vector3 on a sphere of radius R.
+ * Standard spherical-to-Cartesian convention matching TerraLens Three.js world coordinates.
+ */
+export function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
+  const phi = (90 - lat) * (Math.PI / 180);
+  const theta = (lon + 180) * (Math.PI / 180);
+  return new THREE.Vector3(
+    -radius * Math.sin(phi) * Math.cos(theta),
+    radius * Math.cos(phi),
+    radius * Math.sin(phi) * Math.sin(theta)
+  );
+}
+
+/**
+ * Standard scientific colormap thresholds across 2D (MapLibre) and 3D (Three.js) visualizations:
+ * - Ocean (SWOT SSHA): -0.15m to +0.15m (cyclonic cold-core upwelling to warm-core eddy)
+ * - Atmosphere (GPM IMERG): rate (<0.1 to >0.5 mm/hr) or accumulation (<80 to >350 mm)
+ * - Land (MODIS NDVI): <0.2 (arid) to >0.7 (dense canopy)
+ */
+export function getScientificObservationHexColor(
+  properties: Record<string, any>,
+  moduleName: string | null,
+  metricType: string = 'rate'
+): string {
+  if (moduleName === 'ocean') {
+    const ssha = properties.ssha_karin_m ?? 0;
+    if (ssha <= -0.15) return '#2563eb';
+    if (ssha < 0) return '#38bdf8';
+    if (ssha <= 0.15) return '#f59e0b';
+    return '#ef4444';
+  }
+
+  if (moduleName === 'atmosphere') {
+    if (metricType === 'rate') {
+      const rate = properties.precipitation_rate_mm_hr ?? 0;
+      if (rate < 0.1) return '#38bdf8';
+      if (rate < 0.3) return '#0284c7';
+      if (rate < 0.5) return '#6366f1';
+      return '#ec4899';
+    } else {
+      const acc = properties.precipitation_accumulated_mm ?? 0;
+      if (acc < 80) return '#38bdf8';
+      if (acc < 200) return '#0284c7';
+      if (acc < 350) return '#6366f1';
+      return '#ec4899';
+    }
+  }
+
+  if (moduleName === 'land') {
+    const ndvi = properties.ndvi ?? 0.5;
+    if (ndvi < 0.2) return '#d97706';
+    if (ndvi < 0.45) return '#ca8a04';
+    if (ndvi < 0.7) return '#84cc16';
+    return '#10b981';
+  }
+
+  return '#38bdf8';
 }

@@ -241,6 +241,53 @@ interface SearchBarProps {
   className?: string;
 }
 
+// Module-level static initialization: build once and share across all SearchBar instances
+function buildClientSearchDatabase(): SearchResult[] {
+  const items: SearchResult[] = [...SCIENTIFIC_SEARCH_DATABASE];
+  const existingNames = new Set(items.map((i) => i.name.toLowerCase()));
+
+  GIS_PLACES.forEach((p) => {
+    if (existingNames.has(p.name.toLowerCase())) return;
+
+    let cat: SearchResult['category'] = 'City';
+    if (p.category === 'country') cat = 'Country';
+    else if (p.category === 'state') cat = 'State / Province';
+    else if (p.category === 'continent') cat = 'Continent';
+    else if (p.category === 'ocean') cat = 'Ocean System';
+    else if (p.category === 'natural_feature') cat = 'Natural Feature';
+
+    const detailParts: string[] = [];
+    if (p.iso_a3) detailParts.push(p.iso_a3);
+    if (p.parentState) detailParts.push(p.parentState);
+    if (p.parentCountry) detailParts.push(p.parentCountry);
+    if (p.parentContinent) detailParts.push(p.parentContinent);
+    if (p.detail) detailParts.push(p.detail);
+
+    items.push({
+      id: p.id,
+      name: p.name,
+      formal_name: p.formal_name,
+      iso_a2: p.iso_a2,
+      iso_a3: p.iso_a3,
+      category: cat,
+      lat: p.lat,
+      lon: p.lon,
+      bbox: p.bbox,
+      level: p.level,
+      priority: p.priority,
+      parentCountry: p.parentCountry,
+      parentState: p.parentState,
+      parentContinent: p.parentContinent,
+      detail: detailParts.join(' • '),
+    });
+    existingNames.add(p.name.toLowerCase());
+  });
+
+  return items;
+}
+
+const STATIC_CLIENT_DATABASE = buildClientSearchDatabase();
+
 export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, className = '' }) => {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -253,50 +300,8 @@ export const SearchBar: React.FC<SearchBarProps> = ({ onSelectLocation, classNam
   const abortControllerRef = useRef<AbortController | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Unified GIS and Scientific Places Search Database for instant client matching
-  const clientDatabase = useMemo(() => {
-    const items: SearchResult[] = [...SCIENTIFIC_SEARCH_DATABASE];
-    const existingNames = new Set(items.map((i) => i.name.toLowerCase()));
-
-    GIS_PLACES.forEach((p) => {
-      if (existingNames.has(p.name.toLowerCase())) return;
-
-      let cat: SearchResult['category'] = 'City';
-      if (p.category === 'country') cat = 'Country';
-      else if (p.category === 'state') cat = 'State / Province';
-      else if (p.category === 'continent') cat = 'Continent';
-      else if (p.category === 'ocean') cat = 'Ocean System';
-      else if (p.category === 'natural_feature') cat = 'Natural Feature';
-
-      const detailParts: string[] = [];
-      if (p.iso_a3) detailParts.push(p.iso_a3);
-      if (p.parentState) detailParts.push(p.parentState);
-      if (p.parentCountry) detailParts.push(p.parentCountry);
-      if (p.parentContinent) detailParts.push(p.parentContinent);
-      if (p.detail) detailParts.push(p.detail);
-
-      items.push({
-        id: p.id,
-        name: p.name,
-        formal_name: p.formal_name,
-        iso_a2: p.iso_a2,
-        iso_a3: p.iso_a3,
-        category: cat,
-        lat: p.lat,
-        lon: p.lon,
-        bbox: p.bbox,
-        level: p.level,
-        priority: p.priority,
-        parentCountry: p.parentCountry,
-        parentState: p.parentState,
-        parentContinent: p.parentContinent,
-        detail: detailParts.join(' • '),
-      });
-      existingNames.add(p.name.toLowerCase());
-    });
-
-    return items;
-  }, []);
+  // Shared GIS and Scientific Places Search Database
+  const clientDatabase = STATIC_CLIENT_DATABASE;
 
   // Filter client-side matching results instantly
   const clientMatches = useMemo(() => {

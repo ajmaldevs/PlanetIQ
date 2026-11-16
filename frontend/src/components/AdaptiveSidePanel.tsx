@@ -329,14 +329,16 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
               <button
                 onClick={() => setIsMinimized(!isMinimized)}
                 title={isMinimized ? 'Expand full details' : 'Collapse panel'}
-                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                aria-label={isMinimized ? 'Expand context panel details' : 'Collapse context panel'}
+                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
               >
                 {isMinimized ? <Maximize2 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
               </button>
               <button
                 onClick={onClose}
                 title="Close context panel"
-                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                aria-label="Close context panel"
+                className="min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
               >
                 <X className="h-4 w-4" />
               </button>

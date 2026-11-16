@@ -285,7 +285,8 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
             <button
               onClick={onToggleExpand}
               title={isExpanded ? 'Restore normal drawer height' : 'Maximize drawer height'}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              aria-label={isExpanded ? 'Restore normal drawer height' : 'Maximize drawer height'}
+              className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
             >
               {isExpanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
@@ -294,7 +295,8 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
           <button
             onClick={onClose}
             title="Close trends drawer"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+            aria-label="Close trends workspace drawer"
+            className="min-h-[36px] min-w-[36px] flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:outline-none"
           >
             <X className="h-4 w-4" />
           </button>

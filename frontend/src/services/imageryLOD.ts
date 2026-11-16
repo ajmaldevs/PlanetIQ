@@ -1,16 +1,6 @@
 import * as THREE from 'three';
 import { QualityProfile, adaptiveQuality } from './adaptiveQuality';
-
-// Convert (lat, lon) in degrees to 3D Cartesian coordinates on sphere of given radius
-function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lon + 180) * (Math.PI / 180);
-  return new THREE.Vector3(
-    -radius * Math.sin(phi) * Math.cos(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta)
-  );
-}
+import { latLonToVector3 } from './geography';
 
 // Convert (lat, lon, zoom) to Web Mercator tile (x, y)
 function latLonToTileXY(lat: number, lon: number, zoom: number): { x: number; y: number } {
