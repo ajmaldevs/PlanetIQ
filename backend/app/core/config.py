@@ -33,9 +33,11 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
         "http://0.0.0.0:5173",
+        "https://planetiq-1.onrender.com",
     ]
     CORS_ORIGIN_REGEX: Optional[str] = (
         r"^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|"
+        r"[a-zA-Z0-9\.\-]+\.onrender\.com|"
         r"192\.168\.\d{1,3}\.\d{1,3}|"
         r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
         r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})"
