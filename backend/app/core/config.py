@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # CORS Allowed Origins
-    CORS_ORIGINS: List[str] = [
+    CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:3000",
         "http://localhost:5173",
         "http://127.0.0.1:3000",
@@ -49,15 +49,24 @@ class Settings(BaseSettings):
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
         if isinstance(v, str):
             v_stripped = v.strip()
-            if not v_stripped.startswith("["):
-                return [i.strip() for i in v_stripped.split(",") if i.strip()]
-            import json
-            try:
-                parsed = json.loads(v_stripped)
-                if isinstance(parsed, list):
-                    return [str(i).strip() for i in parsed if str(i).strip()]
-            except Exception:
-                pass
+            if not v_stripped:
+                return [
+                    "http://localhost:3000",
+                    "http://localhost:5173",
+                    "http://127.0.0.1:3000",
+                    "http://127.0.0.1:5173",
+                    "http://0.0.0.0:5173",
+                    "https://planetiq-1.onrender.com",
+                ]
+            if v_stripped.startswith("["):
+                import json
+                try:
+                    parsed = json.loads(v_stripped)
+                    if isinstance(parsed, list):
+                        return [str(i).strip() for i in parsed if str(i).strip()]
+                except Exception:
+                    pass
+            return [i.strip() for i in v_stripped.split(",") if i.strip()]
         return v
 
     # Database Configuration (PostgreSQL + PostGIS)
