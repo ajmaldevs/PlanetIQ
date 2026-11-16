@@ -127,11 +127,12 @@ class AssistantService:
         config = types.GenerateContentConfig(
             system_instruction=SYSTEM_SCIENTIFIC_INSTRUCTIONS,
             tools=SCIENTIFIC_TOOLS,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
             temperature=0.2,
         )
 
         candidate_models = [model_name]
-        for m in ["gemini-3.8-flash", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-4-hydrogen"]:
+        for m in ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash", "gemini-4-hydrogen"]:
             if m not in candidate_models:
                 candidate_models.append(m)
 
@@ -144,7 +145,7 @@ class AssistantService:
         for turn_idx in range(cls.MAX_TOOL_TURNS):
             response = None
             if turn_idx == 0:
-                # Try candidate models in order if initial model is not found or deprecated
+                # Try candidate models in order if initial model is unavailable or encounters high demand
                 last_err = None
                 for cand in candidate_models:
                     try:
@@ -157,11 +158,8 @@ class AssistantService:
                         break
                     except Exception as mod_err:
                         last_err = mod_err
-                        err_str = str(mod_err).lower()
-                        if "404" in err_str or "not found" in err_str or "no longer available" in err_str:
-                            logger.info(f"Model {cand} unavailable ({mod_err}), attempting next candidate...")
-                            continue
-                        raise mod_err
+                        logger.info(f"Model candidate {cand} failed ({mod_err}), trying next candidate...")
+                        continue
                 if response is None and last_err:
                     raise last_err
             else:
