@@ -246,19 +246,20 @@ async def test_nasa_earthdata_mock_granule_search():
 @pytest.mark.asyncio
 async def test_assistant_offline_fallback():
     """Tests the transparent offline assistant execution when GEMINI_API_KEY is not configured."""
-    req = AssistantQueryRequest(
-        prompt="What is the precipitation in the Amazon?",
-        context=AssistantContext(active_module="atmosphere", latitude=-3.1, longitude=-60.0),
-    )
-    res = await AssistantService.process_query(req)
+    with patch("app.core.config.settings.GEMINI_API_KEY", ""):
+        req = AssistantQueryRequest(
+            prompt="What is the precipitation in the Amazon?",
+            context=AssistantContext(active_module="atmosphere", latitude=-3.1, longitude=-60.0),
+        )
+        res = await AssistantService.process_query(req)
 
-    assert res.data_status == "demonstration_model"
-    assert "Grounded Scientific Engine" in res.confidence_level
-    assert "get_precipitation_data" in res.tool_calls_executed
-    assert len(res.visual_blocks) >= 1
-    assert any(b["type"] == "metric_card" for b in res.visual_blocks)
-    assert any(b["type"] == "data_quality" for b in res.visual_blocks)
-    assert len(res.scientific_grounding) > 0
+        assert res.data_status == "demonstration_model"
+        assert "Grounded Scientific Engine" in res.confidence_level
+        assert "get_precipitation_data" in res.tool_calls_executed
+        assert len(res.visual_blocks) >= 1
+        assert any(b["type"] == "metric_card" for b in res.visual_blocks)
+        assert any(b["type"] == "data_quality" for b in res.visual_blocks)
+        assert len(res.scientific_grounding) > 0
 
 
 # --- 7. AssistantService Mock Gemini Tool Calling Loop ---
@@ -315,25 +316,26 @@ async def test_assistant_mock_gemini_tool_loop():
 
 def test_api_assistant_query_endpoint():
     """Tests POST /api/v1/assistant/query endpoint."""
-    payload = {
-        "prompt": "Show historical trends of vegetation in the Congo basin",
-        "context": {
-            "active_module": "land",
-            "latitude": 0.5,
-            "longitude": 23.5,
-            "selected_date": "2026-03",
-        },
-        "history": [
-            {"role": "user", "content": "Hello TerraLens"},
-            {"role": "assistant", "content": "Welcome to TerraLens!"},
-        ],
-    }
-    response = client.post("/api/v1/assistant/query", json=payload)
-    assert response.status_code == 200
-    data = response.json()
-    assert "response" in data
-    assert "scientific_grounding" in data
-    assert "suggested_followups" in data
-    assert "visual_blocks" in data
-    assert "tool_calls_executed" in data
-    assert data["data_status"] == "demonstration_model"
+    with patch("app.core.config.settings.GEMINI_API_KEY", ""):
+        payload = {
+            "prompt": "Show historical trends of vegetation in the Congo basin",
+            "context": {
+                "active_module": "land",
+                "latitude": 0.5,
+                "longitude": 23.5,
+                "selected_date": "2026-03",
+            },
+            "history": [
+                {"role": "user", "content": "Hello TerraLens"},
+                {"role": "assistant", "content": "Welcome to TerraLens!"},
+            ],
+        }
+        response = client.post("/api/v1/assistant/query", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert "response" in data
+        assert "scientific_grounding" in data
+        assert "suggested_followups" in data
+        assert "visual_blocks" in data
+        assert "tool_calls_executed" in data
+        assert data["data_status"] == "demonstration_model"

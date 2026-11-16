@@ -116,19 +116,21 @@ async def test_cross_system_endpoints():
 
 @pytest.mark.asyncio
 async def test_assistant_endpoint():
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        payload = {
-            "prompt": "How does SWOT measure sea surface height and what are the units?",
-            "context": {"active_module": "ocean"}
-        }
-        res = await client.post("/api/v1/assistant/query", json=payload)
-        assert res.status_code == 200
-        data = res.json()
-        assert "response" in data
-        assert "scientific_grounding" in data
-        assert len(data["scientific_grounding"]) > 0
-        assert any(c["units"] == "meters (m)" for c in data["scientific_grounding"])
+    from unittest.mock import patch
+    with patch("app.core.config.settings.GEMINI_API_KEY", ""):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            payload = {
+                "prompt": "How does SWOT measure sea surface height and what are the units?",
+                "context": {"active_module": "ocean"}
+            }
+            res = await client.post("/api/v1/assistant/query", json=payload)
+            assert res.status_code == 200
+            data = res.json()
+            assert "response" in data
+            assert "scientific_grounding" in data
+            assert len(data["scientific_grounding"]) > 0
+            assert any(c["units"] == "meters (m)" for c in data["scientific_grounding"])
 
 
 @pytest.mark.asyncio

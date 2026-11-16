@@ -108,7 +108,7 @@ class Settings(BaseSettings):
 
     # AI Integration (Google Gemini API)
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
 
 
 @lru_cache()

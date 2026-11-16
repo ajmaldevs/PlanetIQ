@@ -130,17 +130,46 @@ class AssistantService:
             temperature=0.2,
         )
 
+        candidate_models = [model_name]
+        for m in ["gemini-3.8-flash", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-4-hydrogen"]:
+            if m not in candidate_models:
+                candidate_models.append(m)
+
         executed_tools: List[Dict[str, Any]] = []
         tool_names_called: List[str] = []
         final_text = ""
+        active_model = candidate_models[0]
 
         # Controlled Tool Execution Loop
         for turn_idx in range(cls.MAX_TOOL_TURNS):
-            response = client.models.generate_content(
-                model=model_name,
-                contents=contents,
-                config=config,
-            )
+            response = None
+            if turn_idx == 0:
+                # Try candidate models in order if initial model is not found or deprecated
+                last_err = None
+                for cand in candidate_models:
+                    try:
+                        response = client.models.generate_content(
+                            model=cand,
+                            contents=contents,
+                            config=config,
+                        )
+                        active_model = cand
+                        break
+                    except Exception as mod_err:
+                        last_err = mod_err
+                        err_str = str(mod_err).lower()
+                        if "404" in err_str or "not found" in err_str or "no longer available" in err_str:
+                            logger.info(f"Model {cand} unavailable ({mod_err}), attempting next candidate...")
+                            continue
+                        raise mod_err
+                if response is None and last_err:
+                    raise last_err
+            else:
+                response = client.models.generate_content(
+                    model=active_model,
+                    contents=contents,
+                    config=config,
+                )
 
             # Check if Gemini requested function calls
             if response.function_calls:
