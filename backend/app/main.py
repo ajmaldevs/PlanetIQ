@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.core.database import check_database_connection, get_sync_session
+from app.core.database import check_database_connection, get_sync_session, close_database_connections
 from app.integrations.nasa.earthdata_client import NasaEarthdataClient
 from app.services.ingestion_service import IngestionService
 from app.api.v1.router import api_router
@@ -52,6 +52,10 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Database startup check note: {e}")
     yield
     logger.info(f"Shutting down {settings.PROJECT_NAME}")
+    try:
+        await close_database_connections()
+    except Exception as e:
+        logger.warning(f"Shutdown database cleanup note: {e}")
 
 
 app = FastAPI(

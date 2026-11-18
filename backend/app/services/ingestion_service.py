@@ -30,6 +30,7 @@ from sqlalchemy import select
 
 from app.models.observation import EarthObservation
 from app.models.timeseries import ObservationTimeSeriesRecord
+from app.core.database import session_scope
 from app.data_processing.ndvi_processor import NdviProcessor
 from app.data_processing.ocean_processor import OceanProcessor
 from app.data_processing.atmosphere_processor import AtmosphereProcessor
@@ -581,11 +582,12 @@ class IngestionService:
         dataset_id: str,
         year: int,
         month: int,
-        session: Session,
+        session: Optional[Session] = None,
     ) -> Dict[str, Any]:
         """
         Discovers and retrieves genuine satellite data from NASA CMR.
         If credentials are not configured, transparently reports the blocker.
+        Decouples long-running granule downloads from database connections to prevent pool starvation.
         """
         auth_status = NasaEarthdataClient.get_auth_status()
         if not auth_status.get("granule_download_available"):
@@ -598,51 +600,48 @@ class IngestionService:
                 ),
             }
 
-        # Discover granule
+        # Step 1: Discover and retrieve granule over network without holding a DB session
         granule = None
+        ret = None
+        target_dataset_id = dataset_id
+
         if dataset_id == "MOD13C2":
             granule = await ModisClient.find_granule_for_month(year, month)
             if granule:
                 ret = await ModisClient.retrieve_granule_file(granule)
-                if ret.get("status") in ["downloaded", "cached"] and ret.get("file_path"):
-                    date_str = f"{year:04d}-{month:02d}"
-                    return cls.ingest_granule_file(ret["file_path"], dataset_id, date_str, session)
         elif "CHL" in dataset_id or "SST" in dataset_id:
             prod = "chl" if "CHL" in dataset_id else "sst"
             granule = await OceanColorClient.find_granule_for_month(prod, year, month)
             if granule:
                 ret = await OceanColorClient.retrieve_granule_file(granule)
-                if ret.get("status") in ["downloaded", "cached"] and ret.get("file_path"):
-                    date_str = f"{year:04d}-{month:02d}"
-                    return cls.ingest_granule_file(ret["file_path"], dataset_id, date_str, session)
         elif dataset_id in ["GPM_3IMERGM", "GPM"]:
+            target_dataset_id = "GPM_3IMERGM"
             granule = await GpmClient.find_granule_for_month(year, month)
             if not granule and year >= 2026:
                 granule = await GpmClient.find_granule_for_month(2025, 9)
             if granule:
                 ret = await GpmClient.retrieve_granule_file(granule)
-                if ret.get("status") in ["downloaded", "cached"] and ret.get("file_path"):
-                    date_str = f"{year:04d}-{month:02d}"
-                    return cls.ingest_granule_file(ret["file_path"], "GPM_3IMERGM", date_str, session)
         elif dataset_id in ["SWOT_L2_LR_SSH", "SWOT"]:
+            target_dataset_id = "SWOT_L2_LR_SSH"
             granule = await SwotClient.find_granule_for_month(year, month)
             if granule:
                 ret = await SwotClient.retrieve_granule_file(granule)
-                if ret.get("status") in ["downloaded", "cached"] and ret.get("file_path"):
-                    date_str = f"{year:04d}-{month:02d}"
-                    return cls.ingest_granule_file(ret["file_path"], "SWOT_L2_LR_SSH", date_str, session)
         elif dataset_id in ["MOD08_M3", "MODIS_ATMOSPHERE"]:
+            target_dataset_id = "MOD08_M3"
             granule = await AtmosphereClient.find_granule_for_month("aod", year, month)
             if granule:
                 ret = await AtmosphereClient.retrieve_granule_file(granule)
-                if ret.get("status") in ["downloaded", "cached"] and ret.get("file_path"):
-                    date_str = f"{year:04d}-{month:02d}"
-                    return cls.ingest_granule_file(ret["file_path"], "MOD08_M3", date_str, session)
 
-        return {
-            "status": "not_found",
-            "message": f"No genuine granule discovered on CMR for {dataset_id} in {year}-{month:02d}.",
-        }
+        if not ret or ret.get("status") not in ["downloaded", "cached"] or not ret.get("file_path"):
+            return {
+                "status": "not_found",
+                "message": f"No genuine granule discovered on CMR for {dataset_id} in {year}-{month:02d}.",
+            }
+
+        # Step 2: Open database session strictly during fast persistence
+        date_str = f"{year:04d}-{month:02d}"
+        with session_scope(session) as db:
+            return cls.ingest_granule_file(ret["file_path"], target_dataset_id, date_str, db)
 
     # =========================================================================
     # Array Decoders for Ocean & Atmosphere Granules

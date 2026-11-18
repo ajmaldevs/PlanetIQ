@@ -97,6 +97,8 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "terralens_db"
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
+    DATABASE_POOL_TIMEOUT: int = 30
+    DATABASE_POOL_RECYCLE: int = 1800  # Recycle idle connections every 30 minutes
 
     @classmethod
     def _convert_db_url(cls, raw_url: Optional[str], dialect: str) -> Optional[str]:
@@ -107,7 +109,15 @@ class Settings(BaseSettings):
             return None
         import urllib.parse
         parsed = urllib.parse.urlsplit(clean)
-        # Convert postgres:// or postgresql:// to postgresql+{dialect}://
+        # Preserve SQLite URLs for isolated tests
+        if parsed.scheme.startswith("sqlite"):
+            return clean
+
+        # If already matching target dialect, return as-is
+        if parsed.scheme == f"postgresql+{dialect}":
+            return clean
+
+        # Convert postgres://, postgresql://, or alternate dialects to postgresql+{dialect}://
         scheme = f"postgresql+{dialect}"
         netloc = parsed.netloc
         path = parsed.path

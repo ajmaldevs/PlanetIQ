@@ -73,22 +73,16 @@ async def trigger_granule_ingestion(
     """
     Triggers live CMR discovery and ingestion for a requested satellite dataset and date.
     Requires active NASA Earthdata credentials in the backend environment.
+    Decoupled from connection pool during NASA granule download.
     """
     from app.services.ingestion_service import IngestionService
-
-    db = get_sync_session()
-    if db is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Database session unavailable. Verify PostgreSQL connection."
-        )
 
     try:
         result = await IngestionService.ingest_live_granule(
             dataset_id=dataset_id,
             year=year,
             month=month,
-            session=db,
+            session=None,
         )
         return {
             "status": result.get("status"),
@@ -99,8 +93,6 @@ async def trigger_granule_ingestion(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
-    finally:
-        db.close()
 
 
 @router.get(

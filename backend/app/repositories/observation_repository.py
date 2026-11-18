@@ -28,7 +28,7 @@ from app.models.timeseries import ObservationTimeSeriesRecord
 from app.data_processing.quality_control import QualityControl
 from app.data_processing.ocean_processor import OceanProcessor
 from app.data_processing.atmosphere_processor import AtmosphereProcessor
-from app.core.database import get_sync_session
+from app.core.database import get_sync_session, session_scope
 
 logger = logging.getLogger("planetiq.observation_repository")
 
@@ -63,6 +63,8 @@ class ObservationRepository:
     def mark_db_failed(cls):
         import time
         cls._last_db_failure_time = time.time()
+        from app.core.database import mark_sync_db_failed
+        mark_sync_db_failed()
 
     # =========================================================================
     # 1. LAND (NASA MODIS MOD13C2 v061 0.05° CMG)
@@ -85,61 +87,60 @@ class ObservationRepository:
         returns an explicit unavailable state. NEVER synthesizes or fabricates measurements.
         """
         features: List[Dict[str, Any]] = []
-        db = cls._get_active_session(session)
+        with session_scope(session) as db:
+            if db is not None:
+                try:
+                    # Query verified timeseries records for this month
+                    query = select(ObservationTimeSeriesRecord).filter(
+                        ObservationTimeSeriesRecord.dataset_id == "MOD13C2",
+                        ObservationTimeSeriesRecord.date_str == date_str,
+                        ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                    )
+                    if min_lat is not None:
+                        query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
+                    if max_lat is not None:
+                        query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
+                    if min_lon is not None:
+                        query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
+                    if max_lon is not None:
+                        query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
 
-        if db is not None:
-            try:
-                # Query verified timeseries records for this month
-                query = select(ObservationTimeSeriesRecord).filter(
-                    ObservationTimeSeriesRecord.dataset_id == "MOD13C2",
-                    ObservationTimeSeriesRecord.date_str == date_str,
-                    ObservationTimeSeriesRecord.verification_status == "verified_observation",
-                )
-                if min_lat is not None:
-                    query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
-                if max_lat is not None:
-                    query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
-                if min_lon is not None:
-                    query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
-                if max_lon is not None:
-                    query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
+                    records = db.execute(query).scalars().all()
 
-                records = db.execute(query).scalars().all()
-
-                for rec in records:
-                    qa_info = QualityControl.decode_modis_pixel_reliability(int(rec.quality_flag or 0))
-                    features.append({
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [round(rec.longitude, 4), round(rec.latitude, 4)],
-                        },
-                        "properties": {
-                            "region_name": rec.location_name,
-                            "latitude": rec.latitude,
-                            "longitude": rec.longitude,
-                            "date": date_str,
-                            "dataset_id": "MOD13C2",
-                            "ndvi": rec.value,
-                            "evi": None,  # Preserved as null when band is unverified
-                            "vci_percent": None,
-                            "drought_category": "Climatological Baseline Unavailable",
-                            "unit": rec.unit,
-                            "sensor": "MODIS Terra (0.05° CMG)",
-                            "data_status": "observation",
-                            "is_observation": True,
-                            "source_type": "satellite_telemetry",
-                            "verification_status": "verified_observation",
-                            "granule_id": rec.granule_id,
-                            "source_file_checksum": rec.source_file_checksum,
-                            "quality_reliability": qa_info.get("category"),
-                            "quality_confidence": qa_info.get("confidence", 1.0),
-                            "provenance": "NASA LP DAAC / USGS EROS",
-                        },
-                    })
-            except Exception as exc:
-                cls.mark_db_failed()
-                logger.debug(f"Database query error in get_real_modis_spatial_grid: {exc}")
+                    for rec in records:
+                        qa_info = QualityControl.decode_modis_pixel_reliability(int(rec.quality_flag or 0))
+                        features.append({
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [round(rec.longitude, 4), round(rec.latitude, 4)],
+                            },
+                            "properties": {
+                                "region_name": rec.location_name,
+                                "latitude": rec.latitude,
+                                "longitude": rec.longitude,
+                                "date": date_str,
+                                "dataset_id": "MOD13C2",
+                                "ndvi": rec.value,
+                                "evi": None,  # Preserved as null when band is unverified
+                                "vci_percent": None,
+                                "drought_category": "Climatological Baseline Unavailable",
+                                "unit": rec.unit,
+                                "sensor": "MODIS Terra (0.05° CMG)",
+                                "data_status": "observation",
+                                "is_observation": True,
+                                "source_type": "satellite_telemetry",
+                                "verification_status": "verified_observation",
+                                "granule_id": rec.granule_id,
+                                "source_file_checksum": rec.source_file_checksum,
+                                "quality_reliability": qa_info.get("category"),
+                                "quality_confidence": qa_info.get("confidence", 1.0),
+                                "provenance": "NASA LP DAAC / USGS EROS",
+                            },
+                        })
+                except Exception as exc:
+                    cls.mark_db_failed()
+                    logger.debug(f"Database query error in get_real_modis_spatial_grid: {exc}")
 
         if not features:
             return {
@@ -190,41 +191,41 @@ class ObservationRepository:
         Retrieves real NASA MODIS MOD13C2 multi-year timeseries for coordinates.
         CRITICAL: ONLY includes dates with genuine observations. Does NOT fill missing months with formulas!
         """
-        db = cls._get_active_session(session)
         points = []
         ndvi_values = []
         region_name = f"Terrestrial Point ({latitude:+.2f}°, {longitude:+.2f}°)"
         target_granule = None
 
-        if db is not None:
-            try:
-                # Query within a 1.0 degree proximity box
-                query = select(ObservationTimeSeriesRecord).filter(
-                    ObservationTimeSeriesRecord.dataset_id == "MOD13C2",
-                    ObservationTimeSeriesRecord.metric_name == "NDVI",
-                    ObservationTimeSeriesRecord.verification_status == "verified_observation",
-                    ObservationTimeSeriesRecord.latitude.between(latitude - 1.0, latitude + 1.0),
-                    ObservationTimeSeriesRecord.longitude.between(longitude - 1.0, longitude + 1.0),
-                ).order_by(ObservationTimeSeriesRecord.date_str)
+        with session_scope(session) as db:
+            if db is not None:
+                try:
+                    # Query within a 1.0 degree proximity box
+                    query = select(ObservationTimeSeriesRecord).filter(
+                        ObservationTimeSeriesRecord.dataset_id == "MOD13C2",
+                        ObservationTimeSeriesRecord.metric_name == "NDVI",
+                        ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                        ObservationTimeSeriesRecord.latitude.between(latitude - 1.0, latitude + 1.0),
+                        ObservationTimeSeriesRecord.longitude.between(longitude - 1.0, longitude + 1.0),
+                    ).order_by(ObservationTimeSeriesRecord.date_str)
 
-                recs = db.execute(query).scalars().all()
-                for r in recs:
-                    parts = r.date_str.split("-")
-                    yr = int(parts[0])
-                    if start_year <= yr <= end_year:
-                        ndvi_values.append(r.value)
-                        target_granule = r.granule_id
-                        region_name = r.location_name
-                        points.append({
-                            "date": r.date_str,
-                            "ndvi": r.value,
-                            "evi": None,
-                            "historical_ndvi_median": r.baseline_normal,
-                            "ndvi_anomaly": r.anomaly,
-                        })
-            except Exception as exc:
-                cls.mark_db_failed()
-                logger.debug(f"DB query error in get_real_modis_timeseries: {exc}")
+                    recs = db.execute(query).scalars().all()
+                    for r in recs:
+                        parts = r.date_str.split("-")
+                        yr = int(parts[0])
+                        if start_year <= yr <= end_year:
+                            ndvi_values.append(r.value)
+                            target_granule = r.granule_id
+                            region_name = r.location_name
+                            points.append({
+                                "date": r.date_str,
+                                "ndvi": r.value,
+                                "evi": None,
+                                "historical_ndvi_median": r.baseline_normal,
+                                "ndvi_anomaly": r.anomaly,
+                            })
+                except Exception as exc:
+                    cls.mark_db_failed()
+                    logger.debug(f"DB query error in get_real_modis_timeseries: {exc}")
 
         if not points:
             return {
@@ -288,46 +289,46 @@ class ObservationRepository:
         Only returns genuine verified observations with verification_status='verified_observation'.
         """
         features: List[Dict[str, Any]] = []
-        db = cls._get_active_session(session)
         target_granule = ""
 
-        if db is not None:
-            try:
-                query = select(ObservationTimeSeriesRecord).filter(
-                    ObservationTimeSeriesRecord.dataset_id.in_(["MODISA_L3m_CHL", "MODISA_L3m_SST", "SWOT_L2_LR_SSH", "MODISA_L3m_OCEAN_SWOT"]),
-                    ObservationTimeSeriesRecord.date_str == date_str,
-                    ObservationTimeSeriesRecord.verification_status == "verified_observation",
-                )
-                if min_lat is not None:
-                    query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
-                if max_lat is not None:
-                    query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
-                if min_lon is not None:
-                    query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
-                if max_lon is not None:
-                    query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
-
-                records = db.execute(query).scalars().all()
-                for rec in records:
-                    target_granule = rec.granule_id or "MODISA_SWOT_VERIFIED"
-                    feat = OceanProcessor.process_ocean_point(
-                        lat=rec.latitude,
-                        lon=rec.longitude,
-                        date_str=date_str,
-                        granule_id=target_granule,
-                        chl=rec.value if rec.metric_name == "chlor_a" else None,
-                        sst=rec.value if rec.metric_name == "sst" else None,
-                        ssha=rec.value if rec.metric_name in ["ssha", "ssha_karin"] else None,
-                        quality_flag=int(rec.quality_flag or 0),
-                        location_name=rec.location_name,
+        with session_scope(session) as db:
+            if db is not None:
+                try:
+                    query = select(ObservationTimeSeriesRecord).filter(
+                        ObservationTimeSeriesRecord.dataset_id.in_(["MODISA_L3m_CHL", "MODISA_L3m_SST", "SWOT_L2_LR_SSH", "MODISA_L3m_OCEAN_SWOT"]),
+                        ObservationTimeSeriesRecord.date_str == date_str,
+                        ObservationTimeSeriesRecord.verification_status == "verified_observation",
                     )
-                    if feat:
-                        feat["properties"]["verification_status"] = "verified_observation"
-                        feat["properties"]["source_file_checksum"] = rec.source_file_checksum
-                        features.append(feat)
-            except Exception as exc:
-                cls.mark_db_failed()
-                logger.debug(f"DB error in get_real_ocean_spatial_grid: {exc}")
+                    if min_lat is not None:
+                        query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
+                    if max_lat is not None:
+                        query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
+                    if min_lon is not None:
+                        query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
+                    if max_lon is not None:
+                        query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
+
+                    records = db.execute(query).scalars().all()
+                    for rec in records:
+                        target_granule = rec.granule_id or "MODISA_SWOT_VERIFIED"
+                        feat = OceanProcessor.process_ocean_point(
+                            lat=rec.latitude,
+                            lon=rec.longitude,
+                            date_str=date_str,
+                            granule_id=target_granule,
+                            chl=rec.value if rec.metric_name == "chlor_a" else None,
+                            sst=rec.value if rec.metric_name == "sst" else None,
+                            ssha=rec.value if rec.metric_name in ["ssha", "ssha_karin"] else None,
+                            quality_flag=int(rec.quality_flag or 0),
+                            location_name=rec.location_name,
+                        )
+                        if feat:
+                            feat["properties"]["verification_status"] = "verified_observation"
+                            feat["properties"]["source_file_checksum"] = rec.source_file_checksum
+                            features.append(feat)
+                except Exception as exc:
+                    cls.mark_db_failed()
+                    logger.debug(f"DB error in get_real_ocean_spatial_grid: {exc}")
 
         if not features:
             return {
@@ -384,36 +385,36 @@ class ObservationRepository:
         session: Optional[Session] = None,
     ) -> Dict[str, Any]:
         """Retrieves authentic ocean time series for coordinates."""
-        db = cls._get_active_session(session)
         points = []
         region_name = f"Ocean Coordinate ({latitude:+.2f}°, {longitude:+.2f}°)"
         target_granule = None
 
-        if db is not None:
-            try:
-                query = select(ObservationTimeSeriesRecord).filter(
-                    ObservationTimeSeriesRecord.dataset_id.in_(["MODISA_L3m_CHL", "MODISA_L3m_SST", "SWOT_L2_LR_SSH"]),
-                    ObservationTimeSeriesRecord.verification_status == "verified_observation",
-                    ObservationTimeSeriesRecord.latitude.between(latitude - 2.0, latitude + 2.0),
-                    ObservationTimeSeriesRecord.longitude.between(longitude - 2.0, longitude + 2.0),
-                ).order_by(ObservationTimeSeriesRecord.date_str)
+        with session_scope(session) as db:
+            if db is not None:
+                try:
+                    query = select(ObservationTimeSeriesRecord).filter(
+                        ObservationTimeSeriesRecord.dataset_id.in_(["MODISA_L3m_CHL", "MODISA_L3m_SST", "SWOT_L2_LR_SSH"]),
+                        ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                        ObservationTimeSeriesRecord.latitude.between(latitude - 2.0, latitude + 2.0),
+                        ObservationTimeSeriesRecord.longitude.between(longitude - 2.0, longitude + 2.0),
+                    ).order_by(ObservationTimeSeriesRecord.date_str)
 
-                recs = db.execute(query).scalars().all()
-                for r in recs:
-                    parts = r.date_str.split("-")
-                    yr = int(parts[0])
-                    if start_year <= yr <= end_year:
-                        target_granule = r.granule_id
-                        region_name = r.location_name
-                        points.append({
-                            "date": r.date_str,
-                            "ssha_mean_m": r.value if "SSH" in r.dataset_id else 0.0,
-                            "chlor_a": r.value if "CHL" in r.dataset_id else None,
-                            "sst": r.value if "SST" in r.dataset_id else None,
-                        })
-            except Exception as exc:
-                cls.mark_db_failed()
-                logger.debug(f"DB error in get_real_ocean_timeseries: {exc}")
+                    recs = db.execute(query).scalars().all()
+                    for r in recs:
+                        parts = r.date_str.split("-")
+                        yr = int(parts[0])
+                        if start_year <= yr <= end_year:
+                            target_granule = r.granule_id
+                            region_name = r.location_name
+                            points.append({
+                                "date": r.date_str,
+                                "ssha_mean_m": r.value if "SSH" in r.dataset_id else 0.0,
+                                "chlor_a": r.value if "CHL" in r.dataset_id else None,
+                                "sst": r.value if "SST" in r.dataset_id else None,
+                            })
+                except Exception as exc:
+                    cls.mark_db_failed()
+                    logger.debug(f"DB error in get_real_ocean_timeseries: {exc}")
 
         if not points:
             return {
@@ -491,45 +492,45 @@ class ObservationRepository:
         Only returns genuine verified observations with verification_status='verified_observation'.
         """
         features: List[Dict[str, Any]] = []
-        db = cls._get_active_session(session)
         target_granule = ""
 
-        if db is not None:
-            try:
-                query = select(ObservationTimeSeriesRecord).filter(
-                    ObservationTimeSeriesRecord.dataset_id.in_(["MOD08_M3", "GPM_3IMERGM", "MODIS_GPM_ATMOSPHERE"]),
-                    ObservationTimeSeriesRecord.date_str == date_str,
-                    ObservationTimeSeriesRecord.verification_status == "verified_observation",
-                )
-                if min_lat is not None:
-                    query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
-                if max_lat is not None:
-                    query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
-                if min_lon is not None:
-                    query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
-                if max_lon is not None:
-                    query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
-
-                records = db.execute(query).scalars().all()
-                for rec in records:
-                    target_granule = rec.granule_id or "MODIS_GPM_VERIFIED"
-                    feat = AtmosphereProcessor.process_atmosphere_point(
-                        lat=rec.latitude,
-                        lon=rec.longitude,
-                        date_str=date_str,
-                        granule_id=target_granule,
-                        aod=rec.value if rec.metric_name == "aod_550" else None,
-                        precip_accumulated_mm=rec.value if "precip" in rec.metric_name else None,
-                        quality_flag=int(rec.quality_flag or 3),
-                        location_name=rec.location_name,
+        with session_scope(session) as db:
+            if db is not None:
+                try:
+                    query = select(ObservationTimeSeriesRecord).filter(
+                        ObservationTimeSeriesRecord.dataset_id.in_(["MOD08_M3", "GPM_3IMERGM", "MODIS_GPM_ATMOSPHERE"]),
+                        ObservationTimeSeriesRecord.date_str == date_str,
+                        ObservationTimeSeriesRecord.verification_status == "verified_observation",
                     )
-                    if feat:
-                        feat["properties"]["verification_status"] = "verified_observation"
-                        feat["properties"]["source_file_checksum"] = rec.source_file_checksum
-                        features.append(feat)
-            except Exception as exc:
-                cls.mark_db_failed()
-                logger.debug(f"DB error in get_real_atmosphere_spatial_grid: {exc}")
+                    if min_lat is not None:
+                        query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
+                    if max_lat is not None:
+                        query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
+                    if min_lon is not None:
+                        query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
+                    if max_lon is not None:
+                        query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
+
+                    records = db.execute(query).scalars().all()
+                    for rec in records:
+                        target_granule = rec.granule_id or "MODIS_GPM_VERIFIED"
+                        feat = AtmosphereProcessor.process_atmosphere_point(
+                            lat=rec.latitude,
+                            lon=rec.longitude,
+                            date_str=date_str,
+                            granule_id=target_granule,
+                            aod=rec.value if rec.metric_name == "aod_550" else None,
+                            precip_accumulated_mm=rec.value if "precip" in rec.metric_name else None,
+                            quality_flag=int(rec.quality_flag or 3),
+                            location_name=rec.location_name,
+                        )
+                        if feat:
+                            feat["properties"]["verification_status"] = "verified_observation"
+                            feat["properties"]["source_file_checksum"] = rec.source_file_checksum
+                            features.append(feat)
+                except Exception as exc:
+                    cls.mark_db_failed()
+                    logger.debug(f"DB error in get_real_atmosphere_spatial_grid: {exc}")
 
         if not features:
             return {
@@ -586,35 +587,35 @@ class ObservationRepository:
         session: Optional[Session] = None,
     ) -> Dict[str, Any]:
         """Retrieves authentic atmospheric time series for coordinates."""
-        db = cls._get_active_session(session)
         points = []
         region_name = f"Atmospheric Coordinate ({latitude:+.2f}°, {longitude:+.2f}°)"
         target_granule = None
 
-        if db is not None:
-            try:
-                query = select(ObservationTimeSeriesRecord).filter(
-                    ObservationTimeSeriesRecord.dataset_id.in_(["MOD08_M3", "GPM_3IMERGM", "MODIS_GPM_ATMOSPHERE"]),
-                    ObservationTimeSeriesRecord.verification_status == "verified_observation",
-                    ObservationTimeSeriesRecord.latitude.between(latitude - 2.0, latitude + 2.0),
-                    ObservationTimeSeriesRecord.longitude.between(longitude - 2.0, longitude + 2.0),
-                ).order_by(ObservationTimeSeriesRecord.date_str)
+        with session_scope(session) as db:
+            if db is not None:
+                try:
+                    query = select(ObservationTimeSeriesRecord).filter(
+                        ObservationTimeSeriesRecord.dataset_id.in_(["MOD08_M3", "GPM_3IMERGM", "MODIS_GPM_ATMOSPHERE"]),
+                        ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                        ObservationTimeSeriesRecord.latitude.between(latitude - 2.0, latitude + 2.0),
+                        ObservationTimeSeriesRecord.longitude.between(longitude - 2.0, longitude + 2.0),
+                    ).order_by(ObservationTimeSeriesRecord.date_str)
 
-                recs = db.execute(query).scalars().all()
-                for r in recs:
-                    parts = r.date_str.split("-")
-                    yr = int(parts[0])
-                    if start_year <= yr <= end_year:
-                        target_granule = r.granule_id
-                        region_name = r.location_name
-                        points.append({
-                            "date": r.date_str,
-                            "precipitation_accumulated_mm": r.value if "precip" in r.metric_name else 0.0,
-                            "aod_550": r.value if r.metric_name == "aod_550" else None,
-                        })
-            except Exception as exc:
-                cls.mark_db_failed()
-                logger.debug(f"DB error in get_real_atmosphere_timeseries: {exc}")
+                    recs = db.execute(query).scalars().all()
+                    for r in recs:
+                        parts = r.date_str.split("-")
+                        yr = int(parts[0])
+                        if start_year <= yr <= end_year:
+                            target_granule = r.granule_id
+                            region_name = r.location_name
+                            points.append({
+                                "date": r.date_str,
+                                "precipitation_accumulated_mm": r.value if "precip" in r.metric_name else 0.0,
+                                "aod_550": r.value if r.metric_name == "aod_550" else None,
+                            })
+                except Exception as exc:
+                    cls.mark_db_failed()
+                    logger.debug(f"DB error in get_real_atmosphere_timeseries: {exc}")
 
         if not points:
             return {
