@@ -15,6 +15,7 @@ Implements:
 
 from typing import List, Dict, Any, Optional
 import os
+import asyncio
 import logging
 from app.core.config import settings
 from app.schemas.scientific import (
@@ -149,10 +150,14 @@ class AssistantService:
                 last_err = None
                 for cand in candidate_models:
                     try:
-                        response = client.models.generate_content(
-                            model=cand,
-                            contents=contents,
-                            config=config,
+                        response = await asyncio.wait_for(
+                            asyncio.to_thread(
+                                client.models.generate_content,
+                                model=cand,
+                                contents=contents,
+                                config=config,
+                            ),
+                            timeout=8.0,
                         )
                         active_model = cand
                         break
@@ -163,10 +168,14 @@ class AssistantService:
                 if response is None and last_err:
                     raise last_err
             else:
-                response = client.models.generate_content(
-                    model=active_model,
-                    contents=contents,
-                    config=config,
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        client.models.generate_content,
+                        model=active_model,
+                        contents=contents,
+                        config=config,
+                    ),
+                    timeout=8.0,
                 )
 
             # Check if Gemini requested function calls
