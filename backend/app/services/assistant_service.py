@@ -400,57 +400,68 @@ class AssistantService:
                 if meas:
                     items: List[MetricCardItem] = []
                     if name == "get_ocean_observations":
-                        if "chlorophyll_a_mg_m3" in meas:
+                        chl = meas.get("chlorophyll_a_mg_m3")
+                        if chl is not None:
                             items.append(MetricCardItem(
                                 title="Chlorophyll-a",
-                                value=meas.get("chlorophyll_a_mg_m3"),
+                                value=chl,
                                 unit="mg/m³",
                                 badge=res.get("analysis", {}).get("chlorophyll_productivity", "Productivity"),
                                 subtext="MODIS Aqua OB.DAAC",
                             ))
-                        if "sea_surface_temp_celsius" in meas:
+                        sst = meas.get("sea_surface_temp_celsius")
+                        if sst is not None:
                             items.append(MetricCardItem(
                                 title="Sea Surface Temp (SST)",
-                                value=meas.get("sea_surface_temp_celsius"),
+                                value=sst,
                                 unit="°C",
                                 subtext="MODIS Thermal Radiometry",
                             ))
-                        items.append(MetricCardItem(
-                            title="SSHA (Height Anomaly)",
-                            value=meas.get("sea_surface_height_anomaly_m", 0.0),
-                            unit="m",
-                            badge=res.get("analysis", {}).get("eddy_classification", "Altimetry"),
-                            trend="up" if meas.get("sea_surface_height_anomaly_m", 0.0) > 0 else "down",
-                            subtext="SWOT KaRIn 2 km Swath",
-                        ))
+                        ssha = meas.get("sea_surface_height_anomaly_m")
+                        if ssha is not None:
+                            items.append(MetricCardItem(
+                                title="SSHA (Height Anomaly)",
+                                value=ssha,
+                                unit="m",
+                                badge=res.get("analysis", {}).get("eddy_classification", "Altimetry"),
+                                trend="up" if ssha > 0 else "down",
+                                subtext="SWOT KaRIn 2 km Swath",
+                            ))
                     elif name == "get_precipitation_data":
-                        items.append(MetricCardItem(
-                            title="Monthly Precipitation",
-                            value=meas.get("precipitation_accumulated_mm", 0.0),
-                            unit="mm",
-                            subtext=f"Rate: {meas.get('precipitation_rate_mm_hr')} mm/hr",
-                        ))
-                        anom = meas.get("precipitation_anomaly_mm", 0.0)
-                        items.append(MetricCardItem(
-                            title="Rainfall Departure",
-                            value=f"{anom:+}",
-                            unit="mm",
-                            badge="Above Normal" if anom > 0 else ("Below Normal" if anom < 0 else "Normal"),
-                            trend="up" if anom > 0 else "down",
-                        ))
+                        precip = meas.get("precipitation_accumulated_mm")
+                        if precip is not None:
+                            items.append(MetricCardItem(
+                                title="Monthly Precipitation",
+                                value=precip,
+                                unit="mm",
+                                subtext=f"Rate: {meas.get('precipitation_rate_mm_hr', 0.0)} mm/hr",
+                            ))
+                        anom = meas.get("precipitation_anomaly_mm")
+                        if anom is not None:
+                            items.append(MetricCardItem(
+                                title="Rainfall Departure",
+                                value=f"{anom:+}",
+                                unit="mm",
+                                badge="Above Normal" if anom > 0 else ("Below Normal" if anom < 0 else "Normal"),
+                                trend="up" if anom > 0 else "down",
+                            ))
                     elif name == "get_vegetation_indices":
-                        items.append(MetricCardItem(
-                            title="NDVI Canopy Greenness",
-                            value=meas.get("ndvi", 0.0),
-                            unit="ratio",
-                            subtext="Scale: -0.2 to 1.0",
-                        ))
-                        items.append(MetricCardItem(
-                            title="Vegetation Condition (VCI)",
-                            value=meas.get("vci_percent", 0.0),
-                            unit="%",
-                            badge=res.get("analysis", {}).get("canopy_status", "VCI"),
-                        ))
+                        ndvi = meas.get("ndvi")
+                        if ndvi is not None:
+                            items.append(MetricCardItem(
+                                title="NDVI Canopy Greenness",
+                                value=ndvi,
+                                unit="ratio",
+                                subtext="Scale: -0.2 to 1.0",
+                            ))
+                        vci = meas.get("vci_percent")
+                        if vci is not None:
+                            items.append(MetricCardItem(
+                                title="Vegetation Condition (VCI)",
+                                value=vci,
+                                unit="%",
+                                badge=res.get("analysis", {}).get("canopy_status", "VCI"),
+                            ))
 
                     reg_title = res.get("region_name") or res.get("mission", "Earth Observation")
                     card_block = MetricCardBlock(
@@ -604,64 +615,100 @@ class AssistantService:
             obs = SCIENTIFIC_TOOL_MAP["get_ocean_observations"](region=extracted_region, latitude=lat, longitude=lon, date=date)
             executed_tools.append({"name": "get_ocean_observations", "result": obs})
             tool_names.append("get_ocean_observations")
-            m = obs.get("measurements", {})
             reg_display = obs.get("region_name") or extracted_region or "Ocean Basin"
-            lead_text = (
-                f"### NASA Ocean Satellite Observations ({reg_display})\n\n"
-                f"**Observations**:\n"
-                f"- **Dataset**: NASA / CNES SWOT KaRIn Ocean Altimetry & MODIS Aqua Ocean Color\n"
-                f"- **Temporal Period**: {obs.get('date', date)}\n"
-                f"- **Chlorophyll-a Concentration**: **{m.get('chlorophyll_a_mg_m3', 'N/A')} mg/m³** ({obs.get('analysis', {}).get('chlorophyll_productivity', 'Marine Productivity')})\n"
-                f"- **Sea Surface Temperature (SST)**: **{m.get('sea_surface_temp_celsius', 'N/A')} °C**\n"
-                f"- **Sea Surface Height Anomaly (SSHA)**: **{m.get('sea_surface_height_anomaly_m', 'N/A')} m**\n"
-                f"- **Mesoscale Eddy State**: **{obs.get('analysis', {}).get('eddy_classification', 'Altimetric field')}** (EKE: {m.get('eddy_kinetic_energy_cm2_s2', 'N/A')} cm²/s²)\n\n"
-                f"**Scientific Interpretation**:\n"
-                f"Chlorophyll-a concentration quantifies phytoplankton biomass and marine primary productivity, driven by upper-ocean nutrient upwelling and thermocline shoaling. Sea Surface Temperature (SST) governs heat flux and ocean-atmosphere thermal exchange. Mesoscale eddies (15–100 km) detected by SWOT altimetry actively transport heat, salt, and biogeochemical nutrients across oceanic fronts.\n\n"
-                f"**Data Limitations**:\n"
-                f"Measurements are calibrated according to NASA OB.DAAC and PO.DAAC specifications. Optical radiometry (chlorophyll/SST) may experience data voids during heavy persistent cloud cover, requiring spatio-temporal compositing."
-            )
+
+            if obs.get("status") == "unavailable":
+                lead_text = (
+                    f"### NASA Ocean Satellite Observations ({reg_display})\n\n"
+                    f"**Data Status**: **Unavailable for {date}**\n\n"
+                    f"{obs.get('message', 'Observations currently unavailable in verified repository.')}\n\n"
+                    f"**Scientific Context**:\n"
+                    f"{obs.get('scientific_explanation', 'Ocean optical observations require cloud-free swaths and completed mission processing pipelines.')}\n\n"
+                    f"**Scientific Integrity Notice**:\n"
+                    f"Missing satellite observations remain honestly unavailable and are never fabricated or filled with synthetic numbers."
+                )
+            else:
+                m = obs.get("measurements", {})
+                lead_text = (
+                    f"### NASA Ocean Satellite Observations ({reg_display})\n\n"
+                    f"**Observations**:\n"
+                    f"- **Dataset**: NASA / CNES SWOT KaRIn Ocean Altimetry & MODIS Aqua Ocean Color\n"
+                    f"- **Temporal Period**: {obs.get('date', date)}\n"
+                    f"- **Chlorophyll-a Concentration**: **{m.get('chlorophyll_a_mg_m3', 'N/A')} mg/m³** ({obs.get('analysis', {}).get('chlorophyll_productivity', 'Marine Productivity')})\n"
+                    f"- **Sea Surface Temperature (SST)**: **{m.get('sea_surface_temp_celsius', 'N/A')} °C**\n"
+                    f"- **Sea Surface Height Anomaly (SSHA)**: **{m.get('sea_surface_height_anomaly_m', 'N/A')} m**\n"
+                    f"- **Mesoscale Eddy State**: **{obs.get('analysis', {}).get('eddy_classification', 'Altimetric field')}** (EKE: {m.get('eddy_kinetic_energy_cm2_s2', 'N/A')} cm²/s²)\n\n"
+                    f"**Scientific Interpretation**:\n"
+                    f"Chlorophyll-a concentration quantifies phytoplankton biomass and marine primary productivity, driven by upper-ocean nutrient upwelling and thermocline shoaling. Sea Surface Temperature (SST) governs heat flux and ocean-atmosphere thermal exchange. Mesoscale eddies (15–100 km) detected by SWOT altimetry actively transport heat, salt, and biogeochemical nutrients across oceanic fronts.\n\n"
+                    f"**Data Limitations**:\n"
+                    f"Measurements are calibrated according to NASA OB.DAAC and PO.DAAC specifications. Optical radiometry (chlorophyll/SST) may experience data voids during heavy persistent cloud cover, requiring spatio-temporal compositing."
+                )
 
         elif intent == "atmosphere":
             precip = SCIENTIFIC_TOOL_MAP["get_precipitation_data"](region=extracted_region, latitude=lat, longitude=lon, date=date)
             executed_tools.append({"name": "get_precipitation_data", "result": precip})
             tool_names.append("get_precipitation_data")
-            m = precip.get("measurements", {})
             reg_display = precip.get("region_name") or extracted_region or "Atmospheric Region"
-            lead_text = (
-                f"### NASA GPM IMERG Precipitation Science ({reg_display})\n\n"
-                f"**Observations**:\n"
-                f"- **Dataset**: NASA Global Precipitation Measurement (GPM_3IMERGM v07)\n"
-                f"- **Temporal Period**: {precip.get('date', date)}\n"
-                f"- **Precipitation Rate**: **{m.get('precipitation_rate_mm_hr', 'N/A')} mm/hr**\n"
-                f"- **Monthly Accumulated Precipitation**: **{m.get('precipitation_accumulated_mm', 'N/A')} mm**\n"
-                f"- **Climatological Baseline Normal**: {m.get('climatological_normal_mm', 'N/A')} mm (1998–2020 normal)\n"
-                f"- **Rainfall Anomaly Departure**: **{m.get('precipitation_anomaly_mm', 'N/A')} mm**\n\n"
-                f"**Scientific Interpretation**:\n"
-                f"Precipitation rate measures instantaneous rain intensity, whereas accumulated depth represents the integrated monthly hydrological total. Rainfall anomalies signify departures from multi-decadal climatological normals, regulating soil moisture recharge and basin streamflow.\n\n"
-                f"**Data Limitations**:\n"
-                f"GPM IMERG merges constellation microwave radiometers and spaceborne dual-frequency radar with ground GPCC rain gauge networks. Higher uncertainty is expected over complex mountainous terrain and snow-covered surfaces."
-            )
+
+            if precip.get("status") == "unavailable":
+                lead_text = (
+                    f"### NASA GPM IMERG Precipitation Science ({reg_display})\n\n"
+                    f"**Data Status**: **Unavailable for {date}**\n\n"
+                    f"{precip.get('message', 'Observations currently unavailable in verified repository.')}\n\n"
+                    f"**Scientific Context**:\n"
+                    f"{precip.get('scientific_explanation', 'GPM IMERG Final estimates undergo multi-satellite radar/radiometer calibration.')}\n\n"
+                    f"**Scientific Integrity Notice**:\n"
+                    f"Missing precipitation observations are preserved honestly and are never replaced with simulated rainfall."
+                )
+            else:
+                m = precip.get("measurements", {})
+                lead_text = (
+                    f"### NASA GPM IMERG Precipitation Science ({reg_display})\n\n"
+                    f"**Observations**:\n"
+                    f"- **Dataset**: NASA Global Precipitation Measurement (GPM_3IMERGM v07)\n"
+                    f"- **Temporal Period**: {precip.get('date', date)}\n"
+                    f"- **Precipitation Rate**: **{m.get('precipitation_rate_mm_hr', 'N/A')} mm/hr**\n"
+                    f"- **Monthly Accumulated Precipitation**: **{m.get('precipitation_accumulated_mm', 'N/A')} mm**\n"
+                    f"- **Climatological Baseline Normal**: {m.get('climatological_normal_mm', 'N/A')} mm (1998–2020 normal)\n"
+                    f"- **Rainfall Anomaly Departure**: **{m.get('precipitation_anomaly_mm', 'N/A')} mm**\n\n"
+                    f"**Scientific Interpretation**:\n"
+                    f"Precipitation rate measures instantaneous rain intensity, whereas accumulated depth represents the integrated monthly hydrological total. Rainfall anomalies signify departures from multi-decadal climatological normals, regulating soil moisture recharge and basin streamflow.\n\n"
+                    f"**Data Limitations**:\n"
+                    f"GPM IMERG merges constellation microwave radiometers and spaceborne dual-frequency radar with ground GPCC rain gauge networks. Higher uncertainty is expected over complex mountainous terrain and snow-covered surfaces."
+                )
 
         else:  # land
             veg = SCIENTIFIC_TOOL_MAP["get_vegetation_indices"](region=extracted_region, latitude=lat, longitude=lon, date=date)
             executed_tools.append({"name": "get_vegetation_indices", "result": veg})
             tool_names.append("get_vegetation_indices")
-            m = veg.get("measurements", {})
             reg_display = veg.get("region_name") or extracted_region or "Terrestrial Region"
-            lead_text = (
-                f"### NASA MODIS Vegetation Dynamics ({reg_display})\n\n"
-                f"**Observations**:\n"
-                f"- **Dataset**: NASA MODIS Monthly Global Vegetation Indices (MOD13C2 v061)\n"
-                f"- **Temporal Period**: {veg.get('date', date)}\n"
-                f"- **NDVI (Normalized Difference Vegetation Index)**: **{m.get('ndvi', 'N/A')}**\n"
-                f"- **EVI (Enhanced Vegetation Index)**: **{m.get('evi', 'N/A')}**\n"
-                f"- **Vegetation Condition Index (VCI)**: **{m.get('vci_percent', 'N/A')}%**\n"
-                f"- **Canopy Condition**: **{veg.get('analysis', {}).get('canopy_status', 'Canopy Vitality')}**\n\n"
-                f"**Scientific Interpretation**:\n"
-                f"NDVI monitors active photosynthetic chlorophyll absorption (red) versus cellular leaf structure scattering (NIR). VCI contextualizes current greenness against historical extremes to evaluate agricultural moisture stress and drought development.\n\n"
-                f"**Data Limitations**:\n"
-                f"MODIS MOD13C2 provides 0.05° spatial resolution compositing daily cloud-free observations. Aerosol contamination and residual cloud edges may cause minor negative NDVI biases."
-            )
+
+            if veg.get("status") == "unavailable":
+                lead_text = (
+                    f"### NASA MODIS Vegetation Dynamics ({reg_display})\n\n"
+                    f"**Data Status**: **Unavailable for {date}**\n\n"
+                    f"{veg.get('message', 'Observations currently unavailable in verified repository.')}\n\n"
+                    f"**Scientific Context**:\n"
+                    f"{veg.get('scientific_explanation', 'MODIS MOD13C2 requires cloud-free 16-day composite cycles and pixel reliability validation.')}\n\n"
+                    f"**Scientific Integrity Notice**:\n"
+                    f"Missing vegetation measurements are preserved honestly and are never replaced with manufactured numbers."
+                )
+            else:
+                m = veg.get("measurements", {})
+                lead_text = (
+                    f"### NASA MODIS Vegetation Dynamics ({reg_display})\n\n"
+                    f"**Observations**:\n"
+                    f"- **Dataset**: NASA MODIS Monthly Global Vegetation Indices (MOD13C2 v061)\n"
+                    f"- **Temporal Period**: {veg.get('date', date)}\n"
+                    f"- **NDVI (Normalized Difference Vegetation Index)**: **{m.get('ndvi', 'N/A')}**\n"
+                    f"- **EVI (Enhanced Vegetation Index)**: **{m.get('evi', 'N/A')}**\n"
+                    f"- **Vegetation Condition Index (VCI)**: **{m.get('vci_percent', 'N/A')}%**\n"
+                    f"- **Canopy Condition**: **{veg.get('analysis', {}).get('canopy_status', 'Canopy Vitality')}**\n\n"
+                    f"**Scientific Interpretation**:\n"
+                    f"NDVI monitors active photosynthetic chlorophyll absorption (red) versus cellular leaf structure scattering (NIR). VCI contextualizes current greenness against historical extremes to evaluate agricultural moisture stress and drought development.\n\n"
+                    f"**Data Limitations**:\n"
+                    f"MODIS MOD13C2 provides 0.05° spatial resolution compositing daily cloud-free observations. Aerosol contamination and residual cloud edges may cause minor negative NDVI biases."
+                )
 
         # Standard, professional notice without leaking internals or keys
         status_notice = (

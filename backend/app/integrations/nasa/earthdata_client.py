@@ -25,9 +25,9 @@ COLLECTION_CONCEPT_IDS = {
     "MOD13C2": "C2565788914-LPCLOUD",
     "GPM_3IMERGM": "C2723754851-GES_DISC",
     "SWOT_L2_LR_SSH": "C3233945000-POCLOUD",
-    "MODISA_L3m_CHL": "C1443684497-OB_DAAC",
-    "MODISA_L3m_SST": "C1443684809-OB_DAAC",
-    "MOD08_M3": "C1443682974-LAADS",
+    "MODISA_L3m_CHL": "C3380709133-OB_CLOUD",
+    "MODISA_L3m_SST": "C1615905770-OB_DAAC",
+    "MOD08_M3": "C1443766359-LAADS",
     "MYD08_M3": "C1443683075-LAADS",
 }
 
@@ -35,11 +35,55 @@ COLLECTION_SHORT_NAMES = {
     "MOD13C2": {"short_name": "MOD13C2", "version": "061"},
     "GPM_3IMERGM": {"short_name": "GPM_3IMERGM", "version": "07"},
     "SWOT_L2_LR_SSH": {"short_name": "SWOT_L2_LR_SSH", "version": "D"},
-    "MODISA_L3m_CHL": {"short_name": "MODISA_L3m_CHL", "version": "R2022.0"},
-    "MODISA_L3m_SST": {"short_name": "MODISA_L3m_SST", "version": "R2022.0"},
-    "MOD08_M3": {"short_name": "MOD08_M3", "version": "061"},
-    "MYD08_M3": {"short_name": "MYD08_M3", "version": "061"},
+    "MODISA_L3m_CHL": {"short_name": "MODISA_L3m_CHL", "version": "2022.0"},
+    "MODISA_L3m_SST": {"short_name": "MODISA_L3m_SST", "version": "R2019.0"},
+    "MOD08_M3": {"short_name": "MOD08_M3", "version": "6.1"},
+    "MYD08_M3": {"short_name": "MYD08_M3", "version": "6.1"},
 }
+
+
+class EarthdataAuth(httpx.Auth):
+    """
+    HTTPX Auth handler for NASA Earthdata Login.
+    Maintains authentication across 302 redirects to urs.earthdata.nasa.gov
+    and handles BasicAuth / Bearer token challenges.
+    """
+    def __init__(self, username: str = "", password: str = "", bearer_token: str = ""):
+        self.username = username.strip() if username else ""
+        self.password = password.strip() if password else ""
+        self.bearer_token = bearer_token.strip() if bearer_token else ""
+
+    def auth_flow(self, request: httpx.Request):
+        if self.bearer_token:
+            request.headers["Authorization"] = f"Bearer {self.bearer_token}"
+        elif self.username and self.password:
+            request.headers["Authorization"] = httpx.BasicAuth(self.username, self.password)._auth_header
+
+        response = yield request
+
+        while response.is_redirect or response.status_code == 401:
+            req = response.next_request
+            if req is None:
+                if response.status_code == 401 and "urs.earthdata.nasa.gov" in str(response.url):
+                    req = request.copy()
+                    req.url = response.url
+                    if self.username and self.password:
+                        req.headers["Authorization"] = httpx.BasicAuth(self.username, self.password)._auth_header
+                    elif self.bearer_token:
+                        req.headers["Authorization"] = f"Bearer {self.bearer_token}"
+                    response = yield req
+                    continue
+                break
+
+            if "urs.earthdata.nasa.gov" in req.url.host:
+                if self.username and self.password:
+                    req.headers["Authorization"] = httpx.BasicAuth(self.username, self.password)._auth_header
+            elif self.bearer_token:
+                req.headers["Authorization"] = f"Bearer {self.bearer_token}"
+            elif self.username and self.password:
+                req.headers["Authorization"] = httpx.BasicAuth(self.username, self.password)._auth_header
+
+            response = yield req
 
 
 class NasaEarthdataClient:
@@ -48,20 +92,31 @@ class NasaEarthdataClient:
     COLLECTION_CONCEPT_IDS = COLLECTION_CONCEPT_IDS
     COLLECTION_SHORT_NAMES = COLLECTION_SHORT_NAMES
     CMR_SEARCH_URL = "https://cmr.earthdata.nasa.gov/search"
+    _cached_bearer_token: Optional[str] = None
 
     @classmethod
     def _is_valid_credential(cls, val: Optional[str]) -> bool:
         if not val or not isinstance(val, str):
             return False
         cleaned = val.strip()
-        if not cleaned or cleaned.startswith("your_") or len(cleaned) < 6:
+        if not cleaned or cleaned.startswith("your_") or len(cleaned) < 3:
             return False
         return True
 
     @classmethod
+    def get_masked_username(cls) -> Optional[str]:
+        raw = settings.NASA_EARTHDATA_USERNAME
+        if not cls._is_valid_credential(raw):
+            return None
+        clean = raw.strip()
+        if len(clean) <= 3:
+            return f"{clean[0]}***"
+        return f"{clean[:3]}***{clean[-1]}"
+
+    @classmethod
     def get_auth_status(cls) -> Dict[str, Any]:
         """Returns the current Earthdata authentication readiness status."""
-        has_token = cls._is_valid_credential(settings.NASA_EARTHDATA_BEARER_TOKEN)
+        has_token = cls._is_valid_credential(settings.NASA_EARTHDATA_BEARER_TOKEN) or bool(cls._cached_bearer_token)
         has_user_pass = (
             cls._is_valid_credential(settings.NASA_EARTHDATA_USERNAME)
             and cls._is_valid_credential(settings.NASA_EARTHDATA_PASSWORD)
@@ -73,6 +128,7 @@ class NasaEarthdataClient:
         return {
             "authenticated": authenticated,
             "auth_method": auth_method,
+            "username_configured": cls.get_masked_username() if has_user_pass else None,
             "cmr_public_search_available": True,
             "granule_download_available": authenticated,
             "notice": (
@@ -82,6 +138,42 @@ class NasaEarthdataClient:
                      "CMR public search is fully operational; observations use calibrated scientific demonstrations or local granules."
             ),
         }
+
+    @classmethod
+    async def fetch_or_create_edl_token(cls) -> Optional[str]:
+        """Fetches active EDL bearer token from URS using username/password if available."""
+        if cls._cached_bearer_token:
+            return cls._cached_bearer_token
+        if cls._is_valid_credential(settings.NASA_EARTHDATA_BEARER_TOKEN):
+            return settings.NASA_EARTHDATA_BEARER_TOKEN.strip()
+
+        if not (cls._is_valid_credential(settings.NASA_EARTHDATA_USERNAME) and cls._is_valid_credential(settings.NASA_EARTHDATA_PASSWORD)):
+            return None
+
+        try:
+            auth = httpx.BasicAuth(settings.NASA_EARTHDATA_USERNAME.strip(), settings.NASA_EARTHDATA_PASSWORD.strip())
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get("https://urs.earthdata.nasa.gov/api/users/tokens", auth=auth)
+                if resp.status_code == 200:
+                    tokens = resp.json()
+                    if isinstance(tokens, list) and tokens:
+                        token_val = tokens[0].get("access_token")
+                        if token_val:
+                            cls._cached_bearer_token = token_val
+                            return token_val
+                elif resp.status_code == 404 or (resp.status_code == 200 and not resp.json()):
+                    # Create token
+                    c_resp = await client.post("https://urs.earthdata.nasa.gov/api/users/token", auth=auth)
+                    if c_resp.status_code in (200, 201):
+                        data = c_resp.json()
+                        token_val = data.get("access_token")
+                        if token_val:
+                            cls._cached_bearer_token = token_val
+                            return token_val
+        except Exception as e:
+            logger.debug(f"EDL token retrieval notice: {e}")
+
+        return None
 
     @classmethod
     async def search_granules(
@@ -231,13 +323,15 @@ class NasaEarthdataClient:
                 "message": "NASA Earthdata credentials not configured. Please supply NASA_EARTHDATA_BEARER_TOKEN or username/password in .env.",
             }
 
-        headers = {"User-Agent": f"PlanetIQ/{settings.VERSION}"}
-        auth = None
+        # Attempt token acquisition if username/password configured
+        token = await cls.fetch_or_create_edl_token()
 
-        if auth_status["auth_method"] == "bearer_token":
-            headers["Authorization"] = f"Bearer {settings.NASA_EARTHDATA_BEARER_TOKEN.strip()}"
-        elif auth_status["auth_method"] == "basic_auth":
-            auth = httpx.BasicAuth(settings.NASA_EARTHDATA_USERNAME.strip(), settings.NASA_EARTHDATA_PASSWORD.strip())
+        headers = {"User-Agent": f"PlanetIQ/{settings.VERSION}"}
+        auth = EarthdataAuth(
+            username=settings.NASA_EARTHDATA_USERNAME,
+            password=settings.NASA_EARTHDATA_PASSWORD,
+            bearer_token=token or settings.NASA_EARTHDATA_BEARER_TOKEN,
+        )
 
         dest_dir = os.path.dirname(destination_path)
         if dest_dir:

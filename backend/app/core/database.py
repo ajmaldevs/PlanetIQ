@@ -101,14 +101,27 @@ async def check_database_connection() -> dict:
     try:
         from sqlalchemy import text
         async with async_engine.connect() as conn:
-            # Check basic connection and PostGIS version
-            result = await conn.execute(text("SELECT postgis_full_version();"))
-            version_row = result.scalar()
+            # 1. Verify PostgreSQL basic connectivity
+            await conn.execute(text("SELECT 1;"))
+
+            # 2. Check PostGIS availability
+            postgis_ver = None
+            try:
+                result = await conn.execute(text("SELECT postgis_full_version();"))
+                postgis_ver = str(result.scalar())
+            except Exception:
+                try:
+                    await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+                    result = await conn.execute(text("SELECT postgis_full_version();"))
+                    postgis_ver = str(result.scalar())
+                except Exception as p_err:
+                    logger.debug(f"PostGIS extension notice: {p_err}")
+
             return {
                 "status": "connected",
                 "connected": True,
-                "postgis_available": True,
-                "version": str(version_row),
+                "postgis_available": postgis_ver is not None,
+                "version": postgis_ver or "PostgreSQL (PostGIS optional)",
             }
     except Exception as e:
         logger.info(f"Database connection check returned: {e}")
@@ -116,5 +129,5 @@ async def check_database_connection() -> dict:
             "status": "offline",
             "connected": False,
             "postgis_available": False,
-            "message": "PostgreSQL/PostGIS not currently connected (Development mode)."
+            "message": f"PostgreSQL/PostGIS not currently connected ({e})."
         }

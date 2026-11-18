@@ -73,9 +73,15 @@ class ComparisonService:
         regional_diffs: List[RegionalDiffPoint] = []
         for reg in AtmosphereService.ATMOSPHERE_REGIONS[:5]:
             reg_ts = AtmosphereService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026)
+            if not reg_ts.timeseries:
+                reg_ts = AtmosphereService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode="demonstration")
+            if not reg_ts.timeseries:
+                continue
             reg_pts = {p.date: p for p in reg_ts.timeseries}
-            r_a = reg_pts.get(period_a, reg_ts.timeseries[0]).precipitation_accumulated_mm
-            r_b = reg_pts.get(period_b, reg_ts.timeseries[-1]).precipitation_accumulated_mm
+            first_pt = reg_ts.timeseries[0]
+            last_pt = reg_ts.timeseries[-1]
+            r_a = reg_pts.get(period_a, first_pt).precipitation_accumulated_mm
+            r_b = reg_pts.get(period_b, last_pt).precipitation_accumulated_mm
             delta = round(r_b - r_a, 1)
             if delta > 0:
                 interp = f"Precipitation surplus of {delta:.1f} mm relative to {period_a}"
@@ -168,9 +174,15 @@ class ComparisonService:
         regional_diffs: List[RegionalDiffPoint] = []
         for reg in OceanService.OCEAN_REGIONS[:5]:
             reg_ts = OceanService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026)
+            if not reg_ts.timeseries:
+                reg_ts = OceanService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode="demonstration")
+            if not reg_ts.timeseries:
+                continue
             reg_pts = {p.date: p for p in reg_ts.timeseries}
-            r_a = reg_pts.get(period_a, reg_ts.timeseries[0]).ssha_mean_m
-            r_b = reg_pts.get(period_b, reg_ts.timeseries[-1]).ssha_mean_m
+            first_pt = reg_ts.timeseries[0]
+            last_pt = reg_ts.timeseries[-1]
+            r_a = reg_pts.get(period_a, first_pt).ssha_mean_m
+            r_b = reg_pts.get(period_b, last_pt).ssha_mean_m
             delta = round(r_b - r_a, 4)
             if delta > 0:
                 interp = f"Altimetric sea level elevation of {delta * 100.0:+.1f} cm"
@@ -268,9 +280,15 @@ class ComparisonService:
         regional_diffs: List[RegionalDiffPoint] = []
         for reg in LandService.LAND_REGIONS[:5]:
             reg_ts = LandService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026)
+            if not reg_ts.timeseries:
+                reg_ts = LandService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode="demonstration")
+            if not reg_ts.timeseries:
+                continue
             reg_pts = {p.date: p for p in reg_ts.timeseries}
-            r_a = reg_pts.get(period_a, reg_ts.timeseries[0]).ndvi
-            r_b = reg_pts.get(period_b, reg_ts.timeseries[-1]).ndvi
+            first_pt = reg_ts.timeseries[0]
+            last_pt = reg_ts.timeseries[-1]
+            r_a = reg_pts.get(period_a, first_pt).ndvi
+            r_b = reg_pts.get(period_b, last_pt).ndvi
             delta = round(r_b - r_a, 3)
             if delta > 0:
                 interp = f"Canopy greening of {delta:+.3f} ΔNDVI"

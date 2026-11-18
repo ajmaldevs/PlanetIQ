@@ -210,25 +210,37 @@ def get_ocean_observations(
     if resolved_lat is not None and resolved_lon is not None:
         ts = OceanService.get_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026)
         
-        # If real observations are not loaded in DB, fallback to calibrated simulation model
+        # Strict scientific integrity: do not fabricate observations when data is unavailable
         if not ts.timeseries or ts.data_status == "unavailable":
-            ts = DemoDataService.get_simulated_ocean_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026)
+            return {
+                "status": "unavailable",
+                "data_status": "unavailable",
+                "is_observation": False,
+                "source_type": "none",
+                "region_name": resolved_name,
+                "location": {"latitude": resolved_lat, "longitude": resolved_lon},
+                "date": date,
+                "message": (
+                    f"NASA ocean satellite observations for {resolved_name} ({resolved_lat:+.2f}°, {resolved_lon:+.2f}°) "
+                    f"in {date} are currently unavailable in the verified local repository. Missing observations are not fabricated."
+                ),
+                "scientific_explanation": (
+                    "Ocean Chlorophyll-a (MODIS Aqua / PACE OCI) and Sea Surface Height Anomaly (SWOT KaRIn) "
+                    "require cloud-free optical swaths, valid orbital tracks, and completed DAAC processing pipelines."
+                ),
+                "provenance": "NASA PO.DAAC / OB.DAAC / CNES",
+            }
 
         pt = next((p for p in ts.timeseries if p.date == date), ts.timeseries[-1] if ts.timeseries else None)
         if not pt:
-            return {"status": "no_data", "message": f"No ocean data at ({resolved_lat}, {resolved_lon}) for {date}"}
+            return {"status": "unavailable", "data_status": "unavailable", "message": f"No ocean observation at ({resolved_lat}, {resolved_lon}) for {date}"}
 
         eddy_type, eddy_desc = ScientificAnalytics.classify_ocean_eddy(pt.ssha_mean_m)
         ssh_geoid_ref = round(15.20 + pt.ssha_mean_m, 3)
         adt_ref = round(0.85 + pt.ssha_mean_m, 3)
 
-        # Retrieve chlorophyll and SST with robust defaults if simulated
         chlor_val = getattr(pt, "chlor_a", None)
         sst_val = getattr(pt, "sst", None)
-        if chlor_val is None:
-            chlor_val = round(max(0.05, 0.42 + 0.18 * math.sin(int(date.split("-")[1]) * 0.52)), 3)
-        if sst_val is None:
-            sst_val = round(26.8 + 2.8 * math.cos((int(date.split("-")[1]) - 5) * math.pi / 6.0), 2)
 
         measurements = {
             "chlorophyll_a_mg_m3": chlor_val,
@@ -248,13 +260,14 @@ def get_ocean_observations(
             "eke": "cm^2/s^2",
         }
 
-        chlor_regime = OceanProcessor.classify_chlorophyll_regime(chlor_val)
+        chlor_regime = OceanProcessor.classify_chlorophyll_regime(chlor_val) if chlor_val is not None else "Unknown (Unobserved)"
         analysis = {
             "chlorophyll_productivity": chlor_regime,
             "eddy_classification": eddy_type,
             "scientific_interpretation": (
-                f"{eddy_desc} Chlorophyll-a concentration of {chlor_val} mg/m³ indicates {chlor_regime} "
-                f"with sea surface temperature at {sst_val}°C."
+                f"{eddy_desc} "
+                + (f"Chlorophyll-a concentration of {chlor_val} mg/m³ indicates {chlor_regime}." if chlor_val is not None else "Chlorophyll-a unobserved.")
+                + (f" Sea surface temperature is {sst_val}°C." if sst_val is not None else "")
             ),
         }
 
@@ -286,9 +299,17 @@ def get_ocean_observations(
         min_lat=min_lat_f, max_lat=max_lat_f, min_lon=min_lon_f, max_lon=max_lon_f, date_str=date
     )
     if not fc.features:
-        fc = DemoDataService.get_simulated_ocean_grid(
-            date_str=date, min_lat=min_lat_f, max_lat=max_lat_f, min_lon=min_lon_f, max_lon=max_lon_f
-        )
+        return {
+            "status": "unavailable",
+            "data_status": "unavailable",
+            "is_observation": False,
+            "source_type": "none",
+            "date": date,
+            "region_name": resolved_name,
+            "feature_count": 0,
+            "message": f"No genuine NASA ocean observations available for {date} in the specified bounds.",
+            "provenance": "NASA PO.DAAC / OB.DAAC",
+        }
 
     features = fc.features[:25]
     ssha_values = [f.properties.get("ssha_karin_m", 0.0) for f in features if f.properties.get("ssha_karin_m") is not None]
@@ -374,11 +395,28 @@ def get_precipitation_data(
     if resolved_lat is not None and resolved_lon is not None:
         ts = AtmosphereService.get_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026)
         if not ts.timeseries or ts.data_status == "unavailable":
-            ts = DemoDataService.get_simulated_atmosphere_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026)
+            return {
+                "status": "unavailable",
+                "data_status": "unavailable",
+                "is_observation": False,
+                "source_type": "none",
+                "region_name": resolved_name,
+                "location": {"latitude": resolved_lat, "longitude": resolved_lon},
+                "date": date,
+                "message": (
+                    f"NASA GPM IMERG precipitation observations for {resolved_name} ({resolved_lat:+.2f}°, {resolved_lon:+.2f}°) "
+                    f"in {date} are currently unavailable in the verified local repository. Missing observations are not fabricated."
+                ),
+                "scientific_explanation": (
+                    "GPM IMERG Final Monthly Precipitation (GPM_3IMERGM v07) merges passive microwave constellation "
+                    "sensors with DPR radar and ground rain gauge networks from GES DISC, which has a 2-3 month latency."
+                ),
+                "provenance": "NASA GES DISC / JAXA",
+            }
 
         pt = next((p for p in ts.timeseries if p.date == date), ts.timeseries[-1] if ts.timeseries else None)
         if not pt:
-            return {"status": "no_data", "message": f"No GPM atmosphere data at ({resolved_lat}, {resolved_lon}) for {date}"}
+            return {"status": "unavailable", "data_status": "unavailable", "message": f"No GPM atmosphere data at ({resolved_lat}, {resolved_lon}) for {date}"}
 
         year, month = map(int, pt.date.split("-"))
         _, days_in_month = calendar.monthrange(year, month)
@@ -436,9 +474,17 @@ def get_precipitation_data(
         min_lat=min_lat_f, max_lat=max_lat_f, min_lon=min_lon_f, max_lon=max_lon_f, date_str=date
     )
     if not fc.features:
-        fc = DemoDataService.get_simulated_atmosphere_grid(
-            date_str=date, min_lat=min_lat_f, max_lat=max_lat_f, min_lon=min_lon_f, max_lon=max_lon_f
-        )
+        return {
+            "status": "unavailable",
+            "data_status": "unavailable",
+            "is_observation": False,
+            "source_type": "none",
+            "date": date,
+            "region_name": resolved_name,
+            "feature_count": 0,
+            "message": f"No genuine NASA GPM precipitation observations available for {date} in the specified bounds.",
+            "provenance": "NASA GES DISC / JAXA",
+        }
 
     features = fc.features[:25]
     accum_vals = [f.properties.get("precipitation_accumulated_mm", 0.0) for f in features if f.properties.get("precipitation_accumulated_mm") is not None]
@@ -520,15 +566,34 @@ def get_vegetation_indices(
     if resolved_lat is not None and resolved_lon is not None:
         ts = LandService.get_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026)
         if not ts.timeseries or ts.data_status == "unavailable":
-            ts = DemoDataService.get_simulated_land_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026)
+            return {
+                "status": "unavailable",
+                "data_status": "unavailable",
+                "is_observation": False,
+                "source_type": "none",
+                "region_name": resolved_name,
+                "location": {"latitude": resolved_lat, "longitude": resolved_lon},
+                "date": date,
+                "message": (
+                    f"NASA MODIS MOD13C2 vegetation observations for {resolved_name} ({resolved_lat:+.2f}°, {resolved_lon:+.2f}°) "
+                    f"in {date} are currently unavailable in the verified local repository. Missing observations are not fabricated."
+                ),
+                "scientific_explanation": (
+                    "MODIS Monthly Global Vegetation Indices (MOD13C2 v061) are synthesized from 16-day composite cycles "
+                    "applying pixel reliability quality bitmask filtering from NASA LP DAAC."
+                ),
+                "provenance": "NASA LP DAAC / USGS EROS",
+            }
 
         pt = next((p for p in ts.timeseries if p.date == date), ts.timeseries[-1] if ts.timeseries else None)
         if not pt:
-            return {"status": "no_data", "message": f"No MODIS vegetation data at ({resolved_lat}, {resolved_lon}) for {date}"}
+            return {"status": "unavailable", "data_status": "unavailable", "message": f"No MODIS vegetation data at ({resolved_lat}, {resolved_lon}) for {date}"}
 
-        vci_est = min(100.0, max(0.0, round(((pt.ndvi - 0.05) / 0.75) * 100.0, 1)))
-        canopy_health = "Optimal Vigorous Canopy" if vci_est >= 60.0 else (
-            "Moderate Moisture Stress" if vci_est >= 40.0 else "Severe Vegetation Drought"
+        vci_val = getattr(pt, "vci_percent", None)
+        canopy_health = (
+            ("Optimal Vigorous Canopy" if vci_val >= 60.0 else ("Moderate Moisture Stress" if vci_val >= 40.0 else "Severe Vegetation Drought"))
+            if vci_val is not None
+            else ("Photosynthetically Active Canopy" if pt.ndvi >= 0.50 else "Dormant / Sparse Canopy")
         )
 
         return {
@@ -544,7 +609,7 @@ def get_vegetation_indices(
             "measurements": {
                 "ndvi": pt.ndvi,
                 "evi": pt.evi,
-                "vci_percent": vci_est,
+                "vci_percent": vci_val,
                 "ndvi_anomaly": pt.ndvi_anomaly,
                 "historical_ndvi_median": pt.historical_ndvi_median,
             },
@@ -571,9 +636,17 @@ def get_vegetation_indices(
         min_lat=min_lat_f, max_lat=max_lat_f, min_lon=min_lon_f, max_lon=max_lon_f, date_str=date
     )
     if not fc.features:
-        fc = DemoDataService.get_simulated_land_grid(
-            date_str=date, min_lat=min_lat_f, max_lat=max_lat_f, min_lon=min_lon_f, max_lon=max_lon_f
-        )
+        return {
+            "status": "unavailable",
+            "data_status": "unavailable",
+            "is_observation": False,
+            "source_type": "none",
+            "date": date,
+            "region_name": resolved_name,
+            "feature_count": 0,
+            "message": f"No genuine NASA MODIS MOD13C2 vegetation observations available for {date} in the specified bounds.",
+            "provenance": "NASA LP DAAC / USGS EROS",
+        }
 
     features = fc.features[:25]
     ndvi_vals = [f.properties.get("ndvi", 0.0) for f in features]
@@ -641,7 +714,16 @@ def get_historical_trends(
     if mod == "ocean":
         ts = OceanService.get_timeseries(resolved_lat, resolved_lon, start_year, end_year)
         if not ts.timeseries or ts.data_status == "unavailable":
-            ts = DemoDataService.get_simulated_ocean_timeseries(resolved_lat, resolved_lon, start_year, end_year)
+            return {
+                "status": "unavailable",
+                "data_status": "unavailable",
+                "is_observation": False,
+                "module": mod,
+                "region_name": resolved_name,
+                "location": {"latitude": resolved_lat, "longitude": resolved_lon},
+                "period": f"{start_date} to {end_date}",
+                "message": f"Historical satellite observations for {resolved_name} ({mod}) are currently unavailable in the local repository. Missing data is not manufactured.",
+            }
         pts = [p for p in ts.timeseries if start_date <= p.date <= end_date]
         values = [p.ssha_mean_m for p in pts]
         unit = "meters (m)"
@@ -649,7 +731,16 @@ def get_historical_trends(
     elif mod == "atmosphere":
         ts = AtmosphereService.get_timeseries(resolved_lat, resolved_lon, start_year, end_year)
         if not ts.timeseries or ts.data_status == "unavailable":
-            ts = DemoDataService.get_simulated_atmosphere_timeseries(resolved_lat, resolved_lon, start_year, end_year)
+            return {
+                "status": "unavailable",
+                "data_status": "unavailable",
+                "is_observation": False,
+                "module": mod,
+                "region_name": resolved_name,
+                "location": {"latitude": resolved_lat, "longitude": resolved_lon},
+                "period": f"{start_date} to {end_date}",
+                "message": f"Historical satellite observations for {resolved_name} ({mod}) are currently unavailable in the local repository. Missing data is not manufactured.",
+            }
         pts = [p for p in ts.timeseries if start_date <= p.date <= end_date]
         values = [p.precipitation_accumulated_mm for p in pts]
         unit = "mm"
@@ -657,7 +748,16 @@ def get_historical_trends(
     else:
         ts = LandService.get_timeseries(resolved_lat, resolved_lon, start_year, end_year)
         if not ts.timeseries or ts.data_status == "unavailable":
-            ts = DemoDataService.get_simulated_land_timeseries(resolved_lat, resolved_lon, start_year, end_year)
+            return {
+                "status": "unavailable",
+                "data_status": "unavailable",
+                "is_observation": False,
+                "module": mod,
+                "region_name": resolved_name,
+                "location": {"latitude": resolved_lat, "longitude": resolved_lon},
+                "period": f"{start_date} to {end_date}",
+                "message": f"Historical satellite observations for {resolved_name} ({mod}) are currently unavailable in the local repository. Missing data is not manufactured.",
+            }
         pts = [p for p in ts.timeseries if start_date <= p.date <= end_date]
         values = [p.ndvi for p in pts]
         unit = "dimensionless ratio (-0.2 to 1.0)"
@@ -728,11 +828,18 @@ def compare_regions(
 
     if mod == "ocean":
         ts_a = OceanService.get_timeseries(r_lat_a, r_lon_a, 2026, 2026)
-        if not ts_a.timeseries or ts_a.data_status == "unavailable":
-            ts_a = DemoDataService.get_simulated_ocean_timeseries(r_lat_a, r_lon_a, 2026, 2026)
         ts_b = OceanService.get_timeseries(r_lat_b, r_lon_b, 2026, 2026)
-        if not ts_b.timeseries or ts_b.data_status == "unavailable":
-            ts_b = DemoDataService.get_simulated_ocean_timeseries(r_lat_b, r_lon_b, 2026, 2026)
+        if not ts_a.timeseries or ts_a.data_status == "unavailable" or not ts_b.timeseries or ts_b.data_status == "unavailable":
+            return {
+                "status": "unavailable",
+                "data_status": "unavailable",
+                "is_observation": False,
+                "module": mod,
+                "region_a": name_a,
+                "region_b": name_b,
+                "date": date,
+                "message": f"Cannot compare {name_a} and {name_b} because ocean observations are unavailable for {date}.",
+            }
 
         val_a = next((p.ssha_mean_m for p in ts_a.timeseries if p.date == date), 0.0)
         val_b = next((p.ssha_mean_m for p in ts_b.timeseries if p.date == date), 0.0)
@@ -740,26 +847,40 @@ def compare_regions(
         metric_label = "Sea Surface Height Anomaly (SSHA)"
     elif mod == "atmosphere":
         ts_a = AtmosphereService.get_timeseries(r_lat_a, r_lon_a, 2026, 2026)
-        if not ts_a.timeseries or ts_a.data_status == "unavailable":
-            ts_a = DemoDataService.get_simulated_atmosphere_timeseries(r_lat_a, r_lon_a, 2026, 2026)
         ts_b = AtmosphereService.get_timeseries(r_lat_b, r_lon_b, 2026, 2026)
-        if not ts_b.timeseries or ts_b.data_status == "unavailable":
-            ts_b = DemoDataService.get_simulated_atmosphere_timeseries(r_lat_b, r_lon_b, 2026, 2026)
+        if not ts_a.timeseries or ts_a.data_status == "unavailable" or not ts_b.timeseries or ts_b.data_status == "unavailable":
+            return {
+                "status": "unavailable",
+                "data_status": "unavailable",
+                "is_observation": False,
+                "module": mod,
+                "region_a": name_a,
+                "region_b": name_b,
+                "date": date,
+                "message": f"Cannot compare {name_a} and {name_b} because atmosphere observations are unavailable for {date}.",
+            }
 
-        val_a = next((p.precipitation_accumulated_mm for p in ts_a.timeseries if p.date == date), 100.0)
-        val_b = next((p.precipitation_accumulated_mm for p in ts_b.timeseries if p.date == date), 100.0)
+        val_a = next((p.precipitation_accumulated_mm for p in ts_a.timeseries if p.date == date), 0.0)
+        val_b = next((p.precipitation_accumulated_mm for p in ts_b.timeseries if p.date == date), 0.0)
         unit = "mm"
         metric_label = "Monthly Accumulated Precipitation"
     else:
         ts_a = LandService.get_timeseries(r_lat_a, r_lon_a, 2026, 2026)
-        if not ts_a.timeseries or ts_a.data_status == "unavailable":
-            ts_a = DemoDataService.get_simulated_land_timeseries(r_lat_a, r_lon_a, 2026, 2026)
         ts_b = LandService.get_timeseries(r_lat_b, r_lon_b, 2026, 2026)
-        if not ts_b.timeseries or ts_b.data_status == "unavailable":
-            ts_b = DemoDataService.get_simulated_land_timeseries(r_lat_b, r_lon_b, 2026, 2026)
+        if not ts_a.timeseries or ts_a.data_status == "unavailable" or not ts_b.timeseries or ts_b.data_status == "unavailable":
+            return {
+                "status": "unavailable",
+                "data_status": "unavailable",
+                "is_observation": False,
+                "module": mod,
+                "region_a": name_a,
+                "region_b": name_b,
+                "date": date,
+                "message": f"Cannot compare {name_a} and {name_b} because land vegetation observations are unavailable for {date}.",
+            }
 
-        val_a = next((p.ndvi for p in ts_a.timeseries if p.date == date), 0.5)
-        val_b = next((p.ndvi for p in ts_b.timeseries if p.date == date), 0.5)
+        val_a = next((p.ndvi for p in ts_a.timeseries if p.date == date), 0.0)
+        val_b = next((p.ndvi for p in ts_b.timeseries if p.date == date), 0.0)
         unit = "dimensionless ratio"
         metric_label = "NDVI"
 
