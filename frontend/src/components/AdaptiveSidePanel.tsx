@@ -390,6 +390,10 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                   <CheckCircle2 className="h-3 w-3 text-emerald-400" />
                   <span>Real Observation</span>
                 </span>
+              ) : selectedFeature?.properties.data_status === 'unavailable' ? (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-rose-950 text-rose-300 border border-rose-700/60 shrink-0">
+                  Data Unavailable
+                </span>
               ) : (
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-cyan-300 border border-slate-700 shrink-0">
                   Modelled demo

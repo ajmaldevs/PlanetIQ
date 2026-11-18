@@ -836,7 +836,7 @@ export const App: React.FC = () => {
                   : 'opacity-0 py-0 max-h-0 border-transparent overflow-hidden pointer-events-none'
               }`}
             >
-              TerraLens • NASA Space Apps Challenge 2026 • Earth Observation Intelligence
+              PlanetIQ • NASA Space Apps Challenge 2026 • Earth Observation Intelligence
             </footer>
           </div>
         ) : (

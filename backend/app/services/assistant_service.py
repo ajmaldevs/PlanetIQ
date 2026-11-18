@@ -36,12 +36,12 @@ from app.services.scientific_rag import ScientificRAG
 from app.services.scientific_analytics import ScientificAnalytics
 from app.services.nasa_earthdata_client import NasaEarthdataClient
 
-logger = logging.getLogger("terralens.assistant")
+logger = logging.getLogger("planetiq.assistant")
 
 SYSTEM_SCIENTIFIC_INSTRUCTIONS = """You are the PlanetIQ Scientific Intelligence Assistant, an expert planetary sciences and Earth observation advisor created for NASA Earth Science data analysis.
 
 MANDATORY RULES & SCIENTIFIC SAFEGUARDS:
-1. DATA STATUS TRANSPARENCY: PlanetIQ integrates both genuine NASA satellite observations (e.g. MODIS MOD13C2 Version 061) and calibrated scientific demonstration models. Always report the exact data status ('observation' vs 'demonstration_model') indicated in tool outputs. Clearly cite the satellite sensor, product version, and acquisition period. Never present simulated models as genuine spacecraft telemetry.
+1. DATA STATUS TRANSPARENCY: PlanetIQ integrates both genuine NASA satellite observations (e.g. MODIS MOD13C2 Version 061) and calibrated scientific demonstration models. Always report the exact data status ('observation' vs 'simulated' vs 'unavailable') indicated in tool outputs. Clearly cite the satellite sensor, product version, and acquisition period. Never present simulated models as genuine spacecraft telemetry. If observations are unavailable for a requested time or location, explicitly state that no satellite observations are available rather than estimating.
 2. TOOL USAGE: You have 8 authoritative backend tools:
    - get_ocean_observations: SWOT KaRIn Sea Surface Height (SSH in meters), Sea Surface Height Anomaly (SSHA in meters), Absolute Dynamic Topography (ADT), and eddy classification (cyclonic vs anticyclonic).
    - get_precipitation_data: NASA GPM IMERG Final Monthly Precipitation (GPM_3IMERGM v07), precipitation rate (mm/hr), monthly accumulated precipitation (mm), baseline normal (mm), and rainfall anomaly (mm).
@@ -225,7 +225,7 @@ class AssistantService:
             or call.get("result", {}).get("data_status") == "observation"
             for call in executed_tools
         )
-        overall_data_status = "observation" if is_real_obs else "demonstration_model"
+        overall_data_status = "observation" if is_real_obs else "simulated"
 
         return AssistantQueryResponse(
             response=final_text,
@@ -386,7 +386,7 @@ class AssistantService:
             for call in executed_tools
         )
         quality_block = DataQualityBlock(
-            data_status="observation" if has_real_obs else "demonstration_model",
+            data_status="observation" if has_real_obs else "simulated",
             is_observation=has_real_obs,
             sensor="NASA MODIS Terra, SWOT KaRIn, and GPM IMERG Instruments",
             limitations=[
@@ -397,7 +397,7 @@ class AssistantService:
             uncertainty_note=(
                 "AUTHENTIC SATELLITE OBSERVATION: Extracted from official NASA Earth Science telemetry."
                 if has_real_obs
-                else "DEMONSTRATION MODEL: Calibrated scientific mathematical representation."
+                else "SIMULATED DEMONSTRATION DATA: Calibrated scientific mathematical representation."
             ),
         )
         blocks.append(quality_block.model_dump())
@@ -567,7 +567,7 @@ class AssistantService:
             f"\n\n---\n"
             f"> [!NOTE]\n"
             f"> **AI Service Notice**: {error_reason}\n"
-            f"> The response above was compiled directly from TerraLens verified scientific calculation tools. "
+            f"> The response above was compiled directly from PlanetIQ verified scientific calculation tools. "
             f"To enable natural language reasoning with live Gemini tool calling, set `GEMINI_API_KEY` in your environment."
         )
 
@@ -581,7 +581,7 @@ class AssistantService:
             or call.get("result", {}).get("data_status") == "observation"
             for call in executed_tools
         )
-        overall_status = "observation" if is_real_obs else "demonstration_model"
+        overall_status = "observation" if is_real_obs else "simulated"
 
         return AssistantQueryResponse(
             response=full_text,

@@ -9,11 +9,11 @@ export const AboutMethodologyView: React.FC = () => {
         <div className="flex items-center space-x-2">
           <BookOpen className="h-6 w-6 text-cyan-400" />
           <h2 className="text-2xl font-bold text-white tracking-tight">
-            About TerraLens & Scientific Methodology
+            About PlanetIQ & Scientific Methodology
           </h2>
         </div>
         <p className="text-sm text-slate-300 leading-relaxed">
-          TerraLens is an interactive Earth observation and environmental analysis platform engineered for the{' '}
+          PlanetIQ is an interactive Earth observation and environmental analysis platform engineered for the{' '}
           <strong className="text-cyan-400">NASA Space Apps Challenge 2026</strong>. It provides high school
           students, university scholars, and the science-curious public with a rigorous, accessible window into the
           interconnected physics governing Earth's ocean, atmosphere, and terrestrial systems.
@@ -96,7 +96,7 @@ export const AboutMethodologyView: React.FC = () => {
           <span>Designed for Education & Open Science</span>
         </h3>
         <p className="text-xs text-slate-400 leading-relaxed">
-          TerraLens bridges the gap between raw scientific HDF5/NetCDF files and human comprehension. Students can
+          PlanetIQ bridges the gap between raw scientific HDF5/NetCDF files and human comprehension. Students can
           interactively explore how a warming event in the equatorial Pacific Ocean propagates through the atmosphere to
           influence rainfall across the Americas, and subsequently alters the photosynthetic canopy of the Amazon
           Rainforest.

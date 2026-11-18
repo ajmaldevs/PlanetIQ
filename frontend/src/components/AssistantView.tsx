@@ -52,7 +52,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
     {
       role: 'assistant',
       content:
-        'Welcome to the **TerraLens Scientific Assistant**.\n\nI am connected to authoritative NASA Earth observation tools (SWOT KaRIn ocean altimetry, GPM IMERG precipitation, and MODIS vegetation indices). I can analyse physical measurements, compare regions, chart historical anomalies, and inspect satellite data quality.\n\nWhat would you like to investigate?',
+        'Welcome to the **PlanetIQ Scientific Assistant**.\n\nI am connected to authoritative NASA Earth observation tools (SWOT KaRIn ocean altimetry, GPM IMERG precipitation, and MODIS vegetation indices). I can analyse physical measurements, compare regions, chart historical anomalies, and inspect satellite data quality.\n\nWhat would you like to investigate?',
       grounding: [
         {
           dataset_id: 'SWOT_L2_LR_SSH',
@@ -382,7 +382,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
             <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </div>
           <div>
-            <h3 className="text-xs sm:text-sm font-semibold text-white">TerraLens AI Research Assistant</h3>
+            <h3 className="text-xs sm:text-sm font-semibold text-white">PlanetIQ AI Research Assistant</h3>
             <p className="text-[10px] sm:text-[11px] text-slate-400 line-clamp-1">
               Grounded in NASA SWOT KaRIn, GPM IMERG v07, and MODIS MOD13C2
             </p>
@@ -403,7 +403,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4">
         <DataNotice type="demo" title="Scientific Assistant Scope & Provenance">
-          Answers synthesize verified NASA dataset methodology with live tool calculations. TerraLens map layers and point queries currently use calibrated demonstration models; live CMR granule discovery is available.
+          Answers synthesize verified NASA dataset methodology with live tool calculations. PlanetIQ map layers and point queries currently use calibrated demonstration models; live CMR granule discovery is available.
         </DataNotice>
 
         {messages.map((msg, idx) => (
@@ -428,7 +428,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
                   ) : (
                     <>
                       <Sparkles className="h-3 w-3 text-cyan-400" />
-                      <span className="text-cyan-400 font-semibold">TerraLens Assistant</span>
+                      <span className="text-cyan-400 font-semibold">PlanetIQ Assistant</span>
                     </>
                   )}
                 </span>

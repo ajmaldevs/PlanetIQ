@@ -69,7 +69,7 @@ class AtmosphereTimeSeriesPoint(BaseModel):
 
 
 class AtmosphereTimeSeriesResponse(BaseModel):
-    data_status: str = "demonstration_model"
+    data_status: str = "simulated"
     is_observation: bool = False
     dataset_id: str = "GPM_3IMERGM"
     dataset_name: str = "GPM IMERG Final Monthly Precipitation"
@@ -104,7 +104,7 @@ class OceanTimeSeriesPoint(BaseModel):
 
 
 class OceanTimeSeriesResponse(BaseModel):
-    data_status: str = "demonstration_model"
+    data_status: str = "simulated"
     is_observation: bool = False
     dataset_id: str = "SWOT_L2_LR_SSH"
     dataset_name: str = "SWOT KaRIn Ocean Sea Surface Height (Option A)"
@@ -137,7 +137,7 @@ class LandTimeSeriesPoint(BaseModel):
 
 
 class LandTimeSeriesResponse(BaseModel):
-    data_status: str = "demonstration_model"
+    data_status: str = "simulated"
     is_observation: bool = False
     dataset_id: str = "MOD13C2"
     dataset_name: str = "MODIS Monthly Global Vegetation Indices"
@@ -160,7 +160,7 @@ class CrossSystemCorrelationPoint(BaseModel):
 
 
 class CrossSystemResponse(BaseModel):
-    data_status: str = "demonstration_model"
+    data_status: str = "simulated"
     is_observation: bool = False
     phenomenon_name: str
     description: str
@@ -256,7 +256,7 @@ class AnomalyAlertBlock(BaseModel):
 
 class DataQualityBlock(BaseModel):
     type: Literal["data_quality"] = "data_quality"
-    data_status: str = "demonstration_model"  # "observation" | "demonstration_model"
+    data_status: str = "simulated"  # "observation" | "demonstration_model"
     is_observation: bool = False
     sensor: str
     limitations: List[str]
@@ -268,7 +268,7 @@ class AssistantQueryResponse(BaseModel):
     scientific_grounding: List[ScientificCitation] = Field(default_factory=list)
     suggested_followups: List[str] = Field(default_factory=list)
     confidence_level: str = "High (NASA Earth Science Grounded)"
-    data_status: str = "demonstration_model"  # "observation" | "demonstration_model"
+    data_status: str = "simulated"  # "observation" | "demonstration_model"
     visual_blocks: List[Dict[str, Any]] = Field(default_factory=list)
     tool_calls_executed: List[str] = Field(default_factory=list)
 
@@ -314,7 +314,7 @@ class RegionalDiffPoint(BaseModel):
 
 
 class PeriodComparisonResponse(BaseModel):
-    data_status: str = "demonstration_model"
+    data_status: str = "simulated"
     is_observation: bool = False
     module: str
     period_a: str

@@ -119,8 +119,9 @@ def get_ocean_observations(
             "dataset_id": "SWOT_L2_LR_SSH",
             "mission": "Surface Water and Ocean Topography (SWOT)",
             "sensor": "Ka-band Radar Interferometer (KaRIn)",
-            "data_status": "demonstration_model",
+            "data_status": "simulated",
             "is_observation": False,
+            "source_type": "synthetic",
             "location": {"latitude": latitude, "longitude": longitude},
             "date": pt.date,
             "measurements": {
@@ -151,8 +152,9 @@ def get_ocean_observations(
         "dataset_id": "SWOT_L2_LR_SSH",
         "mission": "Surface Water and Ocean Topography (SWOT)",
         "sensor": "Ka-band Radar Interferometer (KaRIn)",
-        "data_status": "demonstration_model",
+        "data_status": "simulated",
         "is_observation": False,
+        "source_type": "synthetic",
         "date": date,
         "feature_count": len(features),
         "summary": {
@@ -217,8 +219,9 @@ def get_precipitation_data(
             "dataset_id": "GPM_3IMERGM",
             "mission": "Global Precipitation Measurement (GPM)",
             "sensor": "DPR Radar and GMI Radiometers (IMERG Final v07)",
-            "data_status": "demonstration_model",
+            "data_status": "simulated",
             "is_observation": False,
+            "source_type": "synthetic",
             "location": {"latitude": latitude, "longitude": longitude},
             "date": pt.date,
             "measurements": {
@@ -255,8 +258,9 @@ def get_precipitation_data(
         "dataset_id": "GPM_3IMERGM",
         "mission": "Global Precipitation Measurement (GPM)",
         "sensor": "DPR Radar and GMI Radiometers (IMERG Final v07)",
-        "data_status": "demonstration_model",
+        "data_status": "simulated",
         "is_observation": False,
+        "source_type": "synthetic",
         "date": date,
         "feature_count": len(features),
         "summary": {
@@ -434,7 +438,7 @@ def get_historical_trends(
     trend_slope = round((values[-1] - values[0]) / len(values), 4)
 
     is_obs = ts.is_observation if hasattr(ts, "is_observation") else False
-    d_status = ts.data_status if hasattr(ts, "data_status") else "demonstration_model"
+    d_status = ts.data_status if hasattr(ts, "data_status") else "simulated"
 
     return {
         "status": "success",
@@ -521,7 +525,7 @@ def compare_regions(
     )
 
     is_obs = bool(getattr(ts_a, "is_observation", False) and getattr(ts_b, "is_observation", False))
-    d_status = "observation" if is_obs else "demonstration_model"
+    d_status = "observation" if is_obs else "simulated"
 
     return {
         "status": "success",
@@ -630,8 +634,9 @@ def get_data_quality_information(
     return {
         "status": "success",
         "dataset_id": dataset_id,
-        "data_status": "demonstration_model",
+        "data_status": "simulated",
         "is_observation": False,
+        "source_type": "synthetic",
         "earthdata_auth": auth_status,
         "data_notice": "App values are modelled demonstrations; no NASA mission granules have been ingested.",
         "scientific_limitations": limitations,

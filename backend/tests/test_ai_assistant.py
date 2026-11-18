@@ -121,7 +121,7 @@ def test_tool_get_ocean_observations():
     assert res["dataset_id"] == "SWOT_L2_LR_SSH"
     assert "sea_surface_height_anomaly_m" in res["measurements"]
     assert "eddy_classification" in res["analysis"]
-    assert res["data_status"] == "demonstration_model"
+    assert res["data_status"] == "simulated"
     assert res["is_observation"] is False
 
     # Spatial query
@@ -186,7 +186,7 @@ def test_tool_dataset_metadata_and_quality():
 
     qual = get_data_quality_information("SWOT_L2_LR_SSH")
     assert qual["status"] == "success"
-    assert qual["data_status"] == "demonstration_model"
+    assert qual["data_status"] == "simulated"
     assert "scientific_limitations" in qual
 
 
@@ -253,7 +253,7 @@ async def test_assistant_offline_fallback():
         )
         res = await AssistantService.process_query(req)
 
-        assert res.data_status == "demonstration_model"
+        assert res.data_status == "simulated"
         assert "Grounded Scientific Engine" in res.confidence_level
         assert "get_precipitation_data" in res.tool_calls_executed
         assert len(res.visual_blocks) >= 1

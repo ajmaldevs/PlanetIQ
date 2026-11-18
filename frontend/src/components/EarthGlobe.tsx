@@ -122,8 +122,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
 
   const currentZoomRef = useRef<ZoomLevel>('global');
   const [currentZoomLevel, setCurrentZoomLevel] = useState<ZoomLevel>('global');
-  const [imageryResolution, setImageryResolution] = useState<string>('TerraLens base imagery');
-  const currentResolutionBadgeRef = useRef<string>('TerraLens base imagery');
+  const [imageryResolution, setImageryResolution] = useState<string>('PlanetIQ base imagery');
+  const currentResolutionBadgeRef = useRef<string>('PlanetIQ base imagery');
   const lastCenterCalcRef = useRef(Date.now());
   const lastReportedDistRef = useRef(5.35);
 
@@ -456,7 +456,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       // Adaptive Zoom Level & Resolution Scale Calculation
       const distNow = currentCameraDistance.current;
       let newLevel: ZoomLevel = 'global';
-      let resBadge = 'TerraLens base imagery';
+      let resBadge = 'PlanetIQ base imagery';
 
       if (distNow < 2.65) {
         newLevel = 'regional';
@@ -472,7 +472,7 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
         resBadge = 'ArcGIS World Imagery · z3';
       } else {
         newLevel = 'global';
-        resBadge = 'TerraLens base imagery';
+        resBadge = 'PlanetIQ base imagery';
       }
 
       if (newLevel !== currentZoomRef.current || Math.abs(distNow - lastReportedDistRef.current) > 0.08) {

@@ -75,10 +75,10 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
               <span>NASA Space Apps Challenge 2026</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
-              About TerraLens
+              About PlanetIQ
             </h1>
             <p className="text-base sm:text-lg text-slate-300 leading-relaxed font-normal">
-              TerraLens is an interactive Earth observation platform that helps high school students, college researchers,
+              PlanetIQ is an interactive Earth observation platform that helps high school students, college researchers,
               and the public explore Earth's interconnected systems. Current map layers and time series are demonstration models, not satellite measurements.
             </p>
           </div>

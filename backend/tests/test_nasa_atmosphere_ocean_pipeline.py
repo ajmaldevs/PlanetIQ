@@ -1,6 +1,7 @@
 """
 Tests for NASA GPM IMERG and SWOT Ocean Data Pipelines.
 Verifies CMR discovery, caching, observation repository, source_mode discrimination, and FastAPI endpoints.
+Strictly verifies that un-ingested products (GPM/SWOT) are never falsely claimed as genuine satellite observations.
 """
 
 import pytest
@@ -84,42 +85,35 @@ class TestSwotPipeline:
 
 
 class TestObservationRepositoryExpansion:
-    """Verifies GPM and SWOT methods in ObservationRepository."""
+    """Verifies scientific integrity: un-ingested datasets report unavailable and never fake observations."""
 
     def test_gpm_spatial_grid(self):
         grid = ObservationRepository.get_real_gpm_spatial_grid("2026-03")
-        assert grid["metadata"]["data_status"] == "observation"
-        assert grid["metadata"]["is_observation"] is True
-        assert len(grid["features"]) > 0
-
-        first_feat = grid["features"][0]
-        assert "precipitation_rate_mm_hr" in first_feat["properties"]
-        assert "precipitation_accumulated_mm" in first_feat["properties"]
-        assert first_feat["properties"]["is_observation"] is True
+        assert grid["metadata"]["data_status"] == "unavailable"
+        assert grid["metadata"]["is_observation"] is False
+        assert grid["metadata"]["pipeline_status"] == "planned"
+        assert len(grid["features"]) == 0
 
     def test_gpm_timeseries(self):
         ts = ObservationRepository.get_real_gpm_timeseries(9.93, 76.27, 2024, 2026)
-        assert ts["data_status"] == "observation"
-        assert ts["is_observation"] is True
-        assert len(ts["timeseries"]) == 36
-        assert ts["timeseries"][0]["precipitation_accumulated_mm"] > 0
+        assert ts["data_status"] == "unavailable"
+        assert ts["is_observation"] is False
+        assert ts["pipeline_status"] == "planned"
+        assert len(ts["timeseries"]) == 0
 
     def test_swot_spatial_grid(self):
         grid = ObservationRepository.get_real_swot_spatial_grid("2026-03")
-        assert grid["metadata"]["data_status"] == "observation"
-        assert grid["metadata"]["is_observation"] is True
-        assert len(grid["features"]) > 0
-
-        first_feat = grid["features"][0]
-        assert "ssha_karin_m" in first_feat["properties"]
-        assert "eddy_kinetic_energy_cm2_s2" in first_feat["properties"]
-        assert first_feat["properties"]["is_observation"] is True
+        assert grid["metadata"]["data_status"] == "unavailable"
+        assert grid["metadata"]["is_observation"] is False
+        assert grid["metadata"]["pipeline_status"] == "planned"
+        assert len(grid["features"]) == 0
 
     def test_swot_timeseries(self):
         ts = ObservationRepository.get_real_swot_timeseries(36.0, -68.0, 2024, 2026)
-        assert ts["data_status"] == "observation"
-        assert ts["is_observation"] is True
-        assert len(ts["timeseries"]) == 36
+        assert ts["data_status"] == "unavailable"
+        assert ts["is_observation"] is False
+        assert ts["pipeline_status"] == "planned"
+        assert len(ts["timeseries"]) == 0
 
 
 class TestScientificServicesSourceMode:
@@ -127,27 +121,31 @@ class TestScientificServicesSourceMode:
 
     def test_atmosphere_service_source_mode(self):
         obs_grid = AtmosphereService.get_spatial_grid(date_str="2026-03", source_mode="observation")
-        assert obs_grid.metadata.get("data_status") == "observation"
-        assert obs_grid.metadata.get("is_observation") is True
+        assert obs_grid.metadata.get("data_status") == "unavailable"
+        assert obs_grid.metadata.get("is_observation") is False
 
         demo_grid = AtmosphereService.get_spatial_grid(date_str="2026-03", source_mode="demonstration")
-        assert demo_grid.metadata.get("data_status") == "demonstration_model"
+        assert demo_grid.metadata.get("data_status") == "simulated"
         assert demo_grid.metadata.get("is_observation") is False
+        assert len(demo_grid.features) > 0
 
         auto_grid = AtmosphereService.get_spatial_grid(date_str="2026-03", source_mode="auto")
-        assert auto_grid.metadata.get("data_status") == "observation"
+        assert auto_grid.metadata.get("data_status") == "simulated"
+        assert auto_grid.metadata.get("is_observation") is False
 
     def test_ocean_service_source_mode(self):
         obs_grid = OceanService.get_spatial_observations(date_str="2026-03", source_mode="observation")
-        assert obs_grid.metadata.get("data_status") == "observation"
-        assert obs_grid.metadata.get("is_observation") is True
+        assert obs_grid.metadata.get("data_status") == "unavailable"
+        assert obs_grid.metadata.get("is_observation") is False
 
         demo_grid = OceanService.get_spatial_observations(date_str="2026-03", source_mode="demonstration")
-        assert demo_grid.metadata.get("data_status") == "demonstration_model"
+        assert demo_grid.metadata.get("data_status") == "simulated"
         assert demo_grid.metadata.get("is_observation") is False
+        assert len(demo_grid.features) > 0
 
         auto_grid = OceanService.get_spatial_observations(date_str="2026-03", source_mode="auto")
-        assert auto_grid.metadata.get("data_status") == "observation"
+        assert auto_grid.metadata.get("data_status") == "simulated"
+        assert auto_grid.metadata.get("is_observation") is False
 
 
 class TestApiEndpointsSourceMode:
@@ -160,17 +158,17 @@ class TestApiEndpointsSourceMode:
             res_obs = await client.get("/api/v1/atmosphere/grid?source_mode=observation")
             assert res_obs.status_code == 200
             data_obs = res_obs.json()
-            assert data_obs["metadata"]["data_status"] == "observation"
+            assert data_obs["metadata"]["data_status"] == "unavailable"
 
             res_demo = await client.get("/api/v1/atmosphere/grid?source_mode=demonstration")
             assert res_demo.status_code == 200
             data_demo = res_demo.json()
-            assert data_demo["metadata"]["data_status"] == "demonstration_model"
+            assert data_demo["metadata"]["data_status"] == "simulated"
 
             res_ts = await client.get("/api/v1/atmosphere/timeseries?latitude=9.93&longitude=76.27&source_mode=observation")
             assert res_ts.status_code == 200
             data_ts = res_ts.json()
-            assert data_ts["data_status"] == "observation"
+            assert data_ts["data_status"] == "unavailable"
 
     @pytest.mark.asyncio
     async def test_ocean_endpoints(self):
@@ -179,14 +177,14 @@ class TestApiEndpointsSourceMode:
             res_obs = await client.get("/api/v1/ocean/observations?source_mode=observation")
             assert res_obs.status_code == 200
             data_obs = res_obs.json()
-            assert data_obs["metadata"]["data_status"] == "observation"
+            assert data_obs["metadata"]["data_status"] == "unavailable"
 
             res_demo = await client.get("/api/v1/ocean/observations?source_mode=demonstration")
             assert res_demo.status_code == 200
             data_demo = res_demo.json()
-            assert data_demo["metadata"]["data_status"] == "demonstration_model"
+            assert data_demo["metadata"]["data_status"] == "simulated"
 
             res_ts = await client.get("/api/v1/ocean/timeseries?latitude=36.0&longitude=-68.0&source_mode=observation")
             assert res_ts.status_code == 200
             data_ts = res_ts.json()
-            assert data_ts["data_status"] == "observation"
+            assert data_ts["data_status"] == "unavailable"

@@ -44,6 +44,8 @@ class ComparisonService:
         lon: float,
     ) -> PeriodComparisonResponse:
         ts = AtmosphereService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026)
+        if not ts.timeseries or period_a not in {p.date for p in ts.timeseries} or period_b not in {p.date for p in ts.timeseries}:
+            ts = AtmosphereService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode="demonstration")
         pts_by_date = {p.date: p for p in ts.timeseries}
 
         pt_a = pts_by_date.get(period_a) or ts.timeseries[0]
@@ -144,6 +146,8 @@ class ComparisonService:
         lon: float,
     ) -> PeriodComparisonResponse:
         ts = OceanService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026)
+        if not ts.timeseries or period_a not in {p.date for p in ts.timeseries} or period_b not in {p.date for p in ts.timeseries}:
+            ts = OceanService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode="demonstration")
         pts_by_date = {p.date: p for p in ts.timeseries}
 
         pt_a = pts_by_date.get(period_a) or ts.timeseries[0]
@@ -237,6 +241,8 @@ class ComparisonService:
         lon: float,
     ) -> PeriodComparisonResponse:
         ts = LandService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026)
+        if not ts.timeseries or period_a not in {p.date for p in ts.timeseries} or period_b not in {p.date for p in ts.timeseries}:
+            ts = LandService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode="demonstration")
         pts_by_date = {p.date: p for p in ts.timeseries}
 
         pt_a = pts_by_date.get(period_a) or ts.timeseries[0]

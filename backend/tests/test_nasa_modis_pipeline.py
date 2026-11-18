@@ -168,14 +168,25 @@ def test_observation_repository_timeseries_retrieval():
     assert ts["dataset_id"] == "MOD13C2"
     assert ts["data_status"] == "observation"
     assert ts["is_observation"] is True
-    assert len(ts["timeseries"]) == 36  # 3 years * 12 months
+    assert len(ts["timeseries"]) == 4  # Authentic observations: 2024-03, 2025-03, 2026-03, 2026-09
     assert "Punjab" in ts["region_name"]
+
+    # Missing months must remain missing — no fabricated sine waves
+    dates = [p["date"] for p in ts["timeseries"]]
+    assert "2026-01" not in dates
 
     # Peak in March for Indo-Gangetic wheat harvest
     mar_pts = [p for p in ts["timeseries"] if p["date"].endswith("-03")]
     assert len(mar_pts) == 3
     for p in mar_pts:
         assert p["ndvi"] > 0.65  # Lush agricultural canopy
+
+    # Demonstration mode should provide complete modeled timeseries
+    from app.services.land_service import LandService
+    demo_ts = LandService.get_timeseries(30.90, 75.85, 2024, 2026, source_mode="demonstration")
+    assert len(demo_ts.timeseries) == 36
+    assert demo_ts.is_observation is False
+    assert demo_ts.data_status == "simulated"
 
 
 # --- 4. ModisClient & CMR Search Tests ---
@@ -204,3 +215,58 @@ async def test_modis_client_search_flow():
         assert granule is not None
         assert granule["id"] == "G12345-LPCLOUD"
         assert granule["granule_size_mb"] == 100.5
+
+
+# --- 5. Negative Verification Tests (Eliminate Fabricated Observations) ---
+
+def test_synthetic_data_never_labeled_observation():
+    """CRITICAL TEST: Verifies that simulated models are NEVER labeled as observation."""
+    from app.services.demo_data_service import DemoDataService
+
+    # 1. Land Demo Grid
+    land_grid = DemoDataService.get_simulated_land_grid("2026-03")
+    assert land_grid.metadata["data_status"] == "simulated"
+    assert land_grid.metadata["is_observation"] is False
+    assert land_grid.metadata["source_type"] == "synthetic"
+    for feat in land_grid.features:
+        assert feat.properties["data_status"] == "simulated"
+        assert feat.properties["is_observation"] is False
+        assert feat.properties["source_type"] == "synthetic"
+
+    # 2. Atmosphere Demo Grid
+    atmo_grid = DemoDataService.get_simulated_atmosphere_grid("2026-03")
+    assert atmo_grid.metadata["data_status"] == "simulated"
+    assert atmo_grid.metadata["is_observation"] is False
+    assert atmo_grid.metadata["source_type"] == "synthetic"
+
+    # 3. Ocean Demo Grid
+    ocean_grid = DemoDataService.get_simulated_ocean_grid("2026-03")
+    assert ocean_grid.metadata["data_status"] == "simulated"
+    assert ocean_grid.metadata["is_observation"] is False
+    assert ocean_grid.metadata["source_type"] == "synthetic"
+
+
+def test_missing_dates_return_unavailable_not_simulated():
+    """CRITICAL TEST: Verifies missing satellite observation dates are not filled with formulas."""
+    # Month without ingested MODIS granule (e.g. 2026-05)
+    grid = ObservationRepository.get_real_modis_spatial_grid(date_str="2026-05")
+    assert grid["metadata"]["data_status"] == "unavailable"
+    assert grid["metadata"]["is_observation"] is False
+    assert len(grid["features"]) == 0
+    assert "No genuine NASA MODIS MOD13C2" in grid["metadata"]["data_notice"]
+
+
+def test_unconnected_pipelines_never_claim_observation():
+    """CRITICAL TEST: GPM and SWOT un-ingested pipelines must report unavailable, never fake observations."""
+    gpm_grid = ObservationRepository.get_real_gpm_spatial_grid("2026-03")
+    assert gpm_grid["metadata"]["data_status"] == "unavailable"
+    assert gpm_grid["metadata"]["is_observation"] is False
+    assert gpm_grid["metadata"]["pipeline_status"] == "planned"
+    assert len(gpm_grid["features"]) == 0
+
+    swot_grid = ObservationRepository.get_real_swot_spatial_grid("2026-03")
+    assert swot_grid["metadata"]["data_status"] == "unavailable"
+    assert swot_grid["metadata"]["is_observation"] is False
+    assert swot_grid["metadata"]["pipeline_status"] == "planned"
+    assert len(swot_grid["features"]) == 0
+

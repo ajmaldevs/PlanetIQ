@@ -27,7 +27,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             if (onResetExplore) onResetExplore();
           }}
           className="flex items-center space-x-2 text-left focus:outline-hidden focus-visible:ring-2 focus-visible:ring-cyan-400 rounded-lg group shrink-0 cursor-pointer"
-          aria-label="TerraLens Home"
+          aria-label="PlanetIQ Home"
         >
           <div className="h-8 w-8 rounded-full bg-slate-900 border border-slate-700/80 flex items-center justify-center text-cyan-400 group-hover:border-cyan-500/50 transition-colors relative">
             <Globe className="h-4 w-4" />
