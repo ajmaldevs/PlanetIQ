@@ -11,6 +11,11 @@ router = APIRouter()
     response_model=GeoJSONFeatureCollection,
     summary="SWOT KaRIn Sea Surface Height Spatial Observations (Option A)"
 )
+@router.get(
+    "/grid",
+    response_model=GeoJSONFeatureCollection,
+    summary="SWOT KaRIn Sea Surface Height Spatial Grid (Alias)"
+)
 def get_ocean_observations(
     min_lat: Optional[float] = Query(None, ge=-90.0, le=90.0),
     max_lat: Optional[float] = Query(None, ge=-90.0, le=90.0),
