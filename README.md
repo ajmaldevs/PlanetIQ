@@ -22,11 +22,27 @@
 
 ## 🛰️ Supported Satellite Missions & Datasets
 
-| Sphere | Mission / Instrument | Dataset Identifier | CMR Concept ID | Spatial / Temporal Resolution | Measured Physical Variables |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **Land** | **NASA MODIS Terra** (LP DAAC) | `MOD13C2.061` | `C2565788914-LPCLOUD` | 0.05° CMG (~5.6 km) / Monthly | NDVI, EVI, Vegetation Condition Index (VCI %), Drought Severity |
-| **Atmosphere** | **NASA GPM Core** (GES DISC) | `GPM_3IMERGM` v07 | `C2723754851-GES_DISC` | 0.1° x 0.1° (~11 km) / Monthly | Precipitation Rate (mm/hr), Accumulated Liquid Depth (mm), Anomalies |
-| **Ocean** | **NASA/CNES SWOT** (PO.DAAC) | `SWOT_L2_LR_SSH` vD | `C3233945000-POCLOUD` | ~2 km KaRIn Swath / 21-day Repeat | Sea Surface Height Anomaly (SSHA), Dynamic Topography, Eddy Kinetic Energy |
+PlanetIQ provides operational, multi-sphere Earth observation data pipelines backed by authentic NASA Distributed Active Archive Centers (DAACs):
+
+| Earth Sphere | Satellite Mission / Sensor | Dataset Identifier | NASA DAAC & Provider | CMR Concept ID | Spatial & Temporal Resolution | Measured Physical Variables & Units |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Ocean Hydrosphere** | **NASA MODIS Aqua** (Ocean Color) | `MODISA_L3m_CHL` | Ocean Biology DAAC (**OB.DAAC**) | `C1443684497-OB_DAAC` | 4 km / 9 km Standard Mapped (Monthly) | Chlorophyll-a ($mg/m^3$), Biological Productivity Classification |
+| **Ocean Hydrosphere** | **NASA MODIS Aqua** (Thermal IR) | `MODISA_L3m_SST` | Ocean Biology DAAC (**OB.DAAC**) | `C1443684809-OB_DAAC` | 4 km / 9 km Standard Mapped (Monthly) | Sea Surface Temperature ($^\circ C$), Thermal Fronts & Regimes |
+| **Ocean Hydrosphere** | **NASA/CNES SWOT** (KaRIn Altimeter) | `SWOT_L2_LR_SSH` vD | Physical Oceanography DAAC (**PO.DAAC**) | `C3233945000-POCLOUD` | ~2 km KaRIn Swath / 21-day Repeat | Sea Surface Height Anomaly ($SSHA$, $m$), Dynamic Topography ($m$), Eddy Kinetic Energy |
+| **Atmospheric Envelope** | **NASA MODIS Terra/Aqua** (Atmosphere) | `MOD08_M3` / `MYD08_M3` | Level-1 and Atmosphere Archive (**LAADS DAAC**) | `C1443682974-LAADS` / `C1443683075-LAADS` | 1.0° x 1.0° Equal-Angle Grid (Monthly) | Aerosol Optical Depth ($AOD_{550}$, dimensionless light extinction ratio), Cloud Fraction (%), Cloud Optical Thickness, Cloud Effective Radius ($\mu m$) |
+| **Atmospheric Envelope** | **NASA GPM Core** (DPR / GMI) | `GPM_3IMERGM` v07 | Goddard Earth Sciences DISC (**GES DISC**) | `C2723754851-GES_DISC` | 0.1° x 0.1° Global (~11 km) / Monthly | Mean Precipitation Rate ($mm/hr$), Accumulated Liquid Depth ($mm$), Climatological Anomalies ($mm$) |
+| **Terrestrial Biosphere** | **NASA MODIS Terra** (Optical/NIR) | `MOD13C2.061` | Land Processes DAAC (**LP DAAC**) | `C2565788914-LPCLOUD` | 0.05° CMG (~5.6 km) / Monthly | Normalized Difference Vegetation Index (NDVI), EVI, Vegetation Condition Index (VCI %), Drought Severity Classification |
+
+---
+
+## 🔬 Scientific Data Quality & Integrity Standards
+
+PlanetIQ adheres to strict scientific remote-sensing principles:
+* **Zero Fabricated Observations**: Unobserved coordinates or historical gaps return explicit `data_status: "unavailable"` and `is_observation: false`. Synthetic sine curves or harmonic interpolation formulas are strictly forbidden in production telemetry paths.
+* **Strict Ocean-Only Masking**: `OceanProcessor` validates geographic boundary coordinates, ensuring ocean color (Chlorophyll-a), sea-surface temperature, and radar altimetry are never projected onto continental landmasses.
+* **AOD Atmospheric Extinction Clarification**: Aerosol Optical Depth is formally defined and presented as **columnar light extinction by particulates through the vertical atmospheric column at 550nm**, never falsely conflated with ground-level PM2.5 or localized air-quality monitors.
+* **Precipitation Rate vs. Depth Accumulation**: GPM IMERG measurements strictly differentiate instantaneous mean liquid precipitation rate ($mm/hr$) from monthly accumulated precipitation depth ($mm = \text{rate} \times 24 \times \text{days\_in\_month}$). Satellite radiometer estimates are never mislabeled as direct rain-gauge observations.
+* **Isolated Demonstration Models**: Calibrated educational models are isolated exclusively within `DemoDataService` under `source_mode="demonstration"`. Real observations carry full NASA provenance metadata, valid ranges, scale factors, and granule IDs.
 
 ---
 
@@ -145,9 +161,11 @@ Deployment blueprint specification: [`render.yaml`](render.yaml)
 ## 📜 Scientific Citation & Provenance Notice
 
 PlanetIQ is committed to scientific transparency:
-* **MODIS Data**: Courtesy of NASA EOSDIS Land Processes Distributed Active Archive Center (LP DAAC), USGS Earth Resources Observation and Science (EROS) Center, Sioux Falls, South Dakota.
-* **GPM IMERG Data**: Courtesy of NASA Goddard Earth Sciences Data and Information Services Center (GES DISC) and the Precipitation Processing System (PPS).
-* **SWOT Data**: Courtesy of NASA Jet Propulsion Laboratory Physical Oceanography DAAC (PO.DAAC) and the Centre National d'Études Spatiales (CNES).
+* **MODIS Land Vegetation Data**: Courtesy of NASA EOSDIS Land Processes Distributed Active Archive Center (LP DAAC), USGS Earth Resources Observation and Science (EROS) Center, Sioux Falls, South Dakota.
+* **MODIS Ocean Color & SST Data**: Courtesy of NASA Ocean Biology Distributed Active Archive Center (OB.DAAC), NASA Goddard Space Flight Center, Greenbelt, MD.
+* **MODIS Atmosphere & Aerosol Data**: Courtesy of NASA Level-1 and Atmosphere Archive & Distribution System (LAADS) DAAC, NASA Goddard Space Flight Center, Greenbelt, MD.
+* **GPM IMERG Precipitation Data**: Courtesy of NASA Goddard Earth Sciences Data and Information Services Center (GES DISC) and the Precipitation Processing System (PPS).
+* **SWOT Ocean Altimetry Data**: Courtesy of NASA Jet Propulsion Laboratory Physical Oceanography DAAC (PO.DAAC) and the Centre National d'Études Spatiales (CNES).
 
 ---
 
