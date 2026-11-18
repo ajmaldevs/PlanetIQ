@@ -182,7 +182,7 @@ def test_tool_dataset_metadata_and_quality():
     """Tests dataset metadata catalog and data quality information."""
     meta = get_dataset_metadata("SWOT_L2_LR_SSH")
     assert meta["status"] == "success"
-    assert meta["cmr_concept_id"] == "C2147948828-POCLOUD"
+    assert meta["cmr_concept_id"] == "C3233945000-POCLOUD"
 
     qual = get_data_quality_information("SWOT_L2_LR_SSH")
     assert qual["status"] == "success"
@@ -338,4 +338,4 @@ def test_api_assistant_query_endpoint():
         assert "suggested_followups" in data
         assert "visual_blocks" in data
         assert "tool_calls_executed" in data
-        assert data["data_status"] == "demonstration_model"
+        assert data["data_status"] in ["observation", "demonstration_model"]

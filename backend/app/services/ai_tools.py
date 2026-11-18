@@ -319,11 +319,12 @@ def get_vegetation_indices(
         return {
             "status": "success",
             "dataset_id": "MOD13C2",
-            "mission": "MODIS Terra/Aqua",
+            "mission": "MODIS Terra",
             "sensor": "Moderate Resolution Imaging Spectroradiometer (MOD13C2 v061)",
-            "data_status": "demonstration_model",
-            "is_observation": False,
+            "data_status": ts.data_status,
+            "is_observation": ts.is_observation,
             "location": {"latitude": latitude, "longitude": longitude},
+            "region_name": ts.region_name,
             "date": pt.date,
             "measurements": {
                 "ndvi": pt.ndvi,
@@ -341,7 +342,7 @@ def get_vegetation_indices(
                 "canopy_status": canopy_health,
                 "phenology": "Mature active photosynthesis" if pt.ndvi >= 0.50 else "Dormant / sparse canopy",
             },
-            "provenance": "NASA LP DAAC / USGS",
+            "provenance": "NASA LP DAAC / USGS EROS MOD13C2.061",
             "doi": "https://doi.org/10.5067/MODIS/MOD13C2.061",
         }
 
@@ -349,23 +350,24 @@ def get_vegetation_indices(
     fc = LandService.get_spatial_grid(
         min_lat=min_lat, max_lat=max_lat, min_lon=min_lon, max_lon=max_lon, date_str=date
     )
-    features = fc.features[:20]
+    features = fc.features[:25]
     ndvi_vals = [f.properties.get("ndvi", 0.0) for f in features]
+    meta = fc.metadata
 
     return {
         "status": "success",
         "dataset_id": "MOD13C2",
-        "mission": "MODIS Terra/Aqua",
+        "mission": "MODIS Terra",
         "sensor": "Moderate Resolution Imaging Spectroradiometer (MOD13C2 v061)",
-        "data_status": "demonstration_model",
-        "is_observation": False,
+        "data_status": meta.get("data_status", "observation"),
+        "is_observation": meta.get("is_observation", True),
         "date": date,
         "feature_count": len(features),
         "summary": {
             "mean_ndvi": round(sum(ndvi_vals) / len(ndvi_vals), 4) if ndvi_vals else 0.0,
             "min_ndvi": min(ndvi_vals) if ndvi_vals else 0.0,
             "max_ndvi": max(ndvi_vals) if ndvi_vals else 0.0,
-            "units": "dimensionless ratio",
+            "units": "dimensionless ratio (-0.2000 to +1.0000)",
         },
         "sample_features": [
             {
@@ -374,10 +376,11 @@ def get_vegetation_indices(
                 "ndvi": f.properties.get("ndvi"),
                 "evi": f.properties.get("evi"),
                 "vci_percent": f.properties.get("vci_percent"),
+                "quality": f.properties.get("quality_reliability", "Good Data"),
             }
             for f in features[:6]
         ],
-        "provenance": "NASA LP DAAC / USGS",
+        "provenance": "NASA LP DAAC / USGS EROS MOD13C2.061",
         "doi": "https://doi.org/10.5067/MODIS/MOD13C2.061",
     }
 
@@ -430,6 +433,9 @@ def get_historical_trends(
     max_val = max(values)
     trend_slope = round((values[-1] - values[0]) / len(values), 4)
 
+    is_obs = ts.is_observation if hasattr(ts, "is_observation") else False
+    d_status = ts.data_status if hasattr(ts, "data_status") else "demonstration_model"
+
     return {
         "status": "success",
         "module": mod,
@@ -449,8 +455,8 @@ def get_historical_trends(
             {"date": p.date, "value": val}
             for p, val in zip(pts, values)
         ],
-        "data_status": "demonstration_model",
-        "is_observation": False,
+        "data_status": d_status,
+        "is_observation": is_obs,
     }
 
 
@@ -514,6 +520,9 @@ def compare_regions(
         val_a, val_b, metric_label, unit
     )
 
+    is_obs = bool(getattr(ts_a, "is_observation", False) and getattr(ts_b, "is_observation", False))
+    d_status = "observation" if is_obs else "demonstration_model"
+
     return {
         "status": "success",
         "module": mod,
@@ -522,8 +531,8 @@ def compare_regions(
         "region_a": {"name": region_a, "latitude": lat_a, "longitude": lon_a, "value": val_a, "unit": unit},
         "region_b": {"name": region_b, "latitude": lat_b, "longitude": lon_b, "value": val_b, "unit": unit},
         "comparison": diff_info,
-        "data_status": "demonstration_model",
-        "is_observation": False,
+        "data_status": d_status,
+        "is_observation": is_obs,
     }
 
 

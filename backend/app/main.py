@@ -6,7 +6,7 @@ from app.core.config import settings
 from app.api.v1.router import api_router
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("terralens")
+logger = logging.getLogger("planetiq")
 
 
 @asynccontextmanager
@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="TerraLens Scientific API",
+    title="PlanetIQ Scientific API",
     version=settings.VERSION,
     description="Interactive Earth Observation and Environmental Analysis Backend",
     openapi_url=f"{settings.API_V1_STR}/openapi.json",

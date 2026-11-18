@@ -1305,6 +1305,16 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
               )}
             </div>
 
+            {selectedFeature?.properties?.is_observation ? (
+              <span className="text-emerald-400 font-semibold text-[8px] uppercase tracking-wider bg-emerald-950/80 px-1.5 py-0.5 rounded border border-emerald-800/50">
+                Satellite Obs
+              </span>
+            ) : selectedFeature ? (
+              <span className="text-amber-400 font-semibold text-[8px] uppercase tracking-wider bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-800/50">
+                Demo Model
+              </span>
+            ) : null}
+
             {/* Advanced quality controls are available in the Tools menu. */}
             <div className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-slate-900/90 border border-slate-800" title={`Rendering quality: ${qualityMode}; active tier: ${qualityTier}`}>
               <Cpu className="h-2.5 w-2.5 text-cyan-400" />

@@ -16,7 +16,8 @@ def get_ocean_observations(
     max_lat: Optional[float] = Query(None, ge=-90.0, le=90.0),
     min_lon: Optional[float] = Query(None, ge=-180.0, le=180.0),
     max_lon: Optional[float] = Query(None, ge=-180.0, le=180.0),
-    date: str = Query("2026-03", pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Calendar month (YYYY-MM)")
+    date: str = Query("2026-03", pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Calendar month (YYYY-MM)"),
+    source_mode: str = Query("auto", pattern=r"^(auto|observation|demonstration)$", description="Data source mode ('observation', 'demonstration', or 'auto')"),
 ):
     """
     Returns SWOT KaRIn Low Rate Ocean Sea Surface Height (Option A) swath and gridded features.
@@ -32,7 +33,8 @@ def get_ocean_observations(
         max_lat=max_lat,
         min_lon=min_lon,
         max_lon=max_lon,
-        date_str=date
+        date_str=date,
+        source_mode=source_mode,
     )
 
 
@@ -45,7 +47,8 @@ def get_ocean_timeseries(
     latitude: float = Query(..., ge=-90.0, le=90.0),
     longitude: float = Query(..., ge=-180.0, le=180.0),
     start_year: int = Query(2024, ge=2022, le=2026),
-    end_year: int = Query(2026, ge=2022, le=2026)
+    end_year: int = Query(2026, ge=2022, le=2026),
+    source_mode: str = Query("auto", pattern=r"^(auto|observation|demonstration)$", description="Data source mode ('observation', 'demonstration', or 'auto')"),
 ):
     """
     Returns multi-year monthly SSHA trajectory and eddy kinetic energy trends for a given ocean coordinate.
@@ -54,5 +57,6 @@ def get_ocean_timeseries(
         latitude=latitude,
         longitude=longitude,
         start_year=start_year,
-        end_year=end_year
+        end_year=end_year,
+        source_mode=source_mode,
     )

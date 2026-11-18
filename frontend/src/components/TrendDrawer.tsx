@@ -400,14 +400,27 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                 {/* 1. ATMOSPHERE CHART (If atmosphere is active) */}
                 {effectiveModules.includes('atmosphere') && atmosphereData && (
                   <div className="bg-slate-900/40 border border-slate-800/70 p-3 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center justify-between text-xs flex-wrap gap-2">
                       <span className="font-semibold text-blue-300 flex items-center space-x-1.5">
                         <CloudRain className="h-3.5 w-3.5" />
                         <span>Atmosphere: Monthly Precipitation Accumulation vs Climatological Normal</span>
                       </span>
-                      <span className="font-mono text-[10px] text-slate-400">
-                        Unit: mm / month • GPM_3IMERGM
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        {atmosphereData.is_observation ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            <CheckCircle2 className="h-2.5 w-2.5" />
+                            <span>Real Observation</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                            <span>Simulated Demo</span>
+                          </span>
+                        )}
+                        <span className="font-mono text-[10px] text-slate-400">
+                          Unit: mm / month • GPM_3IMERGM
+                        </span>
+                      </div>
                     </div>
 
                     <div className="h-44 sm:h-48 w-full min-w-0">
@@ -418,7 +431,7 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                           <YAxis stroke="#64748b" tick={{ fontSize: 9 }} unit=" mm" />
                           <Tooltip contentStyle={{ backgroundColor: '#090d16', borderColor: '#334155', borderRadius: '8px', fontSize: '11px' }} />
                           <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '2px' }} />
-                          <Line type="monotone" dataKey="precipitation_accumulated_mm" name="Modelled Rain Depth (mm)" stroke="#38bdf8" strokeWidth={2} dot={{ r: 2 }} />
+                          <Line type="monotone" dataKey="precipitation_accumulated_mm" name={atmosphereData.is_observation ? "Satellite Rain Depth (mm)" : "Modelled Rain Depth (mm)"} stroke="#38bdf8" strokeWidth={2} dot={{ r: 2 }} />
                           <Line type="monotone" dataKey="climatological_normal_mm" name="1998-2020 Normal (mm)" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
                           {selectedDate && <ReferenceLine x={selectedDate} stroke="#f59e0b" strokeWidth={1.5} label={{ value: 'Active', position: 'top', fill: '#f59e0b', fontSize: 9 }} />}
                         </LineChart>
@@ -430,14 +443,27 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                 {/* 2. OCEAN CHART (If ocean is active) */}
                 {effectiveModules.includes('ocean') && oceanData && (
                   <div className="bg-slate-900/40 border border-slate-800/70 p-3 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center justify-between text-xs flex-wrap gap-2">
                       <span className="font-semibold text-cyan-300 flex items-center space-x-1.5">
                         <Waves className="h-3.5 w-3.5" />
                         <span>Ocean: Sea Surface Height Anomaly (SSHA) & Extremes</span>
                       </span>
-                      <span className="font-mono text-[10px] text-slate-400">
-                        Unit: meters (m) • NASA/CNES SWOT KaRIn
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        {oceanData.is_observation ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            <CheckCircle2 className="h-2.5 w-2.5" />
+                            <span>Real Observation</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                            <span>Simulated Demo</span>
+                          </span>
+                        )}
+                        <span className="font-mono text-[10px] text-slate-400">
+                          Unit: meters (m) • NASA/CNES SWOT KaRIn
+                        </span>
+                      </div>
                     </div>
 
                     <div className="h-44 sm:h-48 w-full min-w-0">
@@ -449,7 +475,7 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                           <ReferenceLine y={0} stroke="#475569" strokeDasharray="3 3" />
                           <Tooltip contentStyle={{ backgroundColor: '#090d16', borderColor: '#334155', borderRadius: '8px', fontSize: '11px' }} />
                           <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '2px' }} />
-                          <Line type="monotone" dataKey="ssha_mean_m" name="Mean SSHA (m)" stroke="#06b6d4" strokeWidth={2.5} dot={{ r: 2 }} />
+                          <Line type="monotone" dataKey="ssha_mean_m" name={oceanData.is_observation ? "Satellite SSHA (m)" : "Mean SSHA (m)"} stroke="#06b6d4" strokeWidth={2.5} dot={{ r: 2 }} />
                           <Line type="monotone" dataKey="ssha_max_m" name="Swath Max (m)" stroke="#ef4444" strokeWidth={1} strokeDasharray="2 2" dot={false} />
                           <Line type="monotone" dataKey="ssha_min_m" name="Swath Min (m)" stroke="#3b82f6" strokeWidth={1} strokeDasharray="2 2" dot={false} />
                           {selectedDate && <ReferenceLine x={selectedDate} stroke="#f59e0b" strokeWidth={1.5} label={{ value: 'Active', position: 'top', fill: '#f59e0b', fontSize: 9 }} />}
@@ -462,14 +488,27 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                 {/* 3. LAND CHART (If land is active) */}
                 {effectiveModules.includes('land') && landData && (
                   <div className="bg-slate-900/40 border border-slate-800/70 p-3 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center justify-between text-xs flex-wrap gap-2">
                       <span className="font-semibold text-emerald-300 flex items-center space-x-1.5">
                         <Trees className="h-3.5 w-3.5" />
                         <span>Land: Canopy Phenology (NDVI) vs Historical Median</span>
                       </span>
-                      <span className="font-mono text-[10px] text-slate-400">
-                        Index: [-0.2 .. 1.0] • MODIS MOD13C2 v6.1
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        {landData.is_observation ? (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            <CheckCircle2 className="h-2.5 w-2.5" />
+                            <span>Real Observation</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            <AlertTriangle className="h-2.5 w-2.5" />
+                            <span>Simulated Demo</span>
+                          </span>
+                        )}
+                        <span className="font-mono text-[10px] text-slate-400">
+                          Index: [-0.2 .. 1.0] • MODIS MOD13C2 v061
+                        </span>
+                      </div>
                     </div>
 
                     <div className="h-44 sm:h-48 w-full min-w-0">
@@ -480,7 +519,7 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                           <YAxis stroke="#64748b" tick={{ fontSize: 9 }} domain={[0, 1]} />
                           <Tooltip contentStyle={{ backgroundColor: '#090d16', borderColor: '#334155', borderRadius: '8px', fontSize: '11px' }} />
                           <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '2px' }} />
-                          <Line type="monotone" dataKey="ndvi" name="Modelled NDVI Example" stroke="#10b981" strokeWidth={2} dot={{ r: 2 }} />
+                          <Line type="monotone" dataKey="ndvi" name={landData.is_observation ? "Satellite NDVI (MOD13C2)" : "Modelled NDVI Example"} stroke="#10b981" strokeWidth={2} dot={{ r: 2 }} />
                           <Line type="monotone" dataKey="historical_ndvi_median" name="Historical Median" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
                           {selectedDate && <ReferenceLine x={selectedDate} stroke="#f59e0b" strokeWidth={1.5} label={{ value: 'Active', position: 'top', fill: '#f59e0b', fontSize: 9 }} />}
                         </LineChart>

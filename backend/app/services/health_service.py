@@ -11,7 +11,7 @@ class HealthService:
         db_status = await check_database_connection()
         return SystemHealthResponse(
             status="healthy",
-            service="TerraLens Scientific Backend",
+            service="PlanetIQ Scientific Backend",
             version=settings.VERSION,
             environment=settings.ENVIRONMENT,
             database=DatabaseHealth(**db_status),

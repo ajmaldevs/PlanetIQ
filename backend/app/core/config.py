@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     )
 
     # Core Application Settings
-    PROJECT_NAME: str = "TerraLens"
-    VERSION: str = "0.1.0"
+    PROJECT_NAME: str = "PlanetIQ"
+    VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"

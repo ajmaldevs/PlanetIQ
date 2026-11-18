@@ -25,7 +25,7 @@ async def test_system_info_endpoint():
         response = await client.get("/api/v1/system-info")
         assert response.status_code == 200
         data = response.json()
-        assert data["project_name"] == "TerraLens"
+        assert data["project_name"] == "PlanetIQ"
         assert data["api_prefix"] == "/api/v1"
 
 
@@ -36,4 +36,4 @@ async def test_root_endpoint():
         response = await client.get("/")
         assert response.status_code == 200
         data = response.json()
-        assert data["project"] == "TerraLens"
+        assert data["project"] == "PlanetIQ"

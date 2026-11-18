@@ -354,72 +354,103 @@ export const fetchSystemHealth = async (signal?: AbortSignal): Promise<SystemHea
   return res.json();
 };
 
+function parseSourceModeAndSignal(
+  modeOrSignal?: 'auto' | 'observation' | 'demonstration' | AbortSignal,
+  explicitSignal?: AbortSignal
+): { mode?: 'auto' | 'observation' | 'demonstration'; signal?: AbortSignal } {
+  if (modeOrSignal instanceof AbortSignal || (modeOrSignal && typeof (modeOrSignal as any).aborted === 'boolean')) {
+    return { mode: undefined, signal: modeOrSignal as AbortSignal };
+  }
+  return {
+    mode: modeOrSignal as 'auto' | 'observation' | 'demonstration' | undefined,
+    signal: explicitSignal,
+  };
+}
+
 export const fetchAtmosphereGrid = async (
   date: string = '2026-03',
+  sourceModeOrSignal?: 'auto' | 'observation' | 'demonstration' | AbortSignal,
   signal?: AbortSignal
 ): Promise<GeoJSONFeatureCollection> => {
+  const parsed = parseSourceModeAndSignal(sourceModeOrSignal, signal);
+  const modeParam = parsed.mode ? `&source_mode=${parsed.mode}` : '';
   return cachedFetchJson<GeoJSONFeatureCollection>(
-    `${API_BASE_URL}/atmosphere/grid?date=${date}`,
-    { signal }
+    `${API_BASE_URL}/atmosphere/grid?date=${date}${modeParam}`,
+    { signal: parsed.signal }
   );
 };
 
 export const fetchAtmosphereTimeseries = async (
   lat: number,
   lon: number,
+  sourceModeOrSignal?: 'auto' | 'observation' | 'demonstration' | AbortSignal,
   signal?: AbortSignal
 ): Promise<AtmosphereTimeSeriesResponse> => {
+  const parsed = parseSourceModeAndSignal(sourceModeOrSignal, signal);
   const rLat = Number(lat.toFixed(4));
   const rLon = Number(lon.toFixed(4));
+  const modeParam = parsed.mode ? `&source_mode=${parsed.mode}` : '';
   return cachedFetchJson<AtmosphereTimeSeriesResponse>(
-    `${API_BASE_URL}/atmosphere/timeseries?latitude=${rLat}&longitude=${rLon}`,
-    { signal }
+    `${API_BASE_URL}/atmosphere/timeseries?latitude=${rLat}&longitude=${rLon}${modeParam}`,
+    { signal: parsed.signal }
   );
 };
 
 export const fetchOceanObservations = async (
   date: string = '2026-03',
+  sourceModeOrSignal?: 'auto' | 'observation' | 'demonstration' | AbortSignal,
   signal?: AbortSignal
 ): Promise<GeoJSONFeatureCollection> => {
+  const parsed = parseSourceModeAndSignal(sourceModeOrSignal, signal);
+  const modeParam = parsed.mode ? `&source_mode=${parsed.mode}` : '';
   return cachedFetchJson<GeoJSONFeatureCollection>(
-    `${API_BASE_URL}/ocean/observations?date=${date}`,
-    { signal }
+    `${API_BASE_URL}/ocean/observations?date=${date}${modeParam}`,
+    { signal: parsed.signal }
   );
 };
 
 export const fetchOceanTimeseries = async (
   lat: number,
   lon: number,
+  sourceModeOrSignal?: 'auto' | 'observation' | 'demonstration' | AbortSignal,
   signal?: AbortSignal
 ): Promise<OceanTimeSeriesResponse> => {
+  const parsed = parseSourceModeAndSignal(sourceModeOrSignal, signal);
   const rLat = Number(lat.toFixed(4));
   const rLon = Number(lon.toFixed(4));
+  const modeParam = parsed.mode ? `&source_mode=${parsed.mode}` : '';
   return cachedFetchJson<OceanTimeSeriesResponse>(
-    `${API_BASE_URL}/ocean/timeseries?latitude=${rLat}&longitude=${rLon}`,
-    { signal }
+    `${API_BASE_URL}/ocean/timeseries?latitude=${rLat}&longitude=${rLon}${modeParam}`,
+    { signal: parsed.signal }
   );
 };
 
 export const fetchLandGrid = async (
   date: string = '2026-03',
+  sourceModeOrSignal?: 'auto' | 'observation' | 'demonstration' | AbortSignal,
   signal?: AbortSignal
 ): Promise<GeoJSONFeatureCollection> => {
+  const parsed = parseSourceModeAndSignal(sourceModeOrSignal, signal);
+  const modeParam = parsed.mode ? `&source_mode=${parsed.mode}` : '';
   return cachedFetchJson<GeoJSONFeatureCollection>(
-    `${API_BASE_URL}/land/grid?date=${date}`,
-    { signal }
+    `${API_BASE_URL}/land/grid?date=${date}${modeParam}`,
+    { signal: parsed.signal }
   );
 };
 
 export const fetchLandTimeseries = async (
   lat: number,
   lon: number,
+  sourceModeOrSignal?: 'auto' | 'observation' | 'demonstration' | AbortSignal,
   signal?: AbortSignal
 ): Promise<LandTimeSeriesResponse> => {
+  const parsed = parseSourceModeAndSignal(sourceModeOrSignal, signal);
   const rLat = Number(lat.toFixed(4));
   const rLon = Number(lon.toFixed(4));
+  const modeParam = parsed.mode ? `&source_mode=${parsed.mode}` : '';
   return cachedFetchJson<LandTimeSeriesResponse>(
-    `${API_BASE_URL}/land/timeseries?latitude=${rLat}&longitude=${rLon}`,
-    { signal }
+    `${API_BASE_URL}/land/timeseries?latitude=${rLat}&longitude=${rLon}${modeParam}`,
+    { signal: parsed.signal }
   );
 };
 

@@ -1,4 +1,4 @@
-name: TerraLens CI
+name: PlanetIQ CI
 
 on:
   push:
@@ -30,7 +30,7 @@ jobs:
       - name: Run lint and tests
         run: |
           cd backend
-          uv run pytest -v || echo "Tests pending implementation"
+          uv run pytest -v
 
   frontend-checks:
     name: Frontend Validation
@@ -47,9 +47,15 @@ jobs:
       - name: Install frontend dependencies
         run: |
           cd frontend
-          npm install
+          npm ci || npm install
 
       - name: Typecheck frontend
         run: |
           cd frontend
-          npm run lint || echo "Lint check completed"
+          npm run lint
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+

@@ -16,7 +16,8 @@ def get_precipitation_grid(
     max_lat: Optional[float] = Query(None, ge=-90.0, le=90.0, description="Maximum bounding latitude"),
     min_lon: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Minimum bounding longitude"),
     max_lon: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Maximum bounding longitude"),
-    date: str = Query("2026-03", pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Target calendar month (YYYY-MM)")
+    date: str = Query("2026-03", pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Target calendar month (YYYY-MM)"),
+    source_mode: str = Query("auto", pattern=r"^(auto|observation|demonstration)$", description="Data source mode ('observation', 'demonstration', or 'auto')"),
 ):
     """
     Returns spatially gridded GPM IMERG Final Monthly Precipitation (GPM_3IMERGM v07) observations.
@@ -31,7 +32,8 @@ def get_precipitation_grid(
         max_lat=max_lat,
         min_lon=min_lon,
         max_lon=max_lon,
-        date_str=date
+        date_str=date,
+        source_mode=source_mode,
     )
 
 
@@ -44,7 +46,8 @@ def get_precipitation_timeseries(
     latitude: float = Query(..., ge=-90.0, le=90.0, description="Target latitude"),
     longitude: float = Query(..., ge=-180.0, le=180.0, description="Target longitude"),
     start_year: int = Query(2024, ge=1998, le=2026, description="Start year"),
-    end_year: int = Query(2026, ge=1998, le=2026, description="End year")
+    end_year: int = Query(2026, ge=1998, le=2026, description="End year"),
+    source_mode: str = Query("auto", pattern=r"^(auto|observation|demonstration)$", description="Data source mode ('observation', 'demonstration', or 'auto')"),
 ):
     """
     Returns historical monthly precipitation trends and climatological normal comparisons
@@ -54,5 +57,6 @@ def get_precipitation_timeseries(
         latitude=latitude,
         longitude=longitude,
         start_year=start_year,
-        end_year=end_year
+        end_year=end_year,
+        source_mode=source_mode,
     )

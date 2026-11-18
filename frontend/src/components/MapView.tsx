@@ -980,12 +980,24 @@ function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricT
           reading = `NDVI: ${Number(props.ndvi)?.toFixed(2)} • ${props.drought_category || 'Vegetation'}`;
         }
 
+        const isObs = props.is_observation === true || props.data_status === 'observation';
+        const badge = isObs
+          ? `<span style="background:rgba(16,185,129,0.2);color:#34d399;border:1px solid rgba(16,185,129,0.4);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;letter-spacing:0.5px;margin-left:6px;">REAL OBSERVATION</span>`
+          : `<span style="background:rgba(245,158,11,0.2);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;letter-spacing:0.5px;margin-left:6px;">SIMULATED DEMO</span>`;
+        const granule = props.granule_id
+          ? `<div style="color:#64748b;font-size:8px;margin-top:3px;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;">Granule: ${props.granule_id}</div>`
+          : '';
+
         popup
           .setLngLat(coords)
           .setHTML(`
             <div style="background:#090d16; color:#f8fafc; font-family:monospace; padding:6px 10px; border-radius:8px; border:1px solid #334155; font-size:11px; box-shadow:0 10px 25px -5px rgba(0,0,0,0.5);">
-              <div style="font-weight:600; color:#38bdf8; margin-bottom:2px;">${name}</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;gap:8px;">
+                <span style="font-weight:600; color:#38bdf8;">${name}</span>
+                ${badge}
+              </div>
               <div style="color:#94a3b8; font-size:10px;">${reading}</div>
+              ${granule}
             </div>
           `)
           .addTo(map.current);

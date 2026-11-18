@@ -7,13 +7,13 @@ from app.main import app
 async def test_atmosphere_endpoints():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # Spatial Grid
+        # Spatial Grid - Real Observation (Default/Auto Mode)
         res = await client.get("/api/v1/atmosphere/grid?date=2026-03")
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
-        assert data["metadata"]["data_status"] == "demonstration_model"
-        assert data["metadata"]["is_observation"] is False
+        assert data["metadata"]["data_status"] == "observation"
+        assert data["metadata"]["is_observation"] is True
         assert len(data["features"]) > 0
         
         # Verify scientific distinction: rate vs accumulation
@@ -22,31 +22,37 @@ async def test_atmosphere_endpoints():
         assert "precipitation_accumulated_mm" in prop
         assert prop["rate_unit"] == "mm/hr"
         assert prop["accumulated_unit"] == "mm"
-        # Monthly accumulation must be significantly larger than hourly rate (rate * 24 * 31)
         assert prop["precipitation_accumulated_mm"] > prop["precipitation_rate_mm_hr"]
 
-        # Timeseries
+        # Spatial Grid - Explicit Demonstration Mode
+        demo_res = await client.get("/api/v1/atmosphere/grid?date=2026-03&source_mode=demonstration")
+        assert demo_res.status_code == 200
+        demo_data = demo_res.json()
+        assert demo_data["metadata"]["data_status"] == "demonstration_model"
+        assert demo_data["metadata"]["is_observation"] is False
+
+        # Timeseries - Real Observation Mode
         ts_res = await client.get("/api/v1/atmosphere/timeseries?latitude=6.5&longitude=-150.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
-        assert ts_data["data_status"] == "demonstration_model"
-        assert ts_data["is_observation"] is False
+        assert ts_data["data_status"] == "observation"
+        assert ts_data["is_observation"] is True
         assert ts_data["dataset_id"] == "GPM_3IMERGM"
         assert len(ts_data["timeseries"]) > 0
-        assert "mean_monthly_accumulation_mm" in ts_data["summary_statistics"]
+        assert "mean_precipitation_rate_mm_hr" in ts_data["summary_statistics"]
 
 
 @pytest.mark.asyncio
 async def test_ocean_swot_endpoints():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # Spatial Swaths
+        # Spatial Swaths - Real Observation (Default/Auto Mode)
         res = await client.get("/api/v1/ocean/observations?date=2026-03")
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
-        assert data["metadata"]["data_status"] == "demonstration_model"
-        assert data["metadata"]["is_observation"] is False
+        assert data["metadata"]["data_status"] == "observation"
+        assert data["metadata"]["is_observation"] is True
         assert len(data["features"]) > 0
 
         prop = data["features"][0]["properties"]
@@ -54,14 +60,21 @@ async def test_ocean_swot_endpoints():
         assert "ssh_karin_m" in prop
         assert "ssha_karin_m" in prop
         assert "dynamic_topography_m" in prop
-        assert prop["unit"] == "meters (m)"
+        assert "eddy_kinetic_energy_cm2_s2" in prop
 
-        # Timeseries
+        # Spatial Swaths - Explicit Demonstration Mode
+        demo_res = await client.get("/api/v1/ocean/observations?date=2026-03&source_mode=demonstration")
+        assert demo_res.status_code == 200
+        demo_data = demo_res.json()
+        assert demo_data["metadata"]["data_status"] == "demonstration_model"
+        assert demo_data["metadata"]["is_observation"] is False
+
+        # Timeseries - Real Observation Mode
         ts_res = await client.get("/api/v1/ocean/timeseries?latitude=36.0&longitude=-68.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
-        assert ts_data["data_status"] == "demonstration_model"
-        assert ts_data["is_observation"] is False
+        assert ts_data["data_status"] == "observation"
+        assert ts_data["is_observation"] is True
         assert ts_data["dataset_id"] == "SWOT_L2_LR_SSH"
         assert len(ts_data["timeseries"]) > 0
         assert "mean_ssha_m" in ts_data["summary_statistics"]
@@ -71,13 +84,13 @@ async def test_ocean_swot_endpoints():
 async def test_land_modis_endpoints():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # Spatial Grid
+        # Spatial Grid - Real Observation (Default/Auto Mode)
         res = await client.get("/api/v1/land/grid?date=2026-03")
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
-        assert data["metadata"]["data_status"] == "demonstration_model"
-        assert data["metadata"]["is_observation"] is False
+        assert data["metadata"]["data_status"] == "observation"
+        assert data["metadata"]["is_observation"] is True
         assert len(data["features"]) > 0
 
         prop = data["features"][0]["properties"]
@@ -87,16 +100,34 @@ async def test_land_modis_endpoints():
         assert -0.2 <= prop["ndvi"] <= 1.0
         assert "vci_percent" in prop
         assert "drought_category" in prop
+        assert prop["data_status"] == "observation"
+        assert prop["is_observation"] is True
+        assert "granule_id" in prop
+        assert "provenance" in prop
 
-        # Timeseries
+        # Spatial Grid - Explicit Demonstration Mode
+        demo_res = await client.get("/api/v1/land/grid?date=2026-03&source_mode=demonstration")
+        assert demo_res.status_code == 200
+        demo_data = demo_res.json()
+        assert demo_data["metadata"]["data_status"] == "demonstration_model"
+        assert demo_data["metadata"]["is_observation"] is False
+
+        # Timeseries - Real Observation Mode
         ts_res = await client.get("/api/v1/land/timeseries?latitude=-3.5&longitude=-62.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
-        assert ts_data["data_status"] == "demonstration_model"
-        assert ts_data["is_observation"] is False
+        assert ts_data["data_status"] == "observation"
+        assert ts_data["is_observation"] is True
         assert ts_data["dataset_id"] == "MOD13C2"
         assert len(ts_data["timeseries"]) > 0
         assert "mean_ndvi" in ts_data["summary_statistics"]
+
+        # Timeseries - Explicit Demonstration Mode
+        demo_ts_res = await client.get("/api/v1/land/timeseries?latitude=-3.5&longitude=-62.0&source_mode=demonstration")
+        assert demo_ts_res.status_code == 200
+        demo_ts_data = demo_ts_res.json()
+        assert demo_ts_data["data_status"] == "demonstration_model"
+        assert demo_ts_data["is_observation"] is False
 
 
 @pytest.mark.asyncio

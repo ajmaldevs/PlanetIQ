@@ -540,6 +540,20 @@ export const App: React.FC = () => {
     return null;
   };
 
+  const isAnyObservationActive = useMemo(() => {
+    if (selectedFeature?.properties?.is_observation === true || selectedFeature?.properties?.data_status === 'observation') {
+      return true;
+    }
+    const currentData = getActiveData();
+    if (currentData?.metadata?.is_observation === true || currentData?.metadata?.data_status === 'observation') {
+      return true;
+    }
+    if (currentData?.features?.some((f) => f.properties?.is_observation === true || f.properties?.data_status === 'observation')) {
+      return true;
+    }
+    return false;
+  }, [selectedFeature, activeModule, oceanGrid, atmosphereGrid, landGrid]);
+
   const explicitLocationName =
     selectedFeature?.properties.location_name ||
     selectedFeature?.properties.region_name ||
@@ -1063,14 +1077,25 @@ export const App: React.FC = () => {
               <div className="flex-1 h-full relative overflow-hidden pointer-events-none">
                 {(activeModule !== null || activeModules.length > 0) && !dataNoticeDismissed && (
                   <div className="absolute z-40 top-3 left-3 right-3 sm:left-4 sm:right-auto sm:max-w-md pointer-events-auto">
-                    <DataNotice
-                      type="demo"
-                      title="Demonstration data — not NASA observations"
-                      dismissible
-                      onDismiss={() => setDataNoticeDismissed(true)}
-                    >
-                      Scientific layers, time series, comparisons, and cross-system examples are modelled by this build. NASA product citations describe intended data sources; no NASA granules are currently loaded.
-                    </DataNotice>
+                    {isAnyObservationActive ? (
+                      <DataNotice
+                        type="verified"
+                        title="Authentic NASA Satellite Observations Active"
+                        dismissible
+                        onDismiss={() => setDataNoticeDismissed(true)}
+                      >
+                        Telemetry calibrated from NASA Earth observation satellites ({activeModule === 'land' ? 'MODIS MOD13C2 v061' : activeModule === 'atmosphere' ? 'GPM IMERG v07' : activeModule === 'ocean' ? 'SWOT KaRIn' : 'Calibrated Telemetry'}). Scale factors, missing values, and quality flags applied.
+                      </DataNotice>
+                    ) : (
+                      <DataNotice
+                        type="demo"
+                        title="Demonstration data — not NASA observations"
+                        dismissible
+                        onDismiss={() => setDataNoticeDismissed(true)}
+                      >
+                        Scientific layers and comparisons are currently in demonstration mode. Switch regions or select verified observation sites to load genuine satellite telemetry.
+                      </DataNotice>
+                    )}
                   </div>
                 )}
                 {/* Unified Earth System Shared Timeline */}

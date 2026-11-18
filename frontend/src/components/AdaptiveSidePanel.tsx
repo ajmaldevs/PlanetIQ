@@ -181,7 +181,10 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
     }
   } else if (activeModule === 'land') {
     systemName = 'Terrestrial Biosphere';
-    sensorTitle = 'Intended source: NASA MODIS Terra/Aqua';
+    const isReal = selectedFeature?.properties.is_observation === true || selectedFeature?.properties.data_status === 'observation';
+    sensorTitle = isReal
+      ? (selectedFeature?.properties.provenance || 'NASA LP DAAC MODIS Terra (MOD13C2 v061)')
+      : 'Intended source: NASA MODIS Terra/Aqua (Demo Model)';
     systemIcon = <Trees className="h-4 w-4 text-emerald-400" />;
     const ndviVal = selectedFeature?.properties.ndvi;
     const eviVal = selectedFeature?.properties.evi;
@@ -190,7 +193,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
 
     observationLabel = metricType === 'evi' ? 'Enhanced Vegetation Index (EVI)' : 'Normalized Difference Veg Index (NDVI)';
     numericObsValue = metricType === 'evi' ? eviVal : ndviVal;
-    observationUnit = 'index ratio (0 to 1)';
+    observationUnit = 'dimensionless ratio (-0.2 to +1.0)';
 
     if (numericObsValue !== undefined) {
       hasObservation = true;
@@ -198,7 +201,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
 
       if (vciVal !== undefined) {
         anomalySummary = `VCI ${vciVal}% • ${droughtCat || 'Normal Vegetation'}`;
-        anomalySeverity = vciVal < 30 ? 'high' : vciVal > 75 ? 'noticeable' : 'normal';
+        anomalySeverity = vciVal < 35.0 ? 'high' : 'normal';
       }
     }
   }
@@ -382,9 +385,16 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                   </div>
                 </div>
               </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-cyan-300 border border-slate-700">
-                Modelled demo
-              </span>
+              {selectedFeature?.properties.is_observation ? (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-700/60 font-semibold flex items-center space-x-1 shrink-0">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-400" />
+                  <span>Real Observation</span>
+                </span>
+              ) : (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-cyan-300 border border-slate-700 shrink-0">
+                  Modelled demo
+                </span>
+              )}
             </div>
 
             {/* ================= 3. PRIMARY OBSERVATION VALUE & STATUS ================= */}
@@ -438,6 +448,22 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                 <span>Spatial Resolution:</span>
                 <span className="text-slate-200 font-medium">{geographicContext.spatialResolution}</span>
               </div>
+
+              {/* NASA Satellite Granule Provenance */}
+              {selectedFeature?.properties.granule_id && (
+                <div className="pt-1.5 flex items-center justify-between text-[11px] font-mono text-slate-400">
+                  <span>NASA Granule:</span>
+                  <span className="text-emerald-300 font-medium truncate max-w-[200px]" title={selectedFeature.properties.granule_id}>
+                    {selectedFeature.properties.granule_id}
+                  </span>
+                </div>
+              )}
+              {selectedFeature?.properties.quality_reliability && (
+                <div className="pt-1.5 flex items-center justify-between text-[11px] font-mono text-slate-400">
+                  <span>Quality Flag:</span>
+                  <span className="text-slate-200 font-medium">{selectedFeature.properties.quality_reliability}</span>
+                </div>
+              )}
             </div>
 
             {/* ================= 4. OBSERVATION DATE & TIMELINE PLAYBACK ================= */}
