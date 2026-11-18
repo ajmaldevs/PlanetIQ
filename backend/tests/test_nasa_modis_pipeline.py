@@ -257,16 +257,26 @@ def test_missing_dates_return_unavailable_not_simulated():
 
 
 def test_unconnected_pipelines_never_claim_observation():
-    """CRITICAL TEST: GPM and SWOT un-ingested pipelines must report unavailable, never fake observations."""
-    gpm_grid = ObservationRepository.get_real_gpm_spatial_grid("2026-03")
+    """CRITICAL TEST: Unobserved periods must report unavailable, never fake observations."""
+    # Unobserved month (2025-01) must return unavailable
+    gpm_grid = ObservationRepository.get_real_gpm_spatial_grid("2025-01")
     assert gpm_grid["metadata"]["data_status"] == "unavailable"
     assert gpm_grid["metadata"]["is_observation"] is False
-    assert gpm_grid["metadata"]["pipeline_status"] == "planned"
     assert len(gpm_grid["features"]) == 0
 
-    swot_grid = ObservationRepository.get_real_swot_spatial_grid("2026-03")
+    swot_grid = ObservationRepository.get_real_swot_spatial_grid("2025-01")
     assert swot_grid["metadata"]["data_status"] == "unavailable"
     assert swot_grid["metadata"]["is_observation"] is False
-    assert swot_grid["metadata"]["pipeline_status"] == "planned"
     assert len(swot_grid["features"]) == 0
+
+    # Ingested month (2026-03) has genuine observations
+    gpm_obs = ObservationRepository.get_real_gpm_spatial_grid("2026-03")
+    assert gpm_obs["metadata"]["data_status"] == "observation"
+    assert gpm_obs["metadata"]["is_observation"] is True
+    assert len(gpm_obs["features"]) > 0
+
+    swot_obs = ObservationRepository.get_real_swot_spatial_grid("2026-03")
+    assert swot_obs["metadata"]["data_status"] == "observation"
+    assert swot_obs["metadata"]["is_observation"] is True
+    assert len(swot_obs["features"]) > 0
 

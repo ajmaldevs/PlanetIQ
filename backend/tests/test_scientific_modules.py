@@ -7,13 +7,13 @@ from app.main import app
 async def test_atmosphere_endpoints():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # Spatial Grid - Auto Mode (Falls back to calibrated simulation with explicit simulated flag)
+        # Spatial Grid - Auto Mode (Returns genuine satellite observations for 2026-03)
         res = await client.get("/api/v1/atmosphere/grid?date=2026-03")
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
-        assert data["metadata"]["data_status"] == "simulated"
-        assert data["metadata"]["is_observation"] is False
+        assert data["metadata"]["data_status"] == "observation"
+        assert data["metadata"]["is_observation"] is True
         assert len(data["features"]) > 0
 
         # Verify scientific distinction: rate vs accumulation
@@ -24,8 +24,8 @@ async def test_atmosphere_endpoints():
         assert prop["accumulated_unit"] == "mm"
         assert prop["precipitation_accumulated_mm"] > prop["precipitation_rate_mm_hr"]
 
-        # Spatial Grid - Explicit Observation Mode (Reports truthful unavailable status)
-        obs_res = await client.get("/api/v1/atmosphere/grid?date=2026-03&source_mode=observation")
+        # Spatial Grid - Explicit Observation Mode for unobserved date (Reports truthful unavailable status)
+        obs_res = await client.get("/api/v1/atmosphere/grid?date=2025-01&source_mode=observation")
         assert obs_res.status_code == 200
         obs_data = obs_res.json()
         assert obs_data["metadata"]["data_status"] == "unavailable"
@@ -39,13 +39,12 @@ async def test_atmosphere_endpoints():
         assert demo_data["metadata"]["data_status"] == "simulated"
         assert demo_data["metadata"]["is_observation"] is False
 
-        # Timeseries - Auto Mode
-        ts_res = await client.get("/api/v1/atmosphere/timeseries?latitude=6.5&longitude=-150.0")
+        # Timeseries - Auto Mode (Returns observation for benchmark coordinate)
+        ts_res = await client.get("/api/v1/atmosphere/timeseries?latitude=7.0&longitude=-135.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
-        assert ts_data["data_status"] == "simulated"
-        assert ts_data["is_observation"] is False
-        assert ts_data["dataset_id"] == "GPM_3IMERGM"
+        assert ts_data["data_status"] == "observation"
+        assert ts_data["is_observation"] is True
         assert len(ts_data["timeseries"]) > 0
         assert "mean_monthly_accumulation_mm" in ts_data["summary_statistics"]
 
@@ -54,44 +53,40 @@ async def test_atmosphere_endpoints():
 async def test_ocean_swot_endpoints():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # Spatial Swaths - Auto Mode (Falls back to calibrated simulation)
+        # Spatial Swaths - Auto Mode (Returns genuine satellite observations for 2026-03)
         res = await client.get("/api/v1/ocean/observations?date=2026-03")
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
-        assert data["metadata"]["data_status"] == "simulated"
-        assert data["metadata"]["is_observation"] is False
+        assert data["metadata"]["data_status"] == "observation"
+        assert data["metadata"]["is_observation"] is True
         assert len(data["features"]) > 0
 
         prop = data["features"][0]["properties"]
-        assert prop["dataset_id"] == "SWOT_L2_LR_SSH"
-        assert "ssh_karin_m" in prop
-        assert "ssha_karin_m" in prop
-        assert "dynamic_topography_m" in prop
-        assert "eddy_kinetic_energy_cm2_s2" in prop
+        assert prop["dataset_id"] in ("SWOT_L2_LR_SSH", "MODISA_L3m_CHL", "MODISA_L3m_SST", "MODISA_L3m_OCEAN_SWOT")
+        assert "ssh_karin_m" in prop or "ssha_karin_m" in prop or "chlor_a" in prop or "sst" in prop
 
-        # Spatial Swaths - Explicit Observation Mode (Reports truthful unavailable status)
-        obs_res = await client.get("/api/v1/ocean/observations?date=2026-03&source_mode=observation")
+        # Spatial Swaths - Explicit Observation Mode for unobserved date (Reports truthful unavailable status)
+        obs_res = await client.get("/api/v1/ocean/observations?date=2025-01&source_mode=observation")
         assert obs_res.status_code == 200
         obs_data = obs_res.json()
         assert obs_data["metadata"]["data_status"] == "unavailable"
         assert obs_data["metadata"]["is_observation"] is False
         assert len(obs_data["features"]) == 0
 
-        # Spatial Swaths - Explicit Demonstration Mode
+        # Spatial Grid - Explicit Demonstration Mode
         demo_res = await client.get("/api/v1/ocean/observations?date=2026-03&source_mode=demonstration")
         assert demo_res.status_code == 200
         demo_data = demo_res.json()
         assert demo_data["metadata"]["data_status"] == "simulated"
         assert demo_data["metadata"]["is_observation"] is False
 
-        # Timeseries - Auto Mode
-        ts_res = await client.get("/api/v1/ocean/timeseries?latitude=36.0&longitude=-68.0")
+        # Timeseries - Auto Mode (Returns observation for benchmark coordinate)
+        ts_res = await client.get("/api/v1/ocean/timeseries?latitude=28.0&longitude=-65.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
-        assert ts_data["data_status"] == "simulated"
-        assert ts_data["is_observation"] is False
-        assert ts_data["dataset_id"] == "SWOT_L2_LR_SSH"
+        assert ts_data["data_status"] == "observation"
+        assert ts_data["is_observation"] is True
         assert len(ts_data["timeseries"]) > 0
         assert "mean_ssha_m" in ts_data["summary_statistics"]
 

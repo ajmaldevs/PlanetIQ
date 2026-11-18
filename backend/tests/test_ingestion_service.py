@@ -28,19 +28,19 @@ def db_session():
 
 
 def test_seed_initial_observations_idempotent(db_session):
-    """Verifies that authentic satellite benchmarks are correctly persisted and idempotent."""
+    """Verifies that authentic satellite benchmarks are correctly persisted across Land, Ocean, and Atmosphere and idempotent."""
     # First seeding
     inserted = IngestionService.seed_initial_observations(db_session)
     assert inserted > 0
 
-    # Query timeseries records
+    # Query all timeseries records
     records = db_session.execute(
-        select(ObservationTimeSeriesRecord).filter_by(dataset_id="MOD13C2")
+        select(ObservationTimeSeriesRecord)
     ).scalars().all()
     assert len(records) == inserted
 
-    # Check Punjab benchmark
-    punjab_recs = [r for r in records if "Punjab" in r.location_name]
+    # Check Land (MODIS Punjab)
+    punjab_recs = [r for r in records if "Punjab" in r.location_name and r.dataset_id == "MOD13C2"]
     assert len(punjab_recs) == 4
     for r in punjab_recs:
         assert r.metric_name == "NDVI"
@@ -48,13 +48,34 @@ def test_seed_initial_observations_idempotent(db_session):
         assert r.baseline_normal == 0.485
         assert r.unit == "dimensionless ratio (-0.2000 to +1.0000)"
 
-    # Query EarthObservation catalog entries
+    # Check Ocean (MODIS Aqua Chlorophyll-a & SST / SWOT SSHA)
+    ocean_recs = [r for r in records if "Arabian Sea" in r.location_name]
+    assert len(ocean_recs) >= 4
+    chl_recs = [r for r in ocean_recs if r.metric_name == "chlor_a"]
+    assert len(chl_recs) == 4
+    for r in chl_recs:
+        assert r.value > 0.0
+        assert r.unit == "mg/m³"
+
+    # Check Atmosphere (MODIS AOD & GPM Precipitation)
+    atmo_recs = [r for r in records if "Indo-Gangetic" in r.location_name]
+    assert len(atmo_recs) >= 4
+    aod_recs = [r for r in atmo_recs if r.metric_name == "aod_550"]
+    assert len(aod_recs) == 4
+    for r in aod_recs:
+        assert r.value > 0.0
+
+    # Query EarthObservation catalog entries across all 3 domains
     cat_entries = db_session.execute(
-        select(EarthObservation).filter_by(dataset_id="MOD13C2")
+        select(EarthObservation)
     ).scalars().all()
     assert len(cat_entries) > 0
+    domains_present = {c.dataset_id for c in cat_entries}
+    assert "MOD13C2" in domains_present
+    assert "MODISA_L3m_CHL" in domains_present
+    assert "MOD08_M3" in domains_present
+
     for c in cat_entries:
-        assert c.mission_name == "MODIS Terra"
         assert c.extra_metadata["is_observation"] is True
         assert c.extra_metadata["data_status"] == "observation"
         assert "granule_id" in c.extra_metadata

@@ -131,9 +131,11 @@ class OceanService:
                 OceanTimeSeriesPoint(
                     date=p["date"],
                     ssha_mean_m=p["ssha_mean_m"],
-                    ssha_min_m=p["ssha_min_m"],
-                    ssha_max_m=p["ssha_max_m"],
-                    eddy_kinetic_energy_cm2_s2=p["eddy_kinetic_energy_cm2_s2"],
+                    ssha_min_m=p.get("ssha_min_m", 0.0),
+                    ssha_max_m=p.get("ssha_max_m", 0.0),
+                    eddy_kinetic_energy_cm2_s2=p.get("eddy_kinetic_energy_cm2_s2", 0.0),
+                    chlor_a=p.get("chlor_a"),
+                    sst=p.get("sst"),
                 )
                 for p in real_data.get("timeseries", [])
             ]
@@ -170,9 +172,11 @@ class OceanService:
                 OceanTimeSeriesPoint(
                     date=p["date"],
                     ssha_mean_m=p["ssha_mean_m"],
-                    ssha_min_m=p["ssha_min_m"],
-                    ssha_max_m=p["ssha_max_m"],
-                    eddy_kinetic_energy_cm2_s2=p["eddy_kinetic_energy_cm2_s2"],
+                    ssha_min_m=p.get("ssha_min_m", 0.0),
+                    ssha_max_m=p.get("ssha_max_m", 0.0),
+                    eddy_kinetic_energy_cm2_s2=p.get("eddy_kinetic_energy_cm2_s2", 0.0),
+                    chlor_a=p.get("chlor_a"),
+                    sst=p.get("sst"),
                 )
                 for p in real_data.get("timeseries", [])
             ]

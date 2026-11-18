@@ -231,9 +231,9 @@ export function latLonToVector3(lat: number, lon: number, radius: number): THREE
 
 /**
  * Standard scientific colormap thresholds across 2D (MapLibre) and 3D (Three.js) visualizations:
- * - Ocean (SWOT SSHA): -0.15m to +0.15m (cyclonic cold-core upwelling to warm-core eddy)
- * - Atmosphere (GPM IMERG): rate (<0.1 to >0.5 mm/hr) or accumulation (<80 to >350 mm)
- * - Land (MODIS NDVI): <0.2 (arid) to >0.7 (dense canopy)
+ * - Ocean: Chlorophyll-a (mg/m³), SST (°C), SSHA (meters)
+ * - Atmosphere: Precipitation Rate (mm/hr), Accumulation (mm), AOD 550nm (turbidity), Cloud Fraction (%)
+ * - Land: MODIS NDVI / EVI (-0.2 to 1.0)
  */
 export function getScientificObservationHexColor(
   properties: Record<string, any>,
@@ -241,7 +241,26 @@ export function getScientificObservationHexColor(
   metricType: string = 'rate'
 ): string {
   if (moduleName === 'ocean') {
-    const ssha = properties.ssha_karin_m ?? 0;
+    if (metricType === 'chlor_a') {
+      const chl = properties.chlor_a_mg_m3 ?? properties.chlor_a;
+      if (chl === undefined || chl === null) return '#0284c7';
+      if (chl < 0.1) return '#1e40af';      // Oligotrophic blue
+      if (chl < 0.5) return '#06b6d4';      // Moderate turquoise
+      if (chl < 1.5) return '#10b981';      // Productive shelf green
+      return '#84cc16';                     // High phytoplankton bloom
+    }
+
+    if (metricType === 'sst') {
+      const sst = properties.sst_celsius ?? properties.sst;
+      if (sst === undefined || sst === null) return '#06b6d4';
+      if (sst < 8.0) return '#1d4ed8';      // Subpolar cold
+      if (sst < 18.0) return '#06b6d4';     // Temperate cool
+      if (sst < 26.0) return '#f59e0b';     // Warm subtropical
+      return '#ef4444';                     // Tropical warm pool
+    }
+
+    // Default: SSHA or SSH
+    const ssha = properties.ssha_karin_m ?? properties.ssha ?? 0;
     if (ssha <= -0.15) return '#2563eb';
     if (ssha < 0) return '#38bdf8';
     if (ssha <= 0.15) return '#f59e0b';
@@ -249,6 +268,24 @@ export function getScientificObservationHexColor(
   }
 
   if (moduleName === 'atmosphere') {
+    if (metricType === 'aod') {
+      const aod = properties.aod_550;
+      if (aod === undefined || aod === null) return '#38bdf8';
+      if (aod < 0.10) return '#38bdf8';     // Pristine maritime
+      if (aod < 0.30) return '#eab308';     // Light aerosol background
+      if (aod < 0.60) return '#f97316';     // Regional industrial haze
+      return '#b91c1c';                     // Dense smog / wildfire smoke
+    }
+
+    if (metricType === 'cloud') {
+      const cld = properties.cloud_fraction ?? (properties.cloud_fraction_percent ? properties.cloud_fraction_percent / 100 : null);
+      if (cld === undefined || cld === null) return '#7dd3fc';
+      if (cld < 0.25) return '#0284c7';     // Clear skies
+      if (cld < 0.55) return '#7dd3fc';     // Scattered clouds
+      if (cld < 0.80) return '#cbd5e1';     // Broken cloud cover
+      return '#f8fafc';                     // Overcast deep convective
+    }
+
     if (metricType === 'rate') {
       const rate = properties.precipitation_rate_mm_hr ?? 0;
       if (rate < 0.1) return '#38bdf8';

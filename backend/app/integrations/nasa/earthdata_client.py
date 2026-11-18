@@ -25,12 +25,20 @@ COLLECTION_CONCEPT_IDS = {
     "MOD13C2": "C2565788914-LPCLOUD",
     "GPM_3IMERGM": "C2723754851-GES_DISC",
     "SWOT_L2_LR_SSH": "C3233945000-POCLOUD",
+    "MODISA_L3m_CHL": "C1443684497-OB_DAAC",
+    "MODISA_L3m_SST": "C1443684809-OB_DAAC",
+    "MOD08_M3": "C1443682974-LAADS",
+    "MYD08_M3": "C1443683075-LAADS",
 }
 
 COLLECTION_SHORT_NAMES = {
     "MOD13C2": {"short_name": "MOD13C2", "version": "061"},
     "GPM_3IMERGM": {"short_name": "GPM_3IMERGM", "version": "07"},
     "SWOT_L2_LR_SSH": {"short_name": "SWOT_L2_LR_SSH", "version": "D"},
+    "MODISA_L3m_CHL": {"short_name": "MODISA_L3m_CHL", "version": "R2022.0"},
+    "MODISA_L3m_SST": {"short_name": "MODISA_L3m_SST", "version": "R2022.0"},
+    "MOD08_M3": {"short_name": "MOD08_M3", "version": "061"},
+    "MYD08_M3": {"short_name": "MYD08_M3", "version": "061"},
 }
 
 

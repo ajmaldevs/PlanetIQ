@@ -87,6 +87,74 @@ class DatasetRepository:
             ],
             cmr_concept_id="C2565788914-LPCLOUD",
             documentation_url="https://lpdaac.usgs.gov/products/mod13c2v061/"
+        ),
+        DatasetCatalogItem(
+            id="MODISA_L3m_CHL",
+            module="ocean",
+            name="MODIS Aqua Monthly Global Ocean Chlorophyll-a (MODISA_L3m_CHL)",
+            agency="NASA Ocean Biology DAAC (OB.DAAC)",
+            sensor="Moderate Resolution Imaging Spectroradiometer (MODIS) on Aqua",
+            spatial_resolution="4.6 km mapped global grid (0.0416°)",
+            temporal_resolution="Monthly composite (Calendar Month)",
+            variables=[
+                {"name": "chlor_a", "description": "Chlorophyll-a concentration (OC3M algorithm)", "unit": "mg/m³"},
+                {"name": "remote_sensing_reflectance", "description": "Normalized water-leaving reflectance across visual bands", "unit": "sr⁻¹"},
+            ],
+            units=["mg/m³", "sr⁻¹"],
+            scientific_purpose="Quantifying marine phytoplankton biomass, ocean primary productivity, biological carbon pump dynamics, and coastal upwelling ecosystems.",
+            scientific_limitations=[
+                "Cloud cover and sea ice obscure optical retrieval over high-latitude and polar seas.",
+                "High colored dissolved organic matter (CDOM) and suspended sediment can lead to overestimation in turbid coastal case-2 waters.",
+                "Sun glint and high solar zenith angles degrade retrieval quality during low-sun winter periods.",
+            ],
+            cmr_concept_id="C1443684497-OB_DAAC",
+            documentation_url="https://oceancolor.gsfc.nasa.gov/"
+        ),
+        DatasetCatalogItem(
+            id="MODISA_L3m_SST",
+            module="ocean",
+            name="MODIS Aqua Monthly Global Sea Surface Temperature (MODISA_L3m_SST)",
+            agency="NASA OB.DAAC / PO.DAAC",
+            sensor="MODIS Aqua 11 µm and 12 µm thermal infrared channels",
+            spatial_resolution="4.6 km mapped global grid (0.0416°)",
+            temporal_resolution="Monthly composite (Calendar Month)",
+            variables=[
+                {"name": "sst", "description": "Skin Sea Surface Temperature", "unit": "°C (degrees Celsius)"},
+                {"name": "qual_sst", "description": "Quality level flag (0=Best, 1=Good, 2=Questionable, 3=Bad)", "unit": "categorical integer"},
+            ],
+            units=["°C (degrees Celsius)"],
+            scientific_purpose="Tracking global ocean thermodynamic heat content, El Niño/La Niña thermal signatures, marine heatwaves, and oceanic boundary current trajectories.",
+            scientific_limitations=[
+                "Measures thermal skin temperature (~10 µm layer), which can differ by 0.1-0.3°C from bulk sub-surface temperature.",
+                "Sub-pixel cloud contamination and heavy volcanic aerosol plumes can depress infrared SST retrievals.",
+                "Masked over continental land masses and persistent sea ice.",
+            ],
+            cmr_concept_id="C1443684809-OB_DAAC",
+            documentation_url="https://podaac.jpl.nasa.gov/"
+        ),
+        DatasetCatalogItem(
+            id="MOD08_M3",
+            module="atmosphere",
+            name="MODIS Terra/Aqua Monthly Global Atmospheric Product (MOD08_M3)",
+            agency="NASA LAADS DAAC",
+            sensor="Moderate Resolution Imaging Spectroradiometer (MODIS)",
+            spatial_resolution="1° × 1° global atmospheric grid",
+            temporal_resolution="Monthly composite (Calendar Month)",
+            variables=[
+                {"name": "aod_550", "description": "Aerosol Optical Depth at 550nm (Land & Ocean mean)", "unit": "dimensionless ratio (0.000 to 5.000)"},
+                {"name": "cloud_fraction", "description": "Total daytime cloud fraction", "unit": "fraction (0.0 to 1.0) / percent (%)"},
+                {"name": "cloud_optical_thickness", "description": "Cloud optical depth / opacity", "unit": "dimensionless (0 to 100)"},
+                {"name": "cloud_effective_radius", "description": "Cloud droplet / ice crystal effective radius", "unit": "microns (µm)"},
+            ],
+            units=["dimensionless ratio", "percent (%)", "microns (µm)"],
+            scientific_purpose="Global monitoring of atmospheric aerosol radiative forcing, trans-continental desert dust storms, biomass burning plumes, and cloud radiative feedback.",
+            scientific_limitations=[
+                "AOD measures total columnar optical extinction, NOT direct ground-level PM2.5 particulate mass concentration.",
+                "Aerosol retrieval is impossible beneath dense, optically thick cloud decks.",
+                "High surface reflectance over bright desert sands and snow requires specialized Deep Blue algorithms.",
+            ],
+            cmr_concept_id="C1443682974-LAADS",
+            documentation_url="https://atmosphere-imager.gsfc.nasa.gov/products/monthly"
         )
     ]
 

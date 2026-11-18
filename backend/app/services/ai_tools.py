@@ -109,33 +109,54 @@ def get_ocean_observations(
         ts = OceanService.get_timeseries(latitude, longitude, start_year=2024, end_year=2026)
         pt = next((p for p in ts.timeseries if p.date == date), ts.timeseries[-1] if ts.timeseries else None)
         if not pt:
-            return {"status": "no_data", "message": f"No SWOT ocean data at ({latitude}, {longitude}) for {date}"}
+            return {"status": "no_data", "message": f"No SWOT/MODIS ocean data at ({latitude}, {longitude}) for {date}"}
 
         eddy_type, eddy_desc = ScientificAnalytics.classify_ocean_eddy(pt.ssha_mean_m)
         ssh_geoid_ref = round(15.20 + pt.ssha_mean_m, 3)
         adt_ref = round(0.85 + pt.ssha_mean_m, 3)
+
+        measurements = {
+            "sea_surface_height_m": ssh_geoid_ref,
+            "sea_surface_height_anomaly_m": pt.ssha_mean_m,
+            "dynamic_topography_m": adt_ref,
+            "eddy_kinetic_energy_cm2_s2": pt.eddy_kinetic_energy_cm2_s2,
+        }
+        if getattr(pt, "chlor_a", None) is not None:
+            measurements["chlorophyll_a_mg_m3"] = pt.chlor_a
+        if getattr(pt, "sst", None) is not None:
+            measurements["sea_surface_temp_celsius"] = pt.sst
+
+        units = {
+            "ssh": "meters (m)",
+            "ssha": "meters (m)",
+            "dynamic_topography": "meters (m)",
+            "eke": "cm^2/s^2",
+            "chlorophyll_a": "mg/m³",
+            "sst": "°C",
+        }
+
+        analysis = {
+            "eddy_classification": eddy_type,
+            "scientific_interpretation": eddy_desc,
+        }
+        if getattr(pt, "chlor_a", None) is not None:
+            from app.data_processing.ocean_processor import OceanProcessor
+            analysis["chlorophyll_productivity"] = OceanProcessor.classify_chlorophyll_regime(pt.chlor_a)
+
         return {
             "status": "success",
             "dataset_id": "SWOT_L2_LR_SSH",
-            "mission": "Surface Water and Ocean Topography (SWOT)",
-            "sensor": "Ka-band Radar Interferometer (KaRIn)",
-            "data_status": "simulated",
-            "is_observation": False,
-            "source_type": "synthetic",
+            "mission": "Surface Water and Ocean Topography (SWOT) & MODIS Aqua",
+            "sensor": "Ka-band Radar Interferometer (KaRIn) & MODIS Ocean Color/SST",
+            "data_status": ts.data_status,
+            "is_observation": ts.is_observation,
+            "source_type": "satellite_direct" if ts.is_observation else "synthetic",
             "location": {"latitude": latitude, "longitude": longitude},
             "date": pt.date,
-            "measurements": {
-                "sea_surface_height_m": ssh_geoid_ref,
-                "sea_surface_height_anomaly_m": pt.ssha_mean_m,
-                "dynamic_topography_m": adt_ref,
-                "eddy_kinetic_energy_cm2_s2": pt.eddy_kinetic_energy_cm2_s2,
-            },
-            "units": {"ssh": "meters (m)", "ssha": "meters (m)", "dynamic_topography": "meters (m)", "eke": "cm^2/s^2"},
-            "analysis": {
-                "eddy_classification": eddy_type,
-                "scientific_interpretation": eddy_desc,
-            },
-            "provenance": "NASA PO.DAAC / CNES / CSA / UKSA",
+            "measurements": measurements,
+            "units": units,
+            "analysis": analysis,
+            "provenance": "NASA PO.DAAC / OB.DAAC / CNES / CSA / UKSA",
             "doi": "https://doi.org/10.5067/SWOT-SSH-L2-LR",
         }
 
@@ -144,36 +165,48 @@ def get_ocean_observations(
         min_lat=min_lat, max_lat=max_lat, min_lon=min_lon, max_lon=max_lon, date_str=date
     )
     features = fc.features[:20]  # Cap for context window safety
-    ssha_values = [f.properties.get("ssha_karin_m", 0.0) for f in features]
+    ssha_values = [f.properties.get("ssha_karin_m", 0.0) for f in features if f.properties.get("ssha_karin_m") is not None]
+    chl_values = [f.properties.get("chlor_a_mg_m3") for f in features if f.properties.get("chlor_a_mg_m3") is not None]
+    sst_values = [f.properties.get("sst_celsius") for f in features if f.properties.get("sst_celsius") is not None]
     mean_ssha = round(sum(ssha_values) / len(ssha_values), 3) if ssha_values else 0.0
+    mean_chl = round(sum(chl_values) / len(chl_values), 3) if chl_values else None
+    mean_sst = round(sum(sst_values) / len(sst_values), 2) if sst_values else None
+
+    summary = {
+        "mean_ssha_m": mean_ssha,
+        "min_ssha_m": min(ssha_values) if ssha_values else 0.0,
+        "max_ssha_m": max(ssha_values) if ssha_values else 0.0,
+        "units": "meters (m)",
+    }
+    if mean_chl is not None:
+        summary["mean_chlorophyll_a_mg_m3"] = mean_chl
+    if mean_sst is not None:
+        summary["mean_sst_celsius"] = mean_sst
 
     return {
         "status": "success",
         "dataset_id": "SWOT_L2_LR_SSH",
-        "mission": "Surface Water and Ocean Topography (SWOT)",
-        "sensor": "Ka-band Radar Interferometer (KaRIn)",
-        "data_status": "simulated",
-        "is_observation": False,
-        "source_type": "synthetic",
+        "mission": "Surface Water and Ocean Topography (SWOT) & MODIS Aqua",
+        "sensor": "Ka-band Radar Interferometer (KaRIn) & MODIS Ocean Color",
+        "data_status": fc.metadata.get("data_status", "observation" if features else "unavailable"),
+        "is_observation": fc.metadata.get("is_observation", len(features) > 0),
+        "source_type": fc.metadata.get("source_type", "satellite_direct" if features else "none"),
         "date": date,
         "feature_count": len(features),
-        "summary": {
-            "mean_ssha_m": mean_ssha,
-            "min_ssha_m": min(ssha_values) if ssha_values else 0.0,
-            "max_ssha_m": max(ssha_values) if ssha_values else 0.0,
-            "units": "meters (m)",
-        },
+        "summary": summary,
         "sample_features": [
             {
-                "region": f.properties.get("region_name"),
+                "region": f.properties.get("location_name") or f.properties.get("region_name"),
                 "coordinates": f.geometry.coordinates,
                 "ssha_m": f.properties.get("ssha_karin_m"),
                 "ssh_m": f.properties.get("ssh_karin_m"),
+                "chlor_a_mg_m3": f.properties.get("chlor_a_mg_m3"),
+                "sst_celsius": f.properties.get("sst_celsius"),
                 "eddy_type": f.properties.get("eddy_type"),
             }
             for f in features[:6]
         ],
-        "provenance": "NASA PO.DAAC / CNES / CSA / UKSA",
+        "provenance": "NASA PO.DAAC / OB.DAAC / CNES / CSA / UKSA",
         "doi": "https://doi.org/10.5067/SWOT-SSH-L2-LR",
     }
 
@@ -207,41 +240,51 @@ def get_precipitation_data(
         ts = AtmosphereService.get_timeseries(latitude, longitude, start_year=2024, end_year=2026)
         pt = next((p for p in ts.timeseries if p.date == date), ts.timeseries[-1] if ts.timeseries else None)
         if not pt:
-            return {"status": "no_data", "message": f"No GPM precipitation data at ({latitude}, {longitude}) for {date}"}
+            return {"status": "no_data", "message": f"No GPM/MODIS atmosphere data at ({latitude}, {longitude}) for {date}"}
 
         # Validate math: accumulated = rate * 24 * days
         year, month = map(int, pt.date.split("-"))
         _, days_in_month = calendar.monthrange(year, month)
         expected_accum = round(pt.precipitation_rate_mm_hr * 24.0 * days_in_month, 2)
 
+        measurements = {
+            "precipitation_rate_mm_hr": pt.precipitation_rate_mm_hr,
+            "precipitation_accumulated_mm": pt.precipitation_accumulated_mm,
+            "climatological_normal_mm": pt.climatological_normal_mm,
+            "precipitation_anomaly_mm": pt.anomaly_mm,
+            "gauge_weighting_index": 78.5,
+        }
+        if getattr(pt, "aod_550", None) is not None:
+            measurements["aod_550"] = pt.aod_550
+        if getattr(pt, "cloud_fraction", None) is not None:
+            measurements["cloud_fraction"] = pt.cloud_fraction
+
+        units = {
+            "rate": "mm/hr",
+            "accumulated": "mm (total liquid depth)",
+            "normal": "mm",
+            "anomaly": "mm",
+            "aod_550": "dimensionless ratio (columnar optical depth at 550nm)",
+            "cloud_fraction": "ratio (0.0 - 1.0)",
+        }
+
         return {
             "status": "success",
             "dataset_id": "GPM_3IMERGM",
-            "mission": "Global Precipitation Measurement (GPM)",
-            "sensor": "DPR Radar and GMI Radiometers (IMERG Final v07)",
-            "data_status": "simulated",
-            "is_observation": False,
-            "source_type": "synthetic",
+            "mission": "Global Precipitation Measurement (GPM) & MODIS Atmosphere",
+            "sensor": "DPR Radar and GMI Radiometers (IMERG Final v07) & MODIS Terra/Aqua",
+            "data_status": ts.data_status,
+            "is_observation": ts.is_observation,
+            "source_type": "satellite_direct" if ts.is_observation else "synthetic",
             "location": {"latitude": latitude, "longitude": longitude},
             "date": pt.date,
-            "measurements": {
-                "precipitation_rate_mm_hr": pt.precipitation_rate_mm_hr,
-                "precipitation_accumulated_mm": pt.precipitation_accumulated_mm,
-                "climatological_normal_mm": pt.climatological_normal_mm,
-                "precipitation_anomaly_mm": pt.anomaly_mm,
-                "gauge_weighting_index": 78.5,
-            },
-            "units": {
-                "rate": "mm/hr",
-                "accumulated": "mm (total liquid depth)",
-                "normal": "mm",
-                "anomaly": "mm",
-            },
+            "measurements": measurements,
+            "units": units,
             "scientific_note": (
                 f"Rate ({pt.precipitation_rate_mm_hr} mm/hr) times 24h * {days_in_month} days "
                 f"equals {expected_accum} mm monthly accumulation."
             ),
-            "provenance": "NASA GES DISC / JAXA",
+            "provenance": "NASA GES DISC / LAADS DAAC / JAXA",
             "doi": "https://doi.org/10.5067/GPM/IMERG/3B-MONTH/07",
         }
 
@@ -250,36 +293,43 @@ def get_precipitation_data(
         min_lat=min_lat, max_lat=max_lat, min_lon=min_lon, max_lon=max_lon, date_str=date
     )
     features = fc.features[:20]
-    accum_vals = [f.properties.get("precipitation_accumulated_mm", 0.0) for f in features]
-    anom_vals = [f.properties.get("precipitation_anomaly_mm", 0.0) for f in features]
+    accum_vals = [f.properties.get("precipitation_accumulated_mm", 0.0) for f in features if f.properties.get("precipitation_accumulated_mm") is not None]
+    anom_vals = [f.properties.get("precipitation_anomaly_mm", 0.0) for f in features if f.properties.get("precipitation_anomaly_mm") is not None]
+    aod_vals = [f.properties.get("aod_550") for f in features if f.properties.get("aod_550") is not None]
+
+    summary = {
+        "mean_accumulated_mm": round(sum(accum_vals) / len(accum_vals), 1) if accum_vals else 0.0,
+        "mean_anomaly_mm": round(sum(anom_vals) / len(anom_vals), 1) if anom_vals else 0.0,
+        "max_accumulated_mm": max(accum_vals) if accum_vals else 0.0,
+        "units": "mm",
+    }
+    if aod_vals:
+        summary["mean_aod_550"] = round(sum(aod_vals) / len(aod_vals), 3)
 
     return {
         "status": "success",
         "dataset_id": "GPM_3IMERGM",
-        "mission": "Global Precipitation Measurement (GPM)",
-        "sensor": "DPR Radar and GMI Radiometers (IMERG Final v07)",
-        "data_status": "simulated",
-        "is_observation": False,
-        "source_type": "synthetic",
+        "mission": "Global Precipitation Measurement (GPM) & MODIS Atmosphere",
+        "sensor": "DPR Radar and GMI Radiometers (IMERG Final v07) & MODIS",
+        "data_status": fc.metadata.get("data_status", "observation" if features else "unavailable"),
+        "is_observation": fc.metadata.get("is_observation", len(features) > 0),
+        "source_type": fc.metadata.get("source_type", "satellite_direct" if features else "none"),
         "date": date,
         "feature_count": len(features),
-        "summary": {
-            "mean_accumulated_mm": round(sum(accum_vals) / len(accum_vals), 1) if accum_vals else 0.0,
-            "mean_anomaly_mm": round(sum(anom_vals) / len(anom_vals), 1) if anom_vals else 0.0,
-            "max_accumulated_mm": max(accum_vals) if accum_vals else 0.0,
-            "units": "mm",
-        },
+        "summary": summary,
         "sample_features": [
             {
-                "region": f.properties.get("region_name"),
+                "region": f.properties.get("location_name") or f.properties.get("region_name"),
                 "coordinates": f.geometry.coordinates,
                 "rate_mm_hr": f.properties.get("precipitation_rate_mm_hr"),
                 "accumulated_mm": f.properties.get("precipitation_accumulated_mm"),
                 "anomaly_mm": f.properties.get("precipitation_anomaly_mm"),
+                "aod_550": f.properties.get("aod_550"),
+                "cloud_fraction": f.properties.get("cloud_fraction"),
             }
             for f in features[:6]
         ],
-        "provenance": "NASA GES DISC / JAXA",
+        "provenance": "NASA GES DISC / LAADS DAAC / JAXA",
         "doi": "https://doi.org/10.5067/GPM/IMERG/3B-MONTH/07",
     }
 

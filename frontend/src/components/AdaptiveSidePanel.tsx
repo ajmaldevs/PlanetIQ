@@ -116,66 +116,136 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
   let systemIcon = <Info className="h-4 w-4 text-cyan-400" />;
 
   if (activeModule === 'ocean') {
-    systemName = 'Ocean Altimetry';
-    sensorTitle = 'Intended source: NASA SWOT KaRIn (Option A)';
+    systemName = 'Ocean Color & Altimetry';
+    const isReal = selectedFeature?.properties.is_observation === true || selectedFeature?.properties.data_status === 'observation';
+    sensorTitle = isReal
+      ? (selectedFeature?.properties.provenance || 'NASA OB.DAAC (MODIS Aqua) & PO.DAAC (SWOT)')
+      : 'Intended source: NASA MODIS Aqua & SWOT KaRIn (Demo Model)';
     systemIcon = <Waves className="h-4 w-4 text-cyan-400" />;
-    observationLabel = metricType === 'ssh' ? 'Sea Surface Height (Absolute)' : 'Sea Surface Height Anomaly (SSHA)';
-    const sshaVal = selectedFeature?.properties.ssha_karin_m;
-    const sshVal = selectedFeature?.properties.ssh_karin_m;
-    numericObsValue = metricType === 'ssh' ? sshVal : sshaVal;
-    observationUnit = 'meters (m)';
 
-    if (numericObsValue !== undefined) {
-      hasObservation = true;
-      observationValue = `${numericObsValue > 0 && metricType !== 'ssh' ? '+' : ''}${numericObsValue}`;
+    const sshaVal = selectedFeature?.properties.ssha_karin_m ?? selectedFeature?.properties.ssha;
+    const sshVal = selectedFeature?.properties.ssh_karin_m ?? selectedFeature?.properties.ssh;
+    const chlVal = selectedFeature?.properties.chlor_a_mg_m3 ?? selectedFeature?.properties.chlor_a;
+    const sstVal = selectedFeature?.properties.sst_celsius ?? selectedFeature?.properties.sst;
 
-      if (sshaVal !== undefined) {
-        if (sshaVal >= 0.15) {
-          anomalySummary = `Anticyclonic Warm Eddy (+${sshaVal}m above MSS)`;
+    if (metricType === 'chlor_a') {
+      observationLabel = 'Chlorophyll-a Concentration';
+      numericObsValue = chlVal;
+      observationUnit = 'mg/m³';
+      if (numericObsValue !== undefined && numericObsValue !== null) {
+        hasObservation = true;
+        observationValue = `${numericObsValue}`;
+        const regime = selectedFeature?.properties.biological_regime;
+        anomalySummary = regime || (numericObsValue > 1.0 ? 'High Coastal Productivity Bloom' : 'Oligotrophic Open Ocean');
+        anomalySeverity = numericObsValue > 2.0 ? 'high' : 'normal';
+      }
+    } else if (metricType === 'sst') {
+      observationLabel = 'Sea Surface Temperature';
+      numericObsValue = sstVal;
+      observationUnit = '°C';
+      if (numericObsValue !== undefined && numericObsValue !== null) {
+        hasObservation = true;
+        observationValue = `${numericObsValue}°C`;
+        anomalySummary = numericObsValue > 28.0 ? 'Warm Tropical Surface Water' : (numericObsValue < 10.0 ? 'Cold Subpolar Water' : 'Temperate Marine Surface');
+        anomalySeverity = numericObsValue > 29.5 ? 'high' : 'normal';
+      }
+    } else if (metricType === 'ssh') {
+      observationLabel = 'Sea Surface Height (Absolute)';
+      numericObsValue = sshVal;
+      observationUnit = 'meters (m)';
+      if (numericObsValue !== undefined && numericObsValue !== null) {
+        hasObservation = true;
+        observationValue = `${numericObsValue}m`;
+        anomalySummary = 'Absolute Dynamic Topography / Ellipsoid Reference';
+        anomalySeverity = 'normal';
+      }
+    } else {
+      // Default: ssha
+      observationLabel = 'Sea Surface Height Anomaly (SSHA)';
+      numericObsValue = sshaVal;
+      observationUnit = 'meters (m)';
+      if (numericObsValue !== undefined && numericObsValue !== null) {
+        hasObservation = true;
+        observationValue = `${numericObsValue > 0 ? '+' : ''}${numericObsValue}m`;
+        if (numericObsValue >= 0.15) {
+          anomalySummary = `Anticyclonic Warm Eddy (+${numericObsValue}m above MSS)`;
           anomalySeverity = 'high';
-        } else if (sshaVal <= -0.15) {
-          anomalySummary = `Cyclonic Cold Upwelling (${sshaVal}m below MSS)`;
+        } else if (numericObsValue <= -0.15) {
+          anomalySummary = `Cyclonic Cold Upwelling (${numericObsValue}m below MSS)`;
           anomalySeverity = 'high';
         } else {
-          anomalySummary = `Normal Geostrophic Sea Height (${sshaVal > 0 ? '+' : ''}${sshaVal}m)`;
+          anomalySummary = `Normal Geostrophic Sea Height (${numericObsValue > 0 ? '+' : ''}${numericObsValue}m)`;
           anomalySeverity = 'normal';
         }
       }
     }
   } else if (activeModule === 'atmosphere') {
-    systemName = 'Atmospheric Precipitation';
-    sensorTitle = 'Intended source: NASA GPM IMERG Final';
+    systemName = 'Atmosphere Composition & Precipitation';
+    const isReal = selectedFeature?.properties.is_observation === true || selectedFeature?.properties.data_status === 'observation';
+    sensorTitle = isReal
+      ? (selectedFeature?.properties.provenance || 'NASA LAADS DAAC (MODIS) & GES DISC (GPM)')
+      : 'Intended source: NASA MODIS Atmosphere & GPM IMERG (Demo Model)';
     systemIcon = <CloudRain className="h-4 w-4 text-blue-400" />;
+
     const rateVal = selectedFeature?.properties.precipitation_rate_mm_hr;
     const accVal = selectedFeature?.properties.precipitation_accumulated_mm;
     const normalVal = selectedFeature?.properties.climatological_normal_mm;
     const anomalyVal = selectedFeature?.properties.anomaly_mm;
+    const aodVal = selectedFeature?.properties.aod_550;
+    const cldVal = selectedFeature?.properties.cloud_fraction ?? selectedFeature?.properties.cloud_fraction_percent;
 
-    if (metricType === 'rate') {
+    if (metricType === 'aod') {
+      observationLabel = 'Aerosol Optical Depth (550nm)';
+      numericObsValue = aodVal;
+      observationUnit = 'dimensionless ratio';
+      if (numericObsValue !== undefined && numericObsValue !== null) {
+        hasObservation = true;
+        observationValue = `${numericObsValue}`;
+        const regime = selectedFeature?.properties.aerosol_regime;
+        anomalySummary = regime || (numericObsValue > 0.5 ? 'Heavy Particulate Turbidity / Smoke / Dust' : 'Clear Planetary Atmosphere');
+        anomalySeverity = numericObsValue > 0.6 ? 'high' : 'normal';
+      }
+    } else if (metricType === 'cloud') {
+      observationLabel = 'Cloud Fraction';
+      numericObsValue = typeof cldVal === 'number' && cldVal <= 1.0 ? Math.round(cldVal * 100) : cldVal;
+      observationUnit = '% sky cover';
+      if (numericObsValue !== undefined && numericObsValue !== null) {
+        hasObservation = true;
+        observationValue = `${numericObsValue}%`;
+        const regime = selectedFeature?.properties.cloud_regime;
+        anomalySummary = regime || (numericObsValue > 70 ? 'Deep Overcast / Convective Cloud Cover' : 'Clear to Scattered Skies');
+        anomalySeverity = numericObsValue > 85 ? 'noticeable' : 'normal';
+      }
+    } else if (metricType === 'rate') {
       observationLabel = 'Average Rainfall Rate';
       numericObsValue = rateVal;
       observationUnit = 'mm/hr';
+      if (numericObsValue !== undefined && numericObsValue !== null) {
+        hasObservation = true;
+        observationValue = `${numericObsValue}`;
+        anomalySummary = numericObsValue > 0.3 ? 'Active Convective Rainstorm' : 'Light to Moderate Precipitation Rate';
+        anomalySeverity = numericObsValue > 0.4 ? 'high' : 'normal';
+      }
     } else {
+      // Default: accumulation
       observationLabel = 'Total Monthly Rain Depth';
       numericObsValue = accVal;
       observationUnit = 'mm';
-    }
-
-    if (numericObsValue !== undefined) {
-      hasObservation = true;
-      observationValue = `${numericObsValue}`;
-
-      if (anomalyVal !== undefined && normalVal !== undefined) {
-        const pct = Math.round((anomalyVal / Math.max(normalVal, 10)) * 100);
-        if (anomalyVal > 50) {
-          anomalySummary = `High Anomaly: +${anomalyVal}mm (+${pct}% above 1998–2020 normal)`;
-          anomalySeverity = 'high';
-        } else if (anomalyVal < -50) {
-          anomalySummary = `Deficit: ${anomalyVal}mm (${pct}% below 1998–2020 normal)`;
-          anomalySeverity = 'noticeable';
-        } else {
-          anomalySummary = `Within Normal Range (${anomalyVal > 0 ? '+' : ''}${anomalyVal}mm)`;
-          anomalySeverity = 'normal';
+      if (numericObsValue !== undefined && numericObsValue !== null) {
+        hasObservation = true;
+        observationValue = `${numericObsValue}`;
+        if (anomalyVal !== undefined && normalVal !== undefined) {
+          const pct = Math.round((anomalyVal / Math.max(normalVal, 10)) * 100);
+          if (anomalyVal > 50) {
+            anomalySummary = `High Anomaly: +${anomalyVal}mm (+${pct}% above 1998–2020 normal)`;
+            anomalySeverity = 'high';
+          } else if (anomalyVal < -50) {
+            anomalySummary = `Deficit: ${anomalyVal}mm (${pct}% below 1998–2020 normal)`;
+            anomalySeverity = 'noticeable';
+          } else {
+            anomalySummary = `Within Normal Range (${anomalyVal > 0 ? '+' : ''}${anomalyVal}mm)`;
+            anomalySeverity = 'normal';
+          }
         }
       }
     }
@@ -589,34 +659,74 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                 <span className="text-slate-300 font-medium">Display Metric</span>
                 <div className="flex space-x-1">
                   {activeModule === 'atmosphere' && (
-                    <>
+                    <div className="flex flex-wrap gap-1">
                       <button
                         onClick={() => setMetricType('accumulated')}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                        className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
                           metricType === 'accumulated'
-                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold'
+                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-semibold'
                             : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
                         }`}
                       >
-                        Monthly (mm)
+                        Rain (mm)
                       </button>
                       <button
                         onClick={() => setMetricType('rate')}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                        className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
                           metricType === 'rate'
-                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold'
+                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-semibold'
                             : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
                         }`}
                       >
                         Rate (mm/hr)
                       </button>
-                    </>
+                      <button
+                        onClick={() => setMetricType('aod')}
+                        className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
+                          metricType === 'aod'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold'
+                            : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
+                        }`}
+                      >
+                        AOD 550nm
+                      </button>
+                      <button
+                        onClick={() => setMetricType('cloud')}
+                        className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
+                          metricType === 'cloud'
+                            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold'
+                            : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
+                        }`}
+                      >
+                        Cloud %
+                      </button>
+                    </div>
                   )}
                   {activeModule === 'ocean' && (
-                    <>
+                    <div className="flex flex-wrap gap-1">
+                      <button
+                        onClick={() => setMetricType('chlor_a')}
+                        className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
+                          metricType === 'chlor_a'
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold'
+                            : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
+                        }`}
+                      >
+                        Chlorophyll-a
+                      </button>
+                      <button
+                        onClick={() => setMetricType('sst')}
+                        className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
+                          metricType === 'sst'
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold'
+                            : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
+                        }`}
+                      >
+                        SST (°C)
+                      </button>
                       <button
                         onClick={() => setMetricType('ssha')}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                        className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
                           metricType === 'ssha'
                             ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold'
                             : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
@@ -626,7 +736,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                       </button>
                       <button
                         onClick={() => setMetricType('ssh')}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                        className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all ${
                           metricType === 'ssh'
                             ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-semibold'
                             : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-transparent'
@@ -634,7 +744,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                       >
                         Absolute SSH
                       </button>
-                    </>
+                    </div>
                   )}
                   {activeModule === 'land' && (
                     <>

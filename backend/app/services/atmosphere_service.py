@@ -148,6 +148,8 @@ class AtmosphereService:
                     precipitation_accumulated_mm=p["precipitation_accumulated_mm"],
                     climatological_normal_mm=p["climatological_normal_mm"],
                     anomaly_mm=p["anomaly_mm"],
+                    aod_550=p.get("aod_550"),
+                    cloud_fraction=p.get("cloud_fraction"),
                 )
                 for p in real_data.get("timeseries", [])
             ]
@@ -188,6 +190,8 @@ class AtmosphereService:
                     precipitation_accumulated_mm=p["precipitation_accumulated_mm"],
                     climatological_normal_mm=p["climatological_normal_mm"],
                     anomaly_mm=p["anomaly_mm"],
+                    aod_550=p.get("aod_550"),
+                    cloud_fraction=p.get("cloud_fraction"),
                 )
                 for p in real_data.get("timeseries", [])
             ]

@@ -79,10 +79,12 @@ export interface AtmosphereTimeSeriesPoint {
   precipitation_accumulated_mm: number;
   climatological_normal_mm: number;
   anomaly_mm: number;
+  aod_550?: number;
+  cloud_fraction?: number;
 }
 
 export interface AtmosphereTimeSeriesResponse {
-  data_status: 'demonstration_model' | 'observations';
+  data_status: 'observation' | 'observations' | 'simulated' | 'demonstration_model' | 'unavailable';
   is_observation: boolean;
   dataset_id: string;
   dataset_name: string;
@@ -101,10 +103,12 @@ export interface OceanTimeSeriesPoint {
   ssha_min_m: number;
   ssha_max_m: number;
   eddy_kinetic_energy_cm2_s2: number;
+  chlor_a?: number;
+  sst?: number;
 }
 
 export interface OceanTimeSeriesResponse {
-  data_status: 'demonstration_model' | 'observations';
+  data_status: 'observation' | 'observations' | 'simulated' | 'demonstration_model' | 'unavailable';
   is_observation: boolean;
   dataset_id: string;
   dataset_name: string;
@@ -125,7 +129,7 @@ export interface LandTimeSeriesPoint {
 }
 
 export interface LandTimeSeriesResponse {
-  data_status: 'demonstration_model' | 'observations';
+  data_status: 'observation' | 'observations' | 'simulated' | 'demonstration_model' | 'unavailable';
   is_observation: boolean;
   dataset_id: string;
   dataset_name: string;

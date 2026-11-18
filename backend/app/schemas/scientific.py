@@ -66,6 +66,8 @@ class AtmosphereTimeSeriesPoint(BaseModel):
     precipitation_accumulated_mm: float
     climatological_normal_mm: float
     anomaly_mm: float
+    aod_550: Optional[float] = Field(None, description="Aerosol Optical Depth at 550nm")
+    cloud_fraction: Optional[float] = Field(None, description="Cloud fraction (0.0 to 1.0)")
 
 
 class AtmosphereTimeSeriesResponse(BaseModel):
@@ -98,9 +100,11 @@ class OceanObservationPoint(BaseModel):
 class OceanTimeSeriesPoint(BaseModel):
     date: str = Field(..., description="YYYY-MM")
     ssha_mean_m: float
-    ssha_min_m: float
-    ssha_max_m: float
-    eddy_kinetic_energy_cm2_s2: float
+    ssha_min_m: float = 0.0
+    ssha_max_m: float = 0.0
+    eddy_kinetic_energy_cm2_s2: float = 0.0
+    chlor_a: Optional[float] = Field(None, description="Chlorophyll-a concentration in mg/m³")
+    sst: Optional[float] = Field(None, description="Sea Surface Temperature in °C")
 
 
 class OceanTimeSeriesResponse(BaseModel):
