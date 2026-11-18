@@ -1,8 +1,7 @@
-
 services:
   # PlanetIQ FastAPI Backend API
   - type: web
-    name: terralens-backend
+    name: planetiq
     runtime: python
     region: oregon
     plan: standard
@@ -21,34 +20,19 @@ services:
       - key: API_V1_STR
         value: /api/v1
       - key: CORS_ORIGINS
-        fromService:
-          name: terralens-frontend
-          type: web
-          envVarKey: RENDER_EXTERNAL_URL
-      - key: POSTGRES_SERVER
+        value: '["https://planetiq-1.onrender.com"]'
+      - key: DATABASE_URL
         fromDatabase:
-          name: terralens-postgis
-          property: host
-      - key: POSTGRES_PORT
-        fromDatabase:
-          name: terralens-postgis
-          property: port
-      - key: POSTGRES_USER
-        fromDatabase:
-          name: terralens-postgis
-          property: user
-      - key: POSTGRES_PASSWORD
-        fromDatabase:
-          name: terralens-postgis
-          property: password
-      - key: POSTGRES_DB
-        fromDatabase:
-          name: terralens-postgis
-          property: database
+          name: planetiq-database
+          property: connectionString
+      - key: DATABASE_POOL_SIZE
+        value: "10"
+      - key: DATABASE_MAX_OVERFLOW
+        value: "20"
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_MODEL
-        value: gemini-3.5-flash-lite
+        value: gemini-2.5-flash
       - key: NASA_EARTHDATA_BEARER_TOKEN
         sync: false
       - key: NASA_EARTHDATA_USERNAME
@@ -59,7 +43,7 @@ services:
   # PlanetIQ React Frontend (Static Site)
   - type: web
     runtime: static
-    name: terralens-frontend
+    name: planetiq-frontend
     rootDir: frontend
     buildCommand: npm ci && npm run build
     staticPublishPath: dist
@@ -84,9 +68,9 @@ services:
         destination: /index.html
 
 databases:
-  - name: terralens-postgis
+  - name: planetiq-database
     plan: standard
     region: oregon
-    databaseName: terralens_db
-    user: terralens_user
+    databaseName: planetiq_database
+    user: planetiq_database_user
     postgresMajorVersion: 16

@@ -35,7 +35,7 @@ from app.services.ai_tools import (
 )
 from app.services.scientific_analytics import ScientificAnalytics
 from app.services.scientific_rag import ScientificRAG
-from app.services.nasa_earthdata_client import NasaEarthdataClient
+from app.integrations.nasa.earthdata_client import NasaEarthdataClient
 from app.services.assistant_service import AssistantService
 
 

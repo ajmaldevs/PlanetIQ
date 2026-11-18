@@ -28,7 +28,7 @@ from app.services.demo_data_service import DemoDataService
 from app.services.cross_system_service import CrossSystemService
 from app.services.dataset_service import DatasetService
 from app.services.geocoding_service import GeocodingService
-from app.services.nasa_earthdata_client import NasaEarthdataClient
+from app.integrations.nasa.earthdata_client import NasaEarthdataClient
 from app.services.scientific_analytics import ScientificAnalytics
 from app.data_processing.ocean_processor import OceanProcessor
 

@@ -86,7 +86,7 @@ PlanetIQ Client Visualizers (3D Earth Globe, 2D MapView, TrendDrawer, AdaptiveSi
 * **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, Three.js, MapLibre GL, Recharts, Lucide Icons.
 * **Backend**: Python 3.11+, FastAPI, Pydantic v2, NumPy, HTTPX, GeoAlchemy2, SQLAlchemy 2.
 * **Database & GIS**: PostgreSQL 16 + PostGIS 3.4.
-* **AI Engine**: Google Gemini API (`gemini-3.8-flash` / `gemini-3.5-flash-lite`) with structured tool-calling.
+* **AI Engine**: Google Gemini API (`gemini-2.5-flash`) with structured tool-calling.
 * **Deployment & CI/CD**: Render Blueprint (`render.yaml`), GitHub Actions (`.github/workflows/ci.yml`).
 
 ---
