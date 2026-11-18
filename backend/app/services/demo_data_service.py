@@ -268,6 +268,24 @@ class DemoDataService:
             "seasonal_amp": 0.10,
             "base_eke": 195.0,
         },
+        {
+            "id": "arabian_sea",
+            "name": "Arabian Sea Upwelling and Eddy System",
+            "lat": 16.0,
+            "lon": 64.0,
+            "mean_ssha": 0.08,
+            "seasonal_amp": 0.14,
+            "base_eke": 280.0,
+        },
+        {
+            "id": "bay_of_bengal",
+            "name": "Bay of Bengal Freshwater & Eddy Basin",
+            "lat": 14.0,
+            "lon": 87.0,
+            "mean_ssha": 0.12,
+            "seasonal_amp": 0.16,
+            "base_eke": 250.0,
+        },
     ]
 
     # --- Land Simulation ---
@@ -656,6 +674,8 @@ class DemoDataService:
                                 "dynamic_topography_m": dynamic_topography,
                                 "eddy_type": eddy_type,
                                 "eddy_kinetic_energy_cm2_s2": round(base_eke + (100.0 * abs(ssha)), 1),
+                                "chlor_a_mg_m3": round(max(0.05, 0.42 + 0.18 * math.sin(month * 0.52)), 3),
+                                "sst_celsius": round(26.8 + 2.8 * math.cos((month - 5) * math.pi / 6.0), 2),
                                 "unit": "meters (m)",
                                 "sensor": "KaRIn Interferometer (Simulation Model)",
                                 "data_status": "simulated",
@@ -722,6 +742,8 @@ class DemoDataService:
                         ssha_min_m=ssha_min,
                         ssha_max_m=ssha_max,
                         eddy_kinetic_energy_cm2_s2=eke,
+                        chlor_a=round(max(0.05, 0.42 + 0.18 * math.sin(month * 0.52)), 3),
+                        sst=round(26.8 + 2.8 * math.cos((month - 5) * math.pi / 6.0), 2),
                     )
                 )
 

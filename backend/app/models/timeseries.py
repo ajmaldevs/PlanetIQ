@@ -20,6 +20,11 @@ class ObservationTimeSeriesRecord(TimeStampedModel):
     anomaly = Column(Float, nullable=True)
     quality_flag = Column(Float, default=1.0)
 
+    # Scientific verification & provenance tracking
+    verification_status = Column(String(32), default="unverified", nullable=False, index=True)
+    source_file_checksum = Column(String(64), nullable=True)
+    granule_id = Column(String(128), nullable=True, index=True)
+
     __table_args__ = (
         Index("idx_ts_lookup", "dataset_id", "date_str", "latitude", "longitude"),
     )

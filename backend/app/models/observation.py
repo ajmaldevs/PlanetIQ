@@ -66,5 +66,11 @@ class EarthObservation(TimeStampedModel):
     max_value = Column(Float, nullable=True)
     unit = Column(String, nullable=False)
 
+    # Scientific verification & provenance tracking
+    verification_status = Column(String(32), default="unverified", nullable=False, index=True)
+    source_file_checksum = Column(String(64), nullable=True)
+    granule_id = Column(String(128), nullable=True, index=True)
+    processing_version = Column(String(32), nullable=True)
+
     # Extended scientific metadata (satellite orbit pass, quality flags, source granule URL)
     extra_metadata = Column(JSON, default=dict)

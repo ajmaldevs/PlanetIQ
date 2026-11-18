@@ -51,10 +51,13 @@ class NdviProcessor:
         bbox: Optional[Tuple[float, float, float, float]] = None,
         stride: int = 1,
         max_features: int = 250,
+        historical_min: Optional[float] = None,
+        historical_max: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Decodes raw NumPy grids into calibrated GeoJSON features.
         bbox is (min_lon, min_lat, max_lon, max_lat).
+        Missing bands or baselines are preserved as None without synthetic formulas.
         """
         features = []
         valid_ndvi_values = []
@@ -96,15 +99,13 @@ class NdviProcessor:
                     e_valid, decoded_evi = QualityControl.decode_raw_modis_ndvi(int(evi_raw[r, c]))
                     if e_valid:
                         evi = decoded_evi
-                if evi is None:
-                    evi = round(max(-0.2, min(1.0, ndvi * 0.72)), 3)
 
                 qa_info = {"category": "Good Data", "usable": True, "confidence": 1.0}
                 if qa_raw is not None and r < qa_raw.shape[0] and c < qa_raw.shape[1]:
                     qa_info = QualityControl.decode_modis_pixel_reliability(int(qa_raw[r, c]))
 
                 lat, lon = cls.row_col_to_lat_lon(r, c)
-                vci = QualityControl.calculate_vci(ndvi, historical_min=0.10, historical_max=0.85)
+                vci = QualityControl.calculate_vci(ndvi, historical_min=historical_min, historical_max=historical_max)
                 drought_desc = QualityControl.classify_drought_vci(vci)
 
                 valid_ndvi_values.append(ndvi)

@@ -40,6 +40,43 @@ except (ImportError, Exception) as e:
     async_engine = None
     AsyncSessionLocal = None
 
+# Synchronous Engine & Session for scientific repositories and ingestion workers
+try:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    sync_connect_args = {}
+    if "postgres" in settings.SYNC_DATABASE_URL:
+        sync_connect_args["connect_timeout"] = 3
+
+    sync_engine = create_engine(
+        settings.SYNC_DATABASE_URL,
+        echo=settings.DEBUG,
+        pool_pre_ping=True,
+        pool_size=settings.DATABASE_POOL_SIZE,
+        max_overflow=settings.DATABASE_MAX_OVERFLOW,
+        connect_args=sync_connect_args,
+    )
+    SyncSessionLocal = sessionmaker(
+        bind=sync_engine,
+        autocommit=False,
+        autoflush=False,
+    )
+except Exception as e:
+    logger.debug(f"Could not initialize sync database engine: {e}")
+    sync_engine = None
+    SyncSessionLocal = None
+
+
+def get_sync_session():
+    """Returns a new synchronous database session if available, else None."""
+    if SyncSessionLocal is None:
+        return None
+    try:
+        return SyncSessionLocal()
+    except Exception:
+        return None
+
 
 async def get_db() -> AsyncGenerator[Any, None]:
     """Dependency that yields an async database session."""

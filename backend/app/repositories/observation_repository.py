@@ -2,33 +2,36 @@
 Scientific Observation Repository for PlanetIQ.
 Manages persistent storage, caching, and spatial querying of genuine NASA satellite observations:
 - MODIS MOD13C2 v061 (Monthly Global Vegetation Indices)
-- GPM IMERG v07 (Monthly Precipitation - Planned Integration)
-- SWOT KaRIn Ocean Altimetry (Sea Surface Height - Planned Integration)
+- MODIS Aqua Ocean Color & SST (MODISA_L3m_CHL, MODISA_L3m_SST)
+- SWOT KaRIn Ocean Altimetry (SWOT_L2_LR_SSH)
+- MODIS Atmosphere (MOD08_M3) & GPM IMERG (GPM_3IMERGM)
 
 CRITICAL SCIENTIFIC INTEGRITY RULES:
 1. Never label generated, hardcoded, estimated, or simulated values as real satellite observations.
-2. Real satellite measurements must contain:
+2. Real satellite measurements MUST satisfy strict provenance criteria:
+   - verification_status: "verified_observation"
    - data_status: "observation"
    - is_observation: True
-   - Actual dataset name and version
-   - Actual granule identifier
-   - Source provider
-   - Observation timestamp
-   - Quality control flags
-3. Never generate missing historical observations using formulas or interpolation and present them as actual measurements.
-4. Missing data must remain missing. Return an explicit unavailable-data response.
+   - Verified source file checksum
+   - Genuine NASA granule identifier
+3. Never generate missing historical observations using formulas or interpolation.
+4. Missing data must remain missing: return an explicit unavailable-data response.
 """
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 import os
-import json
 import math
 import logging
 from datetime import datetime, timezone
+from sqlalchemy.orm import Session
+from sqlalchemy import select
+
+from app.models.observation import EarthObservation
+from app.models.timeseries import ObservationTimeSeriesRecord
 from app.data_processing.quality_control import QualityControl
 from app.data_processing.ocean_processor import OceanProcessor
 from app.data_processing.atmosphere_processor import AtmosphereProcessor
-from app.services.ingestion_service import IngestionService
+from app.core.database import get_sync_session
 
 logger = logging.getLogger("planetiq.observation_repository")
 
@@ -39,141 +42,34 @@ class ObservationRepository:
     DATA_DIR = os.path.abspath(
         os.path.join(os.path.dirname(__file__), "..", "..", "..", "data", "processed")
     )
+    _last_db_failure_time: float = 0.0
 
-    # Core validated regional benchmarks from NASA MOD13C2 v061 0.05° CMG granules
-    # Authentic observations preserved with exact coordinates, real scaling factors (0.0001), and quality flags
-    MODIS_OBSERVATION_REGIONS = [
-        {
-            "id": "indian_punjab_wheat",
-            "name": "Indo-Gangetic Plain Agricultural Heartland (Punjab, India)",
-            "lat": 30.90,
-            "lon": 75.85,
-            "land_cover": "Double-Cropped Irrigated Agriculture",
-            "baseline_ndvi": 0.485,
-            "provenance_granule": "MOD13C2.A2026060.061.2026085141200",
-            "obs_2026_03": {"ndvi": 0.742, "evi": 0.534, "vci": 82.5, "qa": 0},
-            "obs_2026_09": {"ndvi": 0.615, "evi": 0.442, "vci": 71.0, "qa": 0},
-            "obs_2025_03": {"ndvi": 0.728, "evi": 0.521, "vci": 79.2, "qa": 0},
-            "obs_2024_03": {"ndvi": 0.710, "evi": 0.505, "vci": 75.8, "qa": 0},
-        },
-        {
-            "id": "indian_kerala_canopy",
-            "name": "Western Ghats Wet Evergreen Canopy (Kerala, India)",
-            "lat": 9.93,
-            "lon": 76.27,
-            "land_cover": "Tropical Wet Evergreen Forest / Agroforestry",
-            "baseline_ndvi": 0.765,
-            "provenance_granule": "MOD13C2.A2026060.061.2026085141200",
-            "obs_2026_03": {"ndvi": 0.738, "evi": 0.518, "vci": 68.4, "qa": 0},
-            "obs_2026_09": {"ndvi": 0.812, "evi": 0.584, "vci": 88.0, "qa": 0},
-            "obs_2025_03": {"ndvi": 0.745, "evi": 0.525, "vci": 70.1, "qa": 0},
-            "obs_2024_03": {"ndvi": 0.722, "evi": 0.502, "vci": 65.0, "qa": 0},
-        },
-        {
-            "id": "amazon_rainforest_core",
-            "name": "Central Amazon Moist Evergreen Forest (Amazonas, Brazil)",
-            "lat": -3.46,
-            "lon": -62.21,
-            "land_cover": "Dense Moist Evergreen Tropical Forest",
-            "baseline_ndvi": 0.835,
-            "provenance_granule": "MOD13C2.A2026060.061.2026085141200",
-            "obs_2026_03": {"ndvi": 0.845, "evi": 0.585, "vci": 74.0, "qa": 0},
-            "obs_2026_09": {"ndvi": 0.810, "evi": 0.540, "vci": 62.5, "qa": 0},
-            "obs_2025_03": {"ndvi": 0.830, "evi": 0.570, "vci": 71.0, "qa": 0},
-            "obs_2024_03": {"ndvi": 0.825, "evi": 0.565, "vci": 69.5, "qa": 0},
-        },
-        {
-            "id": "us_corn_belt_iowa",
-            "name": "North American Corn/Soy Intensive Cropland (Iowa, USA)",
-            "lat": 42.03,
-            "lon": -93.63,
-            "land_cover": "Row Croplands / Temperate Agriculture",
-            "baseline_ndvi": 0.440,
-            "provenance_granule": "MOD13C2.A2026060.061.2026085141200",
-            "obs_2026_03": {"ndvi": 0.235, "evi": 0.165, "vci": 48.0, "qa": 0},
-            "obs_2026_07": {"ndvi": 0.862, "evi": 0.640, "vci": 89.5, "qa": 0},
-            "obs_2025_03": {"ndvi": 0.228, "evi": 0.160, "vci": 46.2, "qa": 0},
-            "obs_2024_03": {"ndvi": 0.240, "evi": 0.170, "vci": 50.0, "qa": 0},
-        },
-        {
-            "id": "sahel_savanna_niger",
-            "name": "Sahelian Acacia Savanna / Dryland Agro-Pastoral (Niger/Mali)",
-            "lat": 13.51,
-            "lon": 2.12,
-            "land_cover": "Open Shrublands / Semi-Arid Woody Savanna",
-            "baseline_ndvi": 0.265,
-            "provenance_granule": "MOD13C2.A2026060.061.2026085141200",
-            "obs_2026_03": {"ndvi": 0.145, "evi": 0.105, "vci": 36.5, "qa": 0},
-            "obs_2026_09": {"ndvi": 0.472, "evi": 0.338, "vci": 75.0, "qa": 0},
-            "obs_2025_03": {"ndvi": 0.150, "evi": 0.110, "vci": 38.0, "qa": 0},
-            "obs_2024_03": {"ndvi": 0.142, "evi": 0.102, "vci": 35.0, "qa": 0},
-        },
-        {
-            "id": "siberian_taiga_larch",
-            "name": "Central Siberian Boreal Larch Forest (Yakutia, Russia)",
-            "lat": 62.03,
-            "lon": 129.74,
-            "land_cover": "Deciduous Needleleaf Boreal Forest",
-            "baseline_ndvi": 0.360,
-            "provenance_granule": "MOD13C2.A2026060.061.2026085141200",
-            "obs_2026_03": {"ndvi": 0.120, "evi": 0.085, "vci": 32.0, "qa": 2},
-            "obs_2026_07": {"ndvi": 0.735, "evi": 0.518, "vci": 84.0, "qa": 0},
-            "obs_2025_03": {"ndvi": 0.118, "evi": 0.082, "vci": 31.0, "qa": 2},
-            "obs_2024_03": {"ndvi": 0.125, "evi": 0.088, "vci": 34.0, "qa": 2},
-        },
-        {
-            "id": "nile_delta_oasis",
-            "name": "Nile River Delta Irrigated Intensive Agriculture (Egypt)",
-            "lat": 30.85,
-            "lon": 31.02,
-            "land_cover": "Intensively Irrigated Croplands",
-            "baseline_ndvi": 0.625,
-            "provenance_granule": "MOD13C2.A2026060.061.2026085141200",
-            "obs_2026_03": {"ndvi": 0.672, "evi": 0.485, "vci": 76.0, "qa": 0},
-            "obs_2026_09": {"ndvi": 0.540, "evi": 0.388, "vci": 58.0, "qa": 0},
-            "obs_2025_03": {"ndvi": 0.665, "evi": 0.478, "vci": 74.5, "qa": 0},
-            "obs_2024_03": {"ndvi": 0.658, "evi": 0.472, "vci": 73.0, "qa": 0},
-        },
-        {
-            "id": "australia_murray_basin",
-            "name": "Murray-Darling Agricultural Basin (New South Wales, Australia)",
-            "lat": -34.12,
-            "lon": 142.16,
-            "land_cover": "Dryland Farming / Temperate Grassland",
-            "baseline_ndvi": 0.335,
-            "provenance_granule": "MOD13C2.A2026060.061.2026085141200",
-            "obs_2026_03": {"ndvi": 0.285, "evi": 0.205, "vci": 44.0, "qa": 0},
-            "obs_2026_09": {"ndvi": 0.468, "evi": 0.332, "vci": 72.0, "qa": 0},
-            "obs_2025_03": {"ndvi": 0.292, "evi": 0.210, "vci": 46.0, "qa": 0},
-            "obs_2024_03": {"ndvi": 0.278, "evi": 0.198, "vci": 42.5, "qa": 0},
-        },
-        {
-            "id": "congo_basin_evergreen",
-            "name": "Congo Basin Moist Tropical Evergreen Canopy (DRC)",
-            "lat": 0.52,
-            "lon": 23.51,
-            "land_cover": "Equatorial Moist Broadleaf Forest",
-            "baseline_ndvi": 0.805,
-            "provenance_granule": "MOD13C2.A2026060.061.2026085141200",
-            "obs_2026_03": {"ndvi": 0.815, "evi": 0.575, "vci": 72.5, "qa": 0},
-            "obs_2026_09": {"ndvi": 0.795, "evi": 0.555, "vci": 66.0, "qa": 0},
-            "obs_2025_03": {"ndvi": 0.810, "evi": 0.570, "vci": 71.0, "qa": 0},
-            "obs_2024_03": {"ndvi": 0.802, "evi": 0.562, "vci": 68.5, "qa": 0},
-        },
-        {
-            "id": "sahara_erg_margin",
-            "name": "Saharan Hyper-Arid Desert Margin (Adrar, Mauritania)",
-            "lat": 19.50,
-            "lon": -11.00,
-            "land_cover": "Barren or Sparsely Vegetated Desert",
-            "baseline_ndvi": 0.065,
-            "provenance_granule": "MOD13C2.A2026060.061.2026085141200",
-            "obs_2026_03": {"ndvi": 0.062, "evi": 0.042, "vci": 25.0, "qa": 0},
-            "obs_2026_09": {"ndvi": 0.082, "evi": 0.058, "vci": 35.0, "qa": 0},
-            "obs_2025_03": {"ndvi": 0.060, "evi": 0.040, "vci": 24.0, "qa": 0},
-            "obs_2024_03": {"ndvi": 0.064, "evi": 0.044, "vci": 26.0, "qa": 0},
-        },
-    ]
+    @classmethod
+    def _get_active_session(cls, session: Optional[Session] = None) -> Optional[Session]:
+        """Provides an active database session for queries."""
+        if session is not None:
+            return session
+        import time
+        if time.time() - cls._last_db_failure_time < 30.0:
+            return None
+        try:
+            sess = get_sync_session()
+            if sess is None:
+                cls._last_db_failure_time = time.time()
+            return sess
+        except Exception as exc:
+            cls._last_db_failure_time = time.time()
+            logger.debug(f"Could not acquire sync DB session: {exc}")
+            return None
+
+    @classmethod
+    def mark_db_failed(cls):
+        import time
+        cls._last_db_failure_time = time.time()
+
+    # =========================================================================
+    # 1. LAND (NASA MODIS MOD13C2 v061 0.05° CMG)
+    # =========================================================================
 
     @classmethod
     def get_real_modis_spatial_grid(
@@ -183,69 +79,70 @@ class ObservationRepository:
         max_lat: Optional[float] = None,
         min_lon: Optional[float] = None,
         max_lon: Optional[float] = None,
+        session: Optional[Session] = None,
     ) -> Dict[str, Any]:
         """
         Retrieves real NASA MODIS MOD13C2 satellite observation grid features.
-        Only returns genuine observations. If no observations exist for the requested date,
+        Only returns genuine observations with verification_status='verified_observation'.
+        If no verified observations exist for the requested date/bounds,
         returns an explicit unavailable state. NEVER synthesizes or fabricates measurements.
         """
-        features = []
-        parts = date_str.split("-")
-        month = int(parts[1]) if len(parts) > 1 else 3
-        year = int(parts[0]) if len(parts) > 0 else 2026
+        features: List[Dict[str, Any]] = []
+        db = cls._get_active_session(session)
 
-        obs_key = f"obs_{year:04d}_{month:02d}"
+        if db is not None:
+            try:
+                # Query verified timeseries records for this month
+                query = select(ObservationTimeSeriesRecord).filter(
+                    ObservationTimeSeriesRecord.dataset_id == "MOD13C2",
+                    ObservationTimeSeriesRecord.date_str == date_str,
+                    ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                )
+                if min_lat is not None:
+                    query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
+                if max_lat is not None:
+                    query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
+                if min_lon is not None:
+                    query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
+                if max_lon is not None:
+                    query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
 
-        for reg in cls.MODIS_OBSERVATION_REGIONS:
-            base_lat = reg["lat"]
-            base_lon = reg["lon"]
+                records = db.execute(query).scalars().all()
 
-            if min_lat is not None and base_lat < min_lat:
-                continue
-            if max_lat is not None and base_lat > max_lat:
-                continue
-            if min_lon is not None and base_lon < min_lon:
-                continue
-            if max_lon is not None and base_lon > max_lon:
-                continue
-
-            obs_data = reg.get(obs_key)
-            # If no real observation exists for this month, SKIP IT. Never interpolate!
-            if not obs_data:
-                continue
-
-            ndvi = obs_data["ndvi"]
-            evi = obs_data["evi"]
-            vci = obs_data["vci"]
-            drought_desc = QualityControl.classify_drought_vci(vci)
-            qa_desc = QualityControl.decode_modis_pixel_reliability(obs_data.get("qa", 0))
-
-            features.append({
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [base_lon, base_lat]},
-                "properties": {
-                    "region_id": reg["id"],
-                    "region_name": reg["name"],
-                    "latitude": base_lat,
-                    "longitude": base_lon,
-                    "date": date_str,
-                    "dataset_id": "MOD13C2",
-                    "ndvi": ndvi,
-                    "evi": evi,
-                    "vci_percent": vci,
-                    "drought_category": drought_desc,
-                    "land_cover_type": reg["land_cover"],
-                    "unit": "dimensionless ratio (-0.2000 to +1.0000)",
-                    "sensor": "MODIS Terra (0.05° CMG)",
-                    "data_status": "observation",
-                    "is_observation": True,
-                    "source_type": "satellite_telemetry",
-                    "quality_reliability": qa_desc["category"],
-                    "quality_confidence": qa_desc["confidence"],
-                    "granule_id": reg.get("provenance_granule", "MOD13C2.A2026060.061.2026085141200"),
-                    "provenance": "NASA LP DAAC / USGS EROS",
-                },
-            })
+                for rec in records:
+                    qa_info = QualityControl.decode_modis_pixel_reliability(int(rec.quality_flag or 0))
+                    features.append({
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [round(rec.longitude, 4), round(rec.latitude, 4)],
+                        },
+                        "properties": {
+                            "region_name": rec.location_name,
+                            "latitude": rec.latitude,
+                            "longitude": rec.longitude,
+                            "date": date_str,
+                            "dataset_id": "MOD13C2",
+                            "ndvi": rec.value,
+                            "evi": None,  # Preserved as null when band is unverified
+                            "vci_percent": None,
+                            "drought_category": "Climatological Baseline Unavailable",
+                            "unit": rec.unit,
+                            "sensor": "MODIS Terra (0.05° CMG)",
+                            "data_status": "observation",
+                            "is_observation": True,
+                            "source_type": "satellite_telemetry",
+                            "verification_status": "verified_observation",
+                            "granule_id": rec.granule_id,
+                            "source_file_checksum": rec.source_file_checksum,
+                            "quality_reliability": qa_info.get("category"),
+                            "quality_confidence": qa_info.get("confidence", 1.0),
+                            "provenance": "NASA LP DAAC / USGS EROS",
+                        },
+                    })
+            except Exception as exc:
+                cls.mark_db_failed()
+                logger.debug(f"Database query error in get_real_modis_spatial_grid: {exc}")
 
         if not features:
             return {
@@ -290,43 +187,53 @@ class ObservationRepository:
         longitude: float,
         start_year: int = 2024,
         end_year: int = 2026,
+        session: Optional[Session] = None,
     ) -> Dict[str, Any]:
         """
-        Retrieves real NASA MODIS MOD13C2 multi-year timeseries for the nearest terrestrial benchmark.
+        Retrieves real NASA MODIS MOD13C2 multi-year timeseries for coordinates.
         CRITICAL: ONLY includes dates with genuine observations. Does NOT fill missing months with formulas!
         """
-        closest_region = min(
-            cls.MODIS_OBSERVATION_REGIONS,
-            key=lambda r: math.hypot(r["lat"] - latitude, r["lon"] - longitude),
-        )
-
-        base_ndvi = closest_region["baseline_ndvi"]
+        db = cls._get_active_session(session)
         points = []
         ndvi_values = []
+        region_name = f"Terrestrial Point ({latitude:+.2f}°, {longitude:+.2f}°)"
+        target_granule = None
 
-        for year in range(start_year, end_year + 1):
-            for month in range(1, 13):
-                date_str = f"{year:04d}-{month:02d}"
-                obs_key = f"obs_{year:04d}_{month:02d}"
+        if db is not None:
+            try:
+                # Query within a 1.0 degree proximity box
+                query = select(ObservationTimeSeriesRecord).filter(
+                    ObservationTimeSeriesRecord.dataset_id == "MOD13C2",
+                    ObservationTimeSeriesRecord.metric_name == "NDVI",
+                    ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                    ObservationTimeSeriesRecord.latitude.between(latitude - 1.0, latitude + 1.0),
+                    ObservationTimeSeriesRecord.longitude.between(longitude - 1.0, longitude + 1.0),
+                ).order_by(ObservationTimeSeriesRecord.date_str)
 
-                if obs_key in closest_region:
-                    val = closest_region[obs_key]["ndvi"]
-                    evi_val = closest_region[obs_key]["evi"]
-                    anomaly = round(val - base_ndvi, 3)
-                    ndvi_values.append(val)
-                    points.append({
-                        "date": date_str,
-                        "ndvi": val,
-                        "evi": evi_val,
-                        "historical_ndvi_median": base_ndvi,
-                        "ndvi_anomaly": anomaly,
-                    })
+                recs = db.execute(query).scalars().all()
+                for r in recs:
+                    parts = r.date_str.split("-")
+                    yr = int(parts[0])
+                    if start_year <= yr <= end_year:
+                        ndvi_values.append(r.value)
+                        target_granule = r.granule_id
+                        region_name = r.location_name
+                        points.append({
+                            "date": r.date_str,
+                            "ndvi": r.value,
+                            "evi": None,
+                            "historical_ndvi_median": r.baseline_normal,
+                            "ndvi_anomaly": r.anomaly,
+                        })
+            except Exception as exc:
+                cls.mark_db_failed()
+                logger.debug(f"DB query error in get_real_modis_timeseries: {exc}")
 
         if not points:
             return {
                 "dataset_id": "MOD13C2",
                 "dataset_name": "NASA MODIS Monthly Global Vegetation Indices (MOD13C2 v061)",
-                "region_name": closest_region["name"],
+                "region_name": region_name,
                 "latitude": latitude,
                 "longitude": longitude,
                 "data_status": "unavailable",
@@ -336,7 +243,7 @@ class ObservationRepository:
                 "summary_statistics": {
                     "data_status": "unavailable",
                     "is_observation": False,
-                    "message": "No observation granules available for the requested range.",
+                    "message": "No verified observation granules available for the requested range.",
                 },
                 "timeseries": [],
             }
@@ -344,7 +251,7 @@ class ObservationRepository:
         return {
             "dataset_id": "MOD13C2",
             "dataset_name": "NASA MODIS Monthly Global Vegetation Indices (MOD13C2 v061)",
-            "region_name": closest_region["name"],
+            "region_name": region_name,
             "latitude": latitude,
             "longitude": longitude,
             "data_status": "observation",
@@ -359,18 +266,15 @@ class ObservationRepository:
                 "peak_ndvi_observed": max(ndvi_values),
                 "minimum_ndvi_observed": min(ndvi_values),
                 "observed_points_count": len(points),
-                "vegetation_cover_type": closest_region["land_cover"],
-                "granule_id": closest_region.get("provenance_granule"),
+                "granule_id": target_granule,
                 "provenance": "NASA LP DAAC / USGS EROS",
             },
             "timeseries": points,
         }
 
     # =========================================================================
-    # 2. OCEAN (MODIS Aqua Chlorophyll-a / SST & SWOT KaRIn SSHA) Real Data
+    # 2. OCEAN (NASA MODIS Aqua Ocean Color/SST & SWOT KaRIn)
     # =========================================================================
-
-    OCEAN_OBSERVATION_REGIONS = IngestionService.AUTHENTIC_OCEAN_BENCHMARKS
 
     @classmethod
     def get_real_ocean_spatial_grid(
@@ -380,61 +284,53 @@ class ObservationRepository:
         max_lat: Optional[float] = None,
         min_lon: Optional[float] = None,
         max_lon: Optional[float] = None,
+        session: Optional[Session] = None,
     ) -> Dict[str, Any]:
         """
-        Retrieves real NASA MODIS Aqua (OB.DAAC) & SWOT KaRIn (PO.DAAC) ocean observations.
-        Includes Chlorophyll-a (mg/m³), Sea Surface Temperature (°C), and SSHA (meters).
-        Enforces ocean-only geographic masking (never displays ocean observations on land).
-        Returns genuine observations or an explicit unavailable state.
+        Retrieves real NASA MODIS Aqua & SWOT KaRIn ocean observations.
+        Only returns genuine verified observations with verification_status='verified_observation'.
         """
-        features = []
+        features: List[Dict[str, Any]] = []
+        db = cls._get_active_session(session)
         target_granule = ""
 
-        for reg in cls.OCEAN_OBSERVATION_REGIONS:
-            lat = reg["lat"]
-            lon = reg["lon"]
+        if db is not None:
+            try:
+                query = select(ObservationTimeSeriesRecord).filter(
+                    ObservationTimeSeriesRecord.dataset_id.in_(["MODISA_L3m_CHL", "MODISA_L3m_SST", "SWOT_L2_LR_SSH", "MODISA_L3m_OCEAN_SWOT"]),
+                    ObservationTimeSeriesRecord.date_str == date_str,
+                    ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                )
+                if min_lat is not None:
+                    query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
+                if max_lat is not None:
+                    query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
+                if min_lon is not None:
+                    query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
+                if max_lon is not None:
+                    query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
 
-            if min_lat is not None and lat < min_lat:
-                continue
-            if max_lat is not None and lat > max_lat:
-                continue
-            if min_lon is not None and lon < min_lon:
-                continue
-            if max_lon is not None and lon > max_lon:
-                continue
-
-            match_obs = None
-            for obs in reg.get("observations", []):
-                if obs["date"] == date_str:
-                    match_obs = obs
-                    break
-
-            if not match_obs:
-                continue
-
-            granule = reg.get("granule_id", "MODISA_L3m_CHL_SST")
-            target_granule = granule
-
-            feat = OceanProcessor.process_ocean_point(
-                lat=lat,
-                lon=lon,
-                date_str=date_str,
-                granule_id=granule,
-                chl=match_obs.get("chl"),
-                sst=match_obs.get("sst"),
-                ssha=match_obs.get("ssha"),
-                quality_flag=match_obs.get("qa", 0),
-                location_name=reg.get("name"),
-            )
-            if feat:
-                # Add SWOT specific properties for backward-compatibility with SWOT visualizers
-                feat["properties"]["ssha_karin_m"] = match_obs.get("ssha", 0.0)
-                feat["properties"]["ssh_karin_m"] = match_obs.get("ssha", 0.0)
-                feat["properties"]["dynamic_topography_m"] = match_obs.get("ssha", 0.0)
-                feat["properties"]["eddy_type"] = OceanProcessor.classify_eddy_type(match_obs.get("ssha", 0.0))
-                feat["properties"]["chlor_a"] = match_obs.get("chl")
-                feat["properties"]["sst"] = match_obs.get("sst")
-                features.append(feat)
+                records = db.execute(query).scalars().all()
+                for rec in records:
+                    target_granule = rec.granule_id or "MODISA_SWOT_VERIFIED"
+                    feat = OceanProcessor.process_ocean_point(
+                        lat=rec.latitude,
+                        lon=rec.longitude,
+                        date_str=date_str,
+                        granule_id=target_granule,
+                        chl=rec.value if rec.metric_name == "chlor_a" else None,
+                        sst=rec.value if rec.metric_name == "sst" else None,
+                        ssha=rec.value if rec.metric_name in ["ssha", "ssha_karin"] else None,
+                        quality_flag=int(rec.quality_flag or 0),
+                        location_name=rec.location_name,
+                    )
+                    if feat:
+                        feat["properties"]["verification_status"] = "verified_observation"
+                        feat["properties"]["source_file_checksum"] = rec.source_file_checksum
+                        features.append(feat)
+            except Exception as exc:
+                cls.mark_db_failed()
+                logger.debug(f"DB error in get_real_ocean_spatial_grid: {exc}")
 
         if not features:
             return {
@@ -469,14 +365,16 @@ class ObservationRepository:
         max_lat: Optional[float] = None,
         min_lon: Optional[float] = None,
         max_lon: Optional[float] = None,
+        session: Optional[Session] = None,
     ) -> Dict[str, Any]:
-        """SWOT KaRIn Sea Surface Height query wrapper backed by authentic ocean observations."""
+        """SWOT KaRIn Sea Surface Height query wrapper."""
         return cls.get_real_ocean_spatial_grid(
             date_str=date_str,
             min_lat=min_lat,
             max_lat=max_lat,
             min_lon=min_lon,
             max_lon=max_lon,
+            session=session,
         )
 
     @classmethod
@@ -486,28 +384,45 @@ class ObservationRepository:
         longitude: float,
         start_year: int = 2024,
         end_year: int = 2026,
+        session: Optional[Session] = None,
     ) -> Dict[str, Any]:
-        """
-        Retrieves authentic ocean time series (Chlorophyll-a, SST, and SWOT SSHA) for coordinates.
-        Never fills missing periods with harmonic formulas.
-        """
-        closest_region = None
-        min_dist = float("inf")
+        """Retrieves authentic ocean time series for coordinates."""
+        db = cls._get_active_session(session)
+        points = []
+        region_name = f"Ocean Coordinate ({latitude:+.2f}°, {longitude:+.2f}°)"
+        target_granule = None
 
-        for reg in cls.OCEAN_OBSERVATION_REGIONS:
-            d_lat = reg["lat"] - latitude
-            d_lon = reg["lon"] - longitude
-            dist = math.sqrt(d_lat * d_lat + d_lon * d_lon)
-            if dist < min_dist:
-                min_dist = dist
-                closest_region = reg
+        if db is not None:
+            try:
+                query = select(ObservationTimeSeriesRecord).filter(
+                    ObservationTimeSeriesRecord.dataset_id.in_(["MODISA_L3m_CHL", "MODISA_L3m_SST", "SWOT_L2_LR_SSH"]),
+                    ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                    ObservationTimeSeriesRecord.latitude.between(latitude - 2.0, latitude + 2.0),
+                    ObservationTimeSeriesRecord.longitude.between(longitude - 2.0, longitude + 2.0),
+                ).order_by(ObservationTimeSeriesRecord.date_str)
 
-        # If further than 6 degrees from any authentic ocean benchmark, return unavailable
-        if not closest_region or min_dist > 6.0:
+                recs = db.execute(query).scalars().all()
+                for r in recs:
+                    parts = r.date_str.split("-")
+                    yr = int(parts[0])
+                    if start_year <= yr <= end_year:
+                        target_granule = r.granule_id
+                        region_name = r.location_name
+                        points.append({
+                            "date": r.date_str,
+                            "ssha_mean_m": r.value if "SSH" in r.dataset_id else 0.0,
+                            "chlor_a": r.value if "CHL" in r.dataset_id else None,
+                            "sst": r.value if "SST" in r.dataset_id else None,
+                        })
+            except Exception as exc:
+                cls.mark_db_failed()
+                logger.debug(f"DB error in get_real_ocean_timeseries: {exc}")
+
+        if not points:
             return {
                 "dataset_id": "MODISA_L3m_OCEAN_SWOT",
                 "dataset_name": "NASA MODIS Aqua Ocean Color & SWOT KaRIn Altimetry",
-                "region_name": f"Coordinate ({latitude:+.2f}°, {longitude:+.2f}°)",
+                "region_name": region_name,
                 "latitude": latitude,
                 "longitude": longitude,
                 "data_status": "unavailable",
@@ -522,35 +437,12 @@ class ObservationRepository:
                 "timeseries": [],
             }
 
-        points = []
-        for obs in closest_region.get("observations", []):
-            date_str = obs["date"]
-            year = int(date_str.split("-")[0])
-            if start_year <= year <= end_year:
-                points.append({
-                    "date": date_str,
-                    "ssha_mean_m": obs.get("ssha", 0.0),
-                    "ssha_min_m": round(obs.get("ssha", 0.0) - 0.02, 3),
-                    "ssha_max_m": round(obs.get("ssha", 0.0) + 0.02, 3),
-                    "eddy_kinetic_energy_cm2_s2": round(abs(obs.get("ssha", 0.0)) * 120.0, 1),
-                    "chlor_a": obs.get("chl"),
-                    "sst": obs.get("sst"),
-                })
-
-        ssha_vals = [p["ssha_mean_m"] for p in points]
-        chl_vals = [p["chlor_a"] for p in points if p.get("chlor_a") is not None]
-        sst_vals = [p["sst"] for p in points if p.get("sst") is not None]
-
-        mean_ssha = round(sum(ssha_vals) / len(ssha_vals), 3) if ssha_vals else 0.0
-        mean_chl = round(sum(chl_vals) / len(chl_vals), 3) if chl_vals else None
-        mean_sst = round(sum(sst_vals) / len(sst_vals), 2) if sst_vals else None
-
         return {
             "dataset_id": "MODISA_L3m_OCEAN_SWOT",
             "dataset_name": "NASA MODIS Aqua Ocean Color & SWOT KaRIn Altimetry",
-            "region_name": closest_region["name"],
-            "latitude": closest_region["lat"],
-            "longitude": closest_region["lon"],
+            "region_name": region_name,
+            "latitude": latitude,
+            "longitude": longitude,
             "data_status": "observation",
             "is_observation": True,
             "source_type": "satellite_direct",
@@ -558,11 +450,8 @@ class ObservationRepository:
             "summary_statistics": {
                 "data_status": "observation",
                 "is_observation": True,
-                "mean_ssha_m": mean_ssha,
-                "mean_chlor_a_mg_m3": mean_chl,
-                "mean_sst_celsius": mean_sst,
                 "observation_count": len(points),
-                "granule_id": closest_region.get("granule_id"),
+                "granule_id": target_granule,
                 "provenance": "NASA OB.DAAC & PO.DAAC / CNES",
             },
             "timeseries": points,
@@ -575,20 +464,20 @@ class ObservationRepository:
         longitude: float,
         start_year: int = 2024,
         end_year: int = 2026,
+        session: Optional[Session] = None,
     ) -> Dict[str, Any]:
-        """SWOT KaRIn time series wrapper backed by authentic ocean observations."""
+        """SWOT KaRIn time series wrapper."""
         return cls.get_real_ocean_timeseries(
             latitude=latitude,
             longitude=longitude,
             start_year=start_year,
             end_year=end_year,
+            session=session,
         )
 
     # =========================================================================
-    # 3. ATMOSPHERE (NASA MODIS AOD/Cloud & GPM IMERG) Real Data
+    # 3. ATMOSPHERE (NASA MODIS Atmosphere & GPM IMERG)
     # =========================================================================
-
-    ATMOSPHERE_OBSERVATION_REGIONS = IngestionService.AUTHENTIC_ATMOSPHERE_BENCHMARKS
 
     @classmethod
     def get_real_atmosphere_spatial_grid(
@@ -598,61 +487,52 @@ class ObservationRepository:
         max_lat: Optional[float] = None,
         min_lon: Optional[float] = None,
         max_lon: Optional[float] = None,
+        session: Optional[Session] = None,
     ) -> Dict[str, Any]:
         """
-        Retrieves real NASA MODIS Atmosphere (LAADS DAAC) & GPM IMERG (GES DISC) observations.
-        Includes Aerosol Optical Depth (AOD 550nm), Cloud Fraction, and Precipitation.
+        Retrieves real NASA MODIS Atmosphere & GPM IMERG observations.
+        Only returns genuine verified observations with verification_status='verified_observation'.
         """
-        features = []
+        features: List[Dict[str, Any]] = []
+        db = cls._get_active_session(session)
         target_granule = ""
 
-        for reg in cls.ATMOSPHERE_OBSERVATION_REGIONS:
-            lat = reg["lat"]
-            lon = reg["lon"]
+        if db is not None:
+            try:
+                query = select(ObservationTimeSeriesRecord).filter(
+                    ObservationTimeSeriesRecord.dataset_id.in_(["MOD08_M3", "GPM_3IMERGM", "MODIS_GPM_ATMOSPHERE"]),
+                    ObservationTimeSeriesRecord.date_str == date_str,
+                    ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                )
+                if min_lat is not None:
+                    query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
+                if max_lat is not None:
+                    query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
+                if min_lon is not None:
+                    query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
+                if max_lon is not None:
+                    query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
 
-            if min_lat is not None and lat < min_lat:
-                continue
-            if max_lat is not None and lat > max_lat:
-                continue
-            if min_lon is not None and lon < min_lon:
-                continue
-            if max_lon is not None and lon > max_lon:
-                continue
-
-            match_obs = None
-            for obs in reg.get("observations", []):
-                if obs["date"] == date_str:
-                    match_obs = obs
-                    break
-
-            if not match_obs:
-                continue
-
-            granule = reg.get("granule_id", "MOD08_M3_GPM")
-            target_granule = granule
-
-            feat = AtmosphereProcessor.process_atmosphere_point(
-                lat=lat,
-                lon=lon,
-                date_str=date_str,
-                granule_id=granule,
-                aod=match_obs.get("aod"),
-                cloud_fraction=match_obs.get("cld"),
-                precip_rate_mm_hr=match_obs.get("rain_rate"),
-                precip_accumulated_mm=match_obs.get("rain_acc"),
-                climatological_normal_mm=reg.get("baseline_rain"),
-                quality_flag=match_obs.get("qa", 3),
-                location_name=reg.get("name"),
-            )
-            if feat:
-                # Add GPM backward-compatible properties for GPM-specific consumers
-                feat["properties"]["precipitation_rate_mm_hr"] = match_obs.get("rain_rate", 0.0)
-                feat["properties"]["precipitation_accumulated_mm"] = match_obs.get("rain_acc", 0.0)
-                feat["properties"]["climatological_normal_mm"] = reg.get("baseline_rain", 0.0)
-                feat["properties"]["anomaly_mm"] = round(match_obs.get("rain_acc", 0.0) - reg.get("baseline_rain", 0.0), 1)
-                feat["properties"]["aod_550"] = match_obs.get("aod")
-                feat["properties"]["cloud_fraction"] = match_obs.get("cld")
-                features.append(feat)
+                records = db.execute(query).scalars().all()
+                for rec in records:
+                    target_granule = rec.granule_id or "MODIS_GPM_VERIFIED"
+                    feat = AtmosphereProcessor.process_atmosphere_point(
+                        lat=rec.latitude,
+                        lon=rec.longitude,
+                        date_str=date_str,
+                        granule_id=target_granule,
+                        aod=rec.value if rec.metric_name == "aod_550" else None,
+                        precip_accumulated_mm=rec.value if "precip" in rec.metric_name else None,
+                        quality_flag=int(rec.quality_flag or 3),
+                        location_name=rec.location_name,
+                    )
+                    if feat:
+                        feat["properties"]["verification_status"] = "verified_observation"
+                        feat["properties"]["source_file_checksum"] = rec.source_file_checksum
+                        features.append(feat)
+            except Exception as exc:
+                cls.mark_db_failed()
+                logger.debug(f"DB error in get_real_atmosphere_spatial_grid: {exc}")
 
         if not features:
             return {
@@ -687,14 +567,16 @@ class ObservationRepository:
         max_lat: Optional[float] = None,
         min_lon: Optional[float] = None,
         max_lon: Optional[float] = None,
+        session: Optional[Session] = None,
     ) -> Dict[str, Any]:
-        """GPM IMERG spatial grid wrapper backed by authentic atmospheric observations."""
+        """GPM IMERG spatial grid wrapper."""
         return cls.get_real_atmosphere_spatial_grid(
             date_str=date_str,
             min_lat=min_lat,
             max_lat=max_lat,
             min_lon=min_lon,
             max_lon=max_lon,
+            session=session,
         )
 
     @classmethod
@@ -704,28 +586,44 @@ class ObservationRepository:
         longitude: float,
         start_year: int = 2024,
         end_year: int = 2026,
+        session: Optional[Session] = None,
     ) -> Dict[str, Any]:
-        """
-        Retrieves authentic atmospheric time series (AOD, Cloud Fraction, GPM Precipitation) for coordinates.
-        Never fills missing periods with harmonic formulas.
-        """
-        closest_region = None
-        min_dist = float("inf")
+        """Retrieves authentic atmospheric time series for coordinates."""
+        db = cls._get_active_session(session)
+        points = []
+        region_name = f"Atmospheric Coordinate ({latitude:+.2f}°, {longitude:+.2f}°)"
+        target_granule = None
 
-        for reg in cls.ATMOSPHERE_OBSERVATION_REGIONS:
-            d_lat = reg["lat"] - latitude
-            d_lon = reg["lon"] - longitude
-            dist = math.sqrt(d_lat * d_lat + d_lon * d_lon)
-            if dist < min_dist:
-                min_dist = dist
-                closest_region = reg
+        if db is not None:
+            try:
+                query = select(ObservationTimeSeriesRecord).filter(
+                    ObservationTimeSeriesRecord.dataset_id.in_(["MOD08_M3", "GPM_3IMERGM", "MODIS_GPM_ATMOSPHERE"]),
+                    ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                    ObservationTimeSeriesRecord.latitude.between(latitude - 2.0, latitude + 2.0),
+                    ObservationTimeSeriesRecord.longitude.between(longitude - 2.0, longitude + 2.0),
+                ).order_by(ObservationTimeSeriesRecord.date_str)
 
-        # If further than 6 degrees from any authentic atmospheric benchmark, return unavailable
-        if not closest_region or min_dist > 6.0:
+                recs = db.execute(query).scalars().all()
+                for r in recs:
+                    parts = r.date_str.split("-")
+                    yr = int(parts[0])
+                    if start_year <= yr <= end_year:
+                        target_granule = r.granule_id
+                        region_name = r.location_name
+                        points.append({
+                            "date": r.date_str,
+                            "precipitation_accumulated_mm": r.value if "precip" in r.metric_name else 0.0,
+                            "aod_550": r.value if r.metric_name == "aod_550" else None,
+                        })
+            except Exception as exc:
+                cls.mark_db_failed()
+                logger.debug(f"DB error in get_real_atmosphere_timeseries: {exc}")
+
+        if not points:
             return {
                 "dataset_id": "MODIS_GPM_ATMOSPHERE",
                 "dataset_name": "NASA MODIS Atmosphere (LAADS DAAC) & GPM IMERG (GES DISC)",
-                "location_name": f"Coordinate ({latitude:+.2f}°, {longitude:+.2f}°)",
+                "location_name": region_name,
                 "latitude": latitude,
                 "longitude": longitude,
                 "data_status": "unavailable",
@@ -741,38 +639,12 @@ class ObservationRepository:
                 "timeseries": [],
             }
 
-        points = []
-        base_rain = closest_region.get("baseline_rain", 10.0)
-
-        for obs in closest_region.get("observations", []):
-            date_str = obs["date"]
-            year = int(date_str.split("-")[0])
-            if start_year <= year <= end_year:
-                rain_acc = obs.get("rain_acc", 0.0)
-                points.append({
-                    "date": date_str,
-                    "precipitation_rate_mm_hr": obs.get("rain_rate", 0.0),
-                    "precipitation_accumulated_mm": rain_acc,
-                    "climatological_normal_mm": base_rain,
-                    "anomaly_mm": round(rain_acc - base_rain, 1),
-                    "aod_550": obs.get("aod"),
-                    "cloud_fraction": obs.get("cld"),
-                })
-
-        rates = [p["precipitation_rate_mm_hr"] for p in points]
-        accs = [p["precipitation_accumulated_mm"] for p in points]
-        aods = [p["aod_550"] for p in points if p.get("aod_550") is not None]
-
-        mean_rate = round(sum(rates) / len(rates), 4) if rates else 0.0
-        total_acc = round(sum(accs), 1) if accs else 0.0
-        mean_aod = round(sum(aods) / len(aods), 3) if aods else None
-
         return {
             "dataset_id": "MODIS_GPM_ATMOSPHERE",
             "dataset_name": "NASA MODIS Atmosphere & GPM IMERG Precipitation",
-            "location_name": closest_region["name"],
-            "latitude": closest_region["lat"],
-            "longitude": closest_region["lon"],
+            "location_name": region_name,
+            "latitude": latitude,
+            "longitude": longitude,
             "data_status": "observation",
             "is_observation": True,
             "source_type": "satellite_direct",
@@ -781,12 +653,8 @@ class ObservationRepository:
             "summary_statistics": {
                 "data_status": "observation",
                 "is_observation": True,
-                "mean_precipitation_rate_mm_hr": mean_rate,
-                "total_accumulated_precipitation_mm": total_acc,
-                "mean_monthly_accumulation_mm": round(total_acc / max(len(accs), 1), 1),
-                "mean_aod_550": mean_aod,
                 "observation_count": len(points),
-                "granule_id": closest_region.get("granule_id"),
+                "granule_id": target_granule,
                 "provenance": "NASA LAADS DAAC & GES DISC",
             },
             "timeseries": points,
@@ -799,11 +667,13 @@ class ObservationRepository:
         longitude: float,
         start_year: int = 2024,
         end_year: int = 2026,
+        session: Optional[Session] = None,
     ) -> Dict[str, Any]:
-        """GPM IMERG timeseries wrapper backed by authentic atmospheric observations."""
+        """GPM IMERG timeseries wrapper."""
         return cls.get_real_atmosphere_timeseries(
             latitude=latitude,
             longitude=longitude,
             start_year=start_year,
             end_year=end_year,
+            session=session,
         )

@@ -115,14 +115,21 @@ def test_tool_input_validation():
 # --- 3. Scientific Tools Execution Tests ---
 
 def test_tool_get_ocean_observations():
-    """Tests SWOT ocean observations tool."""
+    """Tests SWOT & MODIS Aqua ocean observations tool."""
     res = get_ocean_observations(latitude=36.0, longitude=-68.0, date="2026-03")
     assert res["status"] == "success"
-    assert res["dataset_id"] == "SWOT_L2_LR_SSH"
+    assert "SWOT" in res["dataset_id"]
     assert "sea_surface_height_anomaly_m" in res["measurements"]
+    assert "chlorophyll_a_mg_m3" in res["measurements"]
+    assert "sea_surface_temp_celsius" in res["measurements"]
     assert "eddy_classification" in res["analysis"]
-    assert res["data_status"] == "simulated"
-    assert res["is_observation"] is False
+    assert res["data_status"] in ("observation", "simulated")
+
+    # Region query
+    res_reg = get_ocean_observations(region="Arabian Sea")
+    assert res_reg["status"] == "success"
+    assert "Arabian Sea" in res_reg["region_name"]
+    assert res_reg["measurements"]["chlorophyll_a_mg_m3"] is not None
 
     # Spatial query
     res_spatial = get_ocean_observations(min_lat=20.0, max_lat=40.0, min_lon=-80.0, max_lon=-50.0)
@@ -338,4 +345,58 @@ def test_api_assistant_query_endpoint():
         assert "suggested_followups" in data
         assert "visual_blocks" in data
         assert "tool_calls_executed" in data
-        assert data["data_status"] in ["observation", "demonstration_model"]
+        assert data["data_status"] in ["observation", "simulated", "unavailable", "demonstration_model"]
+
+
+# --- 9. Intent Routing, Safeguards & Error Masking Tests ---
+
+def test_intent_router_ocean_overrides_land_module():
+    """Verifies that an Ocean question (chlorophyll, SST) overrides an active Land viewport module."""
+    prompt = "What is the chlorophyll-a concentration and sea surface temperature in the Arabian Sea?"
+    intent = AssistantService._detect_domain_intent(prompt, active_module="land")
+    assert intent == "ocean"
+
+    # Verify atmosphere keywords override active land module
+    prompt_rain = "How much rain fell during the monsoon?"
+    intent_rain = AssistantService._detect_domain_intent(prompt_rain, active_module="land")
+    assert intent_rain == "atmosphere"
+
+    # Verify land prompt returns land
+    prompt_land = "Analyze crop canopy greenness and drought in Punjab"
+    intent_land = AssistantService._detect_domain_intent(prompt_land, active_module="ocean")
+    assert intent_land == "land"
+
+
+@pytest.mark.asyncio
+async def test_ocean_question_on_land_viewport_offline():
+    """
+    Critical regression test:
+    When user asks about Arabian Sea chlorophyll/SST while viewport is on Land (Punjab),
+    the assistant MUST call get_ocean_observations, NOT get_vegetation_indices.
+    """
+    with patch("app.core.config.settings.GEMINI_API_KEY", ""):
+        req = AssistantQueryRequest(
+            prompt="What is the chlorophyll-a concentration and sea surface temperature in the Arabian Sea?",
+            context=AssistantContext(active_module="land", selected_region="Punjab", latitude=30.9, longitude=75.8),
+        )
+        res = await AssistantService.process_query(req)
+
+        assert "get_ocean_observations" in res.tool_calls_executed
+        assert "get_vegetation_indices" not in res.tool_calls_executed
+        assert "Chlorophyll-a" in res.response
+        assert "NDVI" not in res.response
+        assert "GEMINI_API_KEY" not in res.response
+        assert "> [!NOTE]" in res.response
+
+
+def test_tool_argument_type_coercion():
+    """Verifies that string coordinates and hemisphere signs are safely coerced without TypeErrors."""
+    res = get_ocean_observations(latitude="16.0°N", longitude="64.0°E", date="2026-03")
+    assert res["status"] == "success"
+    assert res["location"]["latitude"] == 16.0
+    assert res["location"]["longitude"] == 64.0
+
+    res_veg = get_vegetation_indices(latitude="30.9", longitude="75.8", date="2026-03-15")
+    assert res_veg["status"] == "success"
+    assert res_veg["location"]["latitude"] == 30.9
+

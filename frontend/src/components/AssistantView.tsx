@@ -42,6 +42,183 @@ interface Message {
   timestamp: string;
 }
 
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  get_ocean_observations: 'Ocean Altimetry & Chlorophyll-a',
+  get_precipitation_data: 'GPM Precipitation',
+  get_vegetation_indices: 'MODIS Vegetation Indices',
+  compare_regions: 'Regional Comparison',
+  get_historical_trends: 'Historical Trends',
+  get_cross_system_analysis: 'Teleconnection Coupling',
+  get_dataset_metadata: 'Dataset Metadata',
+  get_data_quality_information: 'Data Quality Audit',
+};
+
+const renderInlineMarkdown = (text: string): React.ReactNode => {
+  const parts: React.ReactNode[] = [];
+  const regex = /(\*\*.*?\*\*|\*.*?\*|`.*?`|\[.*?\]\(.*?\))/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index));
+    }
+    const token = match[0];
+    if (token.startsWith('**') && token.endsWith('**')) {
+      parts.push(
+        <strong key={match.index} className="text-white font-semibold">
+          {token.slice(2, -2)}
+        </strong>
+      );
+    } else if (token.startsWith('*') && token.endsWith('*')) {
+      parts.push(
+        <em key={match.index} className="text-slate-200 italic">
+          {token.slice(1, -1)}
+        </em>
+      );
+    } else if (token.startsWith('`') && token.endsWith('`')) {
+      parts.push(
+        <code
+          key={match.index}
+          className="px-1.5 py-0.5 bg-slate-900 border border-slate-800 text-cyan-300 rounded font-mono text-[11px]"
+        >
+          {token.slice(1, -1)}
+        </code>
+      );
+    } else if (token.startsWith('[') && token.includes('](') && token.endsWith(')')) {
+      const linkText = token.substring(1, token.indexOf(']('));
+      const linkUrl = token.substring(token.indexOf('](') + 2, token.length - 1);
+      parts.push(
+        <a
+          key={match.index}
+          href={linkUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-cyan-400 hover:text-cyan-300 underline inline-flex items-center gap-0.5"
+        >
+          {linkText}
+          <ExternalLink className="h-2.5 w-2.5 inline opacity-70" />
+        </a>
+      );
+    }
+    lastIndex = match.index + token.length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+  return parts.length > 0 ? parts : text;
+};
+
+const FormattedMarkdown: React.FC<{ content: string }> = ({ content }) => {
+  const lines = content.split('\n');
+  const elements: React.ReactNode[] = [];
+  let inList = false;
+  let listItems: React.ReactNode[] = [];
+  let inAlert = false;
+  let alertLines: string[] = [];
+
+  const flushList = () => {
+    if (inList) {
+      elements.push(
+        <ul key={`ul-${elements.length}`} className="my-1.5 space-y-1 list-disc list-inside text-slate-300 pl-1">
+          {listItems}
+        </ul>
+      );
+      inList = false;
+      listItems = [];
+    }
+  };
+
+  const flushAlert = () => {
+    if (inAlert) {
+      const alertContent = alertLines.join(' ');
+      const cleanAlert = alertContent.replace(/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*/i, '');
+      elements.push(
+        <div
+          key={`alert-${elements.length}`}
+          className="my-2.5 p-3 rounded-xl bg-cyan-950/40 border border-cyan-800/60 text-cyan-200 text-xs flex items-start space-x-2"
+        >
+          <ShieldCheck className="h-4 w-4 text-cyan-400 shrink-0 mt-0.5" />
+          <div className="leading-relaxed">{renderInlineMarkdown(cleanAlert)}</div>
+        </div>
+      );
+      inAlert = false;
+      alertLines = [];
+    }
+  };
+
+  lines.forEach((line, i) => {
+    const trimmed = line.trim();
+
+    // Blockquote alerts: > [!NOTE] or > text
+    if (trimmed.startsWith('>')) {
+      flushList();
+      inAlert = true;
+      alertLines.push(trimmed.replace(/^>\s*/, ''));
+      return;
+    } else if (inAlert) {
+      flushAlert();
+    }
+
+    // Horizontal rule
+    if (trimmed === '---' || trimmed === '***') {
+      flushList();
+      elements.push(<hr key={`hr-${i}`} className="border-slate-800/80 my-2.5" />);
+      return;
+    }
+
+    // Headers
+    if (trimmed.startsWith('#### ')) {
+      flushList();
+      elements.push(
+        <h4 key={`h4-${i}`} className="text-xs font-semibold text-cyan-300 mt-2 mb-1 flex items-center gap-1.5">
+          {renderInlineMarkdown(trimmed.replace(/^####\s*/, ''))}
+        </h4>
+      );
+      return;
+    }
+    if (trimmed.startsWith('### ')) {
+      flushList();
+      elements.push(
+        <h3 key={`h3-${i}`} className="text-sm font-semibold text-white mt-3 mb-1.5 flex items-center gap-1.5 border-b border-slate-800/50 pb-1">
+          {renderInlineMarkdown(trimmed.replace(/^###\s*/, ''))}
+        </h3>
+      );
+      return;
+    }
+
+    // List items
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      inList = true;
+      listItems.push(
+        <li key={`li-${i}`} className="text-slate-300 text-xs sm:text-sm leading-relaxed">
+          {renderInlineMarkdown(trimmed.replace(/^[-*]\s*/, ''))}
+        </li>
+      );
+      return;
+    } else {
+      flushList();
+    }
+
+    // Blank line
+    if (!trimmed) {
+      return;
+    }
+
+    // Standard paragraph
+    elements.push(
+      <p key={`p-${i}`} className="text-slate-200 leading-relaxed text-xs sm:text-sm my-1">
+        {renderInlineMarkdown(trimmed)}
+      </p>
+    );
+  });
+
+  flushList();
+  flushAlert();
+
+  return <div className="space-y-1">{elements}</div>;
+};
+
 export const AssistantView: React.FC<AssistantViewProps> = ({
   activeModule = null,
   selectedLocationName = 'Global Earth Systems',
@@ -391,6 +568,10 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
         {/* Current Active Context Badges */}
         <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-emerald-950/60 border border-emerald-800/50 text-[10px] text-emerald-300 font-mono">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>NASA Grounded</span>
+          </div>
           <div className="text-[10px] sm:text-[11px] font-mono text-slate-400 bg-slate-900/80 px-2.5 sm:px-3 py-1 rounded-full border border-slate-800 shrink-0">
             Sphere: <span className="text-cyan-400 capitalize">{activeModule || 'Global Systems'}</span>
           </div>
@@ -437,23 +618,27 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
               {/* Tool Execution Badges */}
               {msg.toolCalls && msg.toolCalls.length > 0 && (
-                <div className="flex flex-wrap gap-1 items-center pt-0.5">
-                  <span className="text-[9px] font-mono text-slate-400 uppercase">Tools Consulted:</span>
+                <div className="flex flex-wrap gap-1.5 items-center pt-0.5">
+                  <span className="text-[9px] font-mono text-slate-400 uppercase">Scientific Tools:</span>
                   {msg.toolCalls.map((tName, tIdx) => (
                     <span
                       key={tIdx}
-                      className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-cyan-950/70 border border-cyan-800/50 text-cyan-300"
+                      className="text-[9px] font-mono px-2 py-0.5 rounded-md bg-cyan-950/70 border border-cyan-800/60 text-cyan-300 font-medium"
                     >
-                      {tName}
+                      {TOOL_DISPLAY_NAMES[tName] || tName}
                     </span>
                   ))}
                 </div>
               )}
 
-              {/* Message text */}
-              <div className="whitespace-pre-line space-y-1.5 font-normal">
-                {msg.content}
-              </div>
+              {/* Message text with formatted markdown */}
+              {msg.role === 'assistant' ? (
+                <FormattedMarkdown content={msg.content} />
+              ) : (
+                <div className="whitespace-pre-line space-y-1.5 font-normal">
+                  {msg.content}
+                </div>
+              )}
 
               {/* Visual Analysis Blocks */}
               {msg.visualBlocks && msg.visualBlocks.length > 0 && (

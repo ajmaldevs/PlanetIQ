@@ -19,6 +19,7 @@ from app.schemas.scientific import (
 )
 from app.repositories.observation_repository import ObservationRepository
 from app.services.demo_data_service import DemoDataService
+from app.core.config import settings
 
 
 class OceanService:
@@ -99,13 +100,19 @@ class OceanService:
                 metadata=real_data.get("metadata", {}),
             )
 
-        # Fallback to isolated demo model
-        return DemoDataService.get_simulated_ocean_grid(
-            date_str=date_str,
-            min_lat=min_lat,
-            max_lat=max_lat,
-            min_lon=min_lon,
-            max_lon=max_lon,
+        if settings.ALLOW_DEMO_FALLBACK:
+            return DemoDataService.get_simulated_ocean_grid(
+                date_str=date_str,
+                min_lat=min_lat,
+                max_lat=max_lat,
+                min_lon=min_lon,
+                max_lon=max_lon,
+            )
+
+        return GeoJSONFeatureCollection(
+            type="FeatureCollection",
+            features=[],
+            metadata=real_data.get("metadata", {}),
         )
 
     @classmethod
@@ -193,9 +200,23 @@ class OceanService:
                 timeseries=points,
             )
 
-        return DemoDataService.get_simulated_ocean_timeseries(
+        if settings.ALLOW_DEMO_FALLBACK:
+            return DemoDataService.get_simulated_ocean_timeseries(
+                latitude=latitude,
+                longitude=longitude,
+                start_year=start_year,
+                end_year=end_year,
+            )
+
+        return OceanTimeSeriesResponse(
+            data_status="unavailable",
+            is_observation=False,
+            dataset_id=real_data.get("dataset_id", "SWOT_L2_LR_SSH"),
+            dataset_name=real_data.get("dataset_name", "NASA/CNES SWOT KaRIn Low Rate Ocean Sea Surface Height"),
+            region_name=real_data.get("region_name", "SWOT Ocean Swath"),
             latitude=latitude,
             longitude=longitude,
-            start_year=start_year,
-            end_year=end_year,
+            unit_height="meters (m)",
+            summary_statistics=real_data.get("summary_statistics", {}),
+            timeseries=[],
         )

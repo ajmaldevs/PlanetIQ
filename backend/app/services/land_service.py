@@ -18,6 +18,7 @@ from app.schemas.scientific import (
 )
 from app.repositories.observation_repository import ObservationRepository
 from app.services.demo_data_service import DemoDataService
+from app.core.config import settings
 
 
 class LandService:
@@ -100,12 +101,20 @@ class LandService:
                 metadata=real_data.get("metadata", {}),
             )
 
-        return DemoDataService.get_simulated_land_grid(
-            date_str=date_str,
-            min_lat=min_lat,
-            max_lat=max_lat,
-            min_lon=min_lon,
-            max_lon=max_lon,
+        if settings.ALLOW_DEMO_FALLBACK:
+            return DemoDataService.get_simulated_land_grid(
+                date_str=date_str,
+                min_lat=min_lat,
+                max_lat=max_lat,
+                min_lon=min_lon,
+                max_lon=max_lon,
+            )
+
+        # Strict scientific integrity: do not silently fabricate observations in auto mode
+        return GeoJSONFeatureCollection(
+            type="FeatureCollection",
+            features=[],
+            metadata=real_data.get("metadata", {}),
         )
 
     @classmethod
@@ -189,9 +198,23 @@ class LandService:
                 timeseries=pts,
             )
 
-        return DemoDataService.get_simulated_land_timeseries(
-            latitude=latitude,
-            longitude=longitude,
-            start_year=start_year,
-            end_year=end_year,
+        if settings.ALLOW_DEMO_FALLBACK:
+            return DemoDataService.get_simulated_land_timeseries(
+                latitude=latitude,
+                longitude=longitude,
+                start_year=start_year,
+                end_year=end_year,
+            )
+
+        return LandTimeSeriesResponse(
+            dataset_id=res["dataset_id"],
+            dataset_name=res["dataset_name"],
+            region_name=res["region_name"],
+            latitude=res["latitude"],
+            longitude=res["longitude"],
+            unit=res["unit"],
+            summary_statistics=res["summary_statistics"],
+            data_status="unavailable",
+            is_observation=False,
+            timeseries=[],
         )

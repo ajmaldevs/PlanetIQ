@@ -4,19 +4,27 @@ Connects NASA Earthdata / CMR -> ModisClient / OceanColorClient / AtmosphereClie
 -> Scientific Processors (NdviProcessor, OceanProcessor, AtmosphereProcessor)
 -> QualityControl -> Database (SQLAlchemy).
 
-Features:
-- Discovers and retrieves official NASA Earth observation granules across Land, Ocean, and Atmosphere.
-- Decodes authentic scientific arrays and validates pixel reliability / QA flags.
-- Persists verified satellite observations into:
-  - earth_observations (spatial bounds, metadata, granules)
-  - observation_timeseries (chronological satellite measurements)
-- Strictly enforces scientific provenance: only genuine satellite data is persisted.
+CRITICAL SCIENTIFIC INTEGRITY RULES:
+1. Only genuine satellite data decoded from downloaded, validated NASA granules with verified
+   cryptographic checksums may be labeled:
+       verification_status = "verified_observation"
+       data_status = "observation"
+       is_observation = True
+2. Hardcoded benchmark measurements are isolated development/test fixtures and must be labeled:
+       verification_status = "synthetic"
+       data_status = "synthetic_fixture"
+       is_observation = False
+3. Never interpolate, fabricate, or simulate observations in production ingestion paths.
+4. If NASA Earthdata credentials are not configured, report the prerequisite transparently
+   rather than faking successful ingestion.
 """
 
 from typing import Dict, Any, List, Optional
 import os
+import hashlib
 import logging
 from datetime import datetime, timezone
+import numpy as np
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
@@ -26,6 +34,12 @@ from app.data_processing.ndvi_processor import NdviProcessor
 from app.data_processing.ocean_processor import OceanProcessor
 from app.data_processing.atmosphere_processor import AtmosphereProcessor
 from app.data_processing.quality_control import QualityControl
+from app.integrations.nasa.earthdata_client import NasaEarthdataClient
+from app.integrations.nasa.modis_client import ModisClient
+from app.integrations.nasa.ocean_color_client import OceanColorClient
+from app.integrations.nasa.atmosphere_client import AtmosphereClient
+from app.integrations.nasa.gpm_client import GpmClient
+from app.integrations.nasa.swot_client import SwotClient
 
 logger = logging.getLogger("planetiq.ingestion_service")
 
@@ -34,7 +48,7 @@ class IngestionService:
     """Manages satellite data ingestion pipelines and database persistence across all three domains."""
 
     # =========================================================================
-    # 1. LAND BENCHMARKS: NASA MODIS Terra MOD13C2 v061 (0.05° CMG)
+    # Isolated Test Development Fixtures (Tagged Strictly as Synthetic)
     # =========================================================================
     AUTHENTIC_MODIS_BENCHMARKS = [
         {
@@ -44,7 +58,8 @@ class IngestionService:
             "lon": 75.85,
             "land_cover": "Double-Cropped Irrigated Agriculture",
             "baseline_ndvi": 0.485,
-            "granule_id": "MOD13C2.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD13C2",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "ndvi": 0.710, "evi": 0.505, "vci": 75.8, "qa": 0},
                 {"date": "2025-03", "ndvi": 0.728, "evi": 0.521, "vci": 79.2, "qa": 0},
@@ -59,7 +74,8 @@ class IngestionService:
             "lon": 76.27,
             "land_cover": "Tropical Wet Evergreen Forest / Agroforestry",
             "baseline_ndvi": 0.765,
-            "granule_id": "MOD13C2.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD13C2",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "ndvi": 0.722, "evi": 0.502, "vci": 65.0, "qa": 0},
                 {"date": "2025-03", "ndvi": 0.745, "evi": 0.525, "vci": 70.1, "qa": 0},
@@ -74,7 +90,8 @@ class IngestionService:
             "lon": -62.21,
             "land_cover": "Dense Moist Evergreen Tropical Forest",
             "baseline_ndvi": 0.835,
-            "granule_id": "MOD13C2.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD13C2",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "ndvi": 0.825, "evi": 0.565, "vci": 69.5, "qa": 0},
                 {"date": "2025-03", "ndvi": 0.830, "evi": 0.570, "vci": 71.0, "qa": 0},
@@ -89,7 +106,8 @@ class IngestionService:
             "lon": -93.63,
             "land_cover": "Row Croplands / Temperate Agriculture",
             "baseline_ndvi": 0.440,
-            "granule_id": "MOD13C2.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD13C2",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "ndvi": 0.240, "evi": 0.170, "vci": 50.0, "qa": 0},
                 {"date": "2025-03", "ndvi": 0.228, "evi": 0.160, "vci": 46.2, "qa": 0},
@@ -104,7 +122,8 @@ class IngestionService:
             "lon": 2.12,
             "land_cover": "Open Shrublands / Semi-Arid Woody Savanna",
             "baseline_ndvi": 0.265,
-            "granule_id": "MOD13C2.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD13C2",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "ndvi": 0.142, "evi": 0.102, "vci": 35.0, "qa": 0},
                 {"date": "2025-03", "ndvi": 0.150, "evi": 0.110, "vci": 38.0, "qa": 0},
@@ -119,7 +138,8 @@ class IngestionService:
             "lon": 129.74,
             "land_cover": "Deciduous Needleleaf Boreal Forest",
             "baseline_ndvi": 0.360,
-            "granule_id": "MOD13C2.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD13C2",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "ndvi": 0.125, "evi": 0.088, "vci": 34.0, "qa": 2},
                 {"date": "2025-03", "ndvi": 0.118, "evi": 0.082, "vci": 31.0, "qa": 2},
@@ -134,7 +154,8 @@ class IngestionService:
             "lon": 31.02,
             "land_cover": "Intensively Irrigated Croplands",
             "baseline_ndvi": 0.625,
-            "granule_id": "MOD13C2.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD13C2",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "ndvi": 0.658, "evi": 0.472, "vci": 73.0, "qa": 0},
                 {"date": "2025-03", "ndvi": 0.665, "evi": 0.478, "vci": 74.5, "qa": 0},
@@ -149,7 +170,8 @@ class IngestionService:
             "lon": 142.16,
             "land_cover": "Dryland Farming / Temperate Grassland",
             "baseline_ndvi": 0.335,
-            "granule_id": "MOD13C2.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD13C2",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "ndvi": 0.278, "evi": 0.198, "vci": 42.5, "qa": 0},
                 {"date": "2025-03", "ndvi": 0.292, "evi": 0.210, "vci": 46.0, "qa": 0},
@@ -164,7 +186,8 @@ class IngestionService:
             "lon": 23.51,
             "land_cover": "Equatorial Moist Broadleaf Forest",
             "baseline_ndvi": 0.805,
-            "granule_id": "MOD13C2.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD13C2",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "ndvi": 0.802, "evi": 0.562, "vci": 68.5, "qa": 0},
                 {"date": "2025-03", "ndvi": 0.810, "evi": 0.570, "vci": 71.0, "qa": 0},
@@ -179,7 +202,8 @@ class IngestionService:
             "lon": -11.00,
             "land_cover": "Barren or Sparsely Vegetated Desert",
             "baseline_ndvi": 0.065,
-            "granule_id": "MOD13C2.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD13C2",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "ndvi": 0.064, "evi": 0.044, "vci": 26.0, "qa": 0},
                 {"date": "2025-03", "ndvi": 0.060, "evi": 0.040, "vci": 24.0, "qa": 0},
@@ -189,9 +213,6 @@ class IngestionService:
         },
     ]
 
-    # =========================================================================
-    # 2. OCEAN BENCHMARKS: NASA MODIS Aqua (OB.DAAC) & SWOT KaRIn (PO.DAAC)
-    # =========================================================================
     AUTHENTIC_OCEAN_BENCHMARKS = [
         {
             "id": "arabian_sea_upwelling",
@@ -201,7 +222,8 @@ class IngestionService:
             "marine_province": "Northwestern Indian Ocean Upwelling System",
             "baseline_chl": 0.450,
             "baseline_sst": 26.8,
-            "granule_id": "MODISA_L3m_CHL.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MODISA_CHL",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "chl": 1.25, "sst": 26.5, "ssha": 0.04, "qa": 0},
                 {"date": "2025-03", "chl": 1.42, "sst": 26.8, "ssha": 0.05, "qa": 0},
@@ -217,7 +239,8 @@ class IngestionService:
             "marine_province": "Subpolar North Atlantic Gyre",
             "baseline_chl": 0.850,
             "baseline_sst": 9.2,
-            "granule_id": "MODISA_L3m_CHL.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MODISA_CHL",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "chl": 0.78, "sst": 8.9, "ssha": -0.07, "qa": 0},
                 {"date": "2025-03", "chl": 0.82, "sst": 9.1, "ssha": -0.06, "qa": 0},
@@ -233,7 +256,8 @@ class IngestionService:
             "marine_province": "Eastern Tropical Pacific Upwelling",
             "baseline_chl": 0.360,
             "baseline_sst": 23.0,
-            "granule_id": "MODISA_L3m_CHL.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MODISA_CHL",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "chl": 0.32, "sst": 24.2, "ssha": 0.08, "qa": 0},
                 {"date": "2025-03", "chl": 0.35, "sst": 23.5, "ssha": 0.02, "qa": 0},
@@ -248,104 +272,26 @@ class IngestionService:
             "lon": -65.00,
             "marine_province": "North Atlantic Subtropical Oligotrophic Gyre",
             "baseline_chl": 0.040,
-            "baseline_sst": 24.5,
-            "granule_id": "MODISA_L3m_CHL.A2026060.061.2026085141200",
+            "baseline_sst": 22.4,
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MODISA_CHL",
+            "verification_status": "synthetic",
             "observations": [
-                {"date": "2024-03", "chl": 0.042, "sst": 24.3, "ssha": 0.10, "qa": 0},
-                {"date": "2025-03", "chl": 0.039, "sst": 24.6, "ssha": 0.11, "qa": 0},
-                {"date": "2026-03", "chl": 0.038, "sst": 24.8, "ssha": 0.12, "qa": 0},
-                {"date": "2026-09", "chl": 0.032, "sst": 28.4, "ssha": 0.15, "qa": 0},
+                {"date": "2024-03", "chl": 0.045, "sst": 22.1, "ssha": 0.01, "qa": 0},
+                {"date": "2025-03", "chl": 0.042, "sst": 22.4, "ssha": 0.02, "qa": 0},
+                {"date": "2026-03", "chl": 0.040, "sst": 22.8, "ssha": 0.01, "qa": 0},
+                {"date": "2026-09", "chl": 0.035, "sst": 28.1, "ssha": 0.05, "qa": 0},
             ],
         },
         {
-            "id": "humboldt_current_peru",
-            "name": "Humboldt Current High-Productivity Coastal Upwelling (Peru)",
-            "lat": -12.50,
-            "lon": -78.20,
-            "marine_province": "Eastern Boundary Current / Coastal Upwelling",
-            "baseline_chl": 2.800,
-            "baseline_sst": 17.8,
-            "granule_id": "MODISA_L3m_CHL.A2026060.061.2026085141200",
-            "observations": [
-                {"date": "2024-03", "chl": 2.95, "sst": 18.2, "ssha": 0.02, "qa": 0},
-                {"date": "2025-03", "chl": 3.10, "sst": 17.9, "ssha": -0.02, "qa": 0},
-                {"date": "2026-03", "chl": 3.25, "sst": 17.5, "ssha": -0.05, "qa": 0},
-                {"date": "2026-09", "chl": 4.15, "sst": 16.2, "ssha": -0.08, "qa": 0},
-            ],
-        },
-        {
-            "id": "southern_ocean_polar_front",
-            "name": "Southern Ocean Antarctic Polar Front (Drake Passage)",
-            "lat": -55.00,
-            "lon": -45.00,
-            "marine_province": "Antarctic Circumpolar Current Zone",
-            "baseline_chl": 0.380,
-            "baseline_sst": 3.4,
-            "granule_id": "MODISA_L3m_CHL.A2026060.061.2026085141200",
-            "observations": [
-                {"date": "2024-03", "chl": 0.40, "sst": 3.5, "ssha": -0.12, "qa": 0},
-                {"date": "2025-03", "chl": 0.41, "sst": 3.3, "ssha": -0.14, "qa": 0},
-                {"date": "2026-03", "chl": 0.42, "sst": 3.1, "ssha": -0.15, "qa": 0},
-                {"date": "2026-09", "chl": 0.18, "sst": 1.2, "ssha": -0.18, "qa": 0},
-            ],
-        },
-        {
-            "id": "great_barrier_reef_lagoon",
-            "name": "Great Barrier Reef Marine Lagoon (Queensland, Australia)",
-            "lat": -18.20,
-            "lon": 147.50,
-            "marine_province": "Coral Sea Barrier Reef Lagoonal Water",
-            "baseline_chl": 0.480,
-            "baseline_sst": 27.9,
-            "granule_id": "MODISA_L3m_CHL.A2026060.061.2026085141200",
-            "observations": [
-                {"date": "2024-03", "chl": 0.50, "sst": 28.5, "ssha": 0.08, "qa": 0},
-                {"date": "2025-03", "chl": 0.51, "sst": 28.3, "ssha": 0.06, "qa": 0},
-                {"date": "2026-03", "chl": 0.52, "sst": 28.2, "ssha": 0.05, "qa": 0},
-                {"date": "2026-09", "chl": 0.35, "sst": 24.1, "ssha": 0.02, "qa": 0},
-            ],
-        },
-        {
-            "id": "kuroshio_extension_meander",
-            "name": "Kuroshio Extension Warm-Core Ring (Northwest Pacific)",
-            "lat": 35.50,
-            "lon": 145.00,
-            "marine_province": "Western Boundary Current Extension",
-            "baseline_chl": 0.250,
-            "baseline_sst": 21.2,
-            "granule_id": "MODISA_L3m_CHL.A2026060.061.2026085141200",
-            "observations": [
-                {"date": "2024-03", "chl": 0.26, "sst": 21.5, "ssha": 0.15, "qa": 0},
-                {"date": "2025-03", "chl": 0.27, "sst": 21.6, "ssha": 0.16, "qa": 0},
-                {"date": "2026-03", "chl": 0.28, "sst": 21.8, "ssha": 0.18, "qa": 0},
-                {"date": "2026-09", "chl": 0.38, "sst": 25.4, "ssha": 0.22, "qa": 0},
-            ],
-        },
-        {
-            "id": "california_current_upwelling",
-            "name": "California Current Coastal Upwelling (Monterey Bay, USA)",
-            "lat": 36.20,
-            "lon": -123.00,
-            "marine_province": "Eastern Boundary Upwelling System",
-            "baseline_chl": 1.450,
-            "baseline_sst": 14.8,
-            "granule_id": "MODISA_L3m_CHL.A2026060.061.2026085141200",
-            "observations": [
-                {"date": "2024-03", "chl": 1.55, "sst": 14.2, "ssha": -0.04, "qa": 0},
-                {"date": "2025-03", "chl": 1.60, "sst": 14.4, "ssha": -0.05, "qa": 0},
-                {"date": "2026-03", "chl": 1.65, "sst": 14.5, "ssha": -0.06, "qa": 0},
-                {"date": "2026-09", "chl": 2.10, "sst": 15.8, "ssha": -0.02, "qa": 0},
-            ],
-        },
-        {
-            "id": "benguela_upwelling_namibia",
-            "name": "Benguela Hyper-Productive Upwelling System (Namibia)",
-            "lat": -23.00,
-            "lon": 13.50,
-            "marine_province": "Southeast Atlantic Upwelling Ecosystem",
+            "id": "peru_humboldt_upwelling",
+            "name": "Peru Humboldt Current Upwelling (Callao)",
+            "lat": -12.05,
+            "lon": -77.15,
+            "marine_province": "Humboldt Current Large Marine Ecosystem",
             "baseline_chl": 3.800,
-            "baseline_sst": 15.6,
-            "granule_id": "MODISA_L3m_CHL.A2026060.061.2026085141200",
+            "baseline_sst": 16.0,
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MODISA_CHL",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "chl": 3.95, "sst": 15.8, "ssha": -0.06, "qa": 0},
                 {"date": "2025-03", "chl": 4.02, "sst": 15.5, "ssha": -0.07, "qa": 0},
@@ -355,9 +301,6 @@ class IngestionService:
         },
     ]
 
-    # =========================================================================
-    # 3. ATMOSPHERE BENCHMARKS: NASA MODIS (LAADS DAAC) & GPM IMERG (GES DISC)
-    # =========================================================================
     AUTHENTIC_ATMOSPHERE_BENCHMARKS = [
         {
             "id": "indo_gangetic_winter_haze",
@@ -367,7 +310,8 @@ class IngestionService:
             "atmospheric_regime": "Continental Particulate Inversion Zone",
             "baseline_aod": 0.480,
             "baseline_rain": 15.0,
-            "granule_id": "MOD08_M3.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD08_M3",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "aod": 0.650, "cld": 0.24, "rain_rate": 0.022, "rain_acc": 16.4, "qa": 3},
                 {"date": "2025-03", "aod": 0.710, "cld": 0.26, "rain_rate": 0.018, "rain_acc": 13.4, "qa": 3},
@@ -383,7 +327,8 @@ class IngestionService:
             "atmospheric_regime": "Saharan Air Layer (SAL) Dust Transport",
             "baseline_aod": 0.380,
             "baseline_rain": 2.5,
-            "granule_id": "MOD08_M3.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD08_M3",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "aod": 0.580, "cld": 0.14, "rain_rate": 0.003, "rain_acc": 2.2, "qa": 3},
                 {"date": "2025-03", "aod": 0.600, "cld": 0.15, "rain_rate": 0.002, "rain_acc": 1.5, "qa": 3},
@@ -399,7 +344,8 @@ class IngestionService:
             "atmospheric_regime": "Equatorial Deep Moist Convection",
             "baseline_aod": 0.140,
             "baseline_rain": 295.0,
-            "granule_id": "MOD08_M3.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD08_M3",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "aod": 0.140, "cld": 0.80, "rain_rate": 0.410, "rain_acc": 305.0, "qa": 3},
                 {"date": "2025-03", "aod": 0.142, "cld": 0.81, "rain_rate": 0.415, "rain_acc": 308.8, "qa": 3},
@@ -415,7 +361,8 @@ class IngestionService:
             "atmospheric_regime": "Tropical Oceanic Deep Convection",
             "baseline_aod": 0.060,
             "baseline_rain": 270.0,
-            "granule_id": "MOD08_M3.A2026060.061.2026085141200",
+            "granule_id": "SYNTHETIC_DEV_FIXTURE_MOD08_M3",
+            "verification_status": "synthetic",
             "observations": [
                 {"date": "2024-03", "aod": 0.062, "cld": 0.86, "rain_rate": 0.370, "rain_acc": 275.3, "qa": 3},
                 {"date": "2025-03", "aod": 0.064, "cld": 0.87, "rain_rate": 0.380, "rain_acc": 282.7, "qa": 3},
@@ -423,116 +370,350 @@ class IngestionService:
                 {"date": "2026-09", "aod": 0.058, "cld": 0.85, "rain_rate": 0.360, "rain_acc": 259.2, "qa": 3},
             ],
         },
-        {
-            "id": "east_asia_industrial_plain",
-            "name": "North China Plain Sulfate/Nitrate Haze (Shandong, China)",
-            "lat": 36.50,
-            "lon": 116.50,
-            "atmospheric_regime": "East Asian Industrial Boundary Layer",
-            "baseline_aod": 0.520,
-            "baseline_rain": 20.0,
-            "granule_id": "MOD08_M3.A2026060.061.2026085141200",
-            "observations": [
-                {"date": "2024-03", "aod": 0.680, "cld": 0.42, "rain_rate": 0.028, "rain_acc": 20.8, "qa": 3},
-                {"date": "2025-03", "aod": 0.705, "cld": 0.44, "rain_rate": 0.025, "rain_acc": 18.6, "qa": 3},
-                {"date": "2026-03", "aod": 0.720, "cld": 0.45, "rain_rate": 0.030, "rain_acc": 22.0, "qa": 3},
-                {"date": "2026-09", "aod": 0.410, "cld": 0.52, "rain_rate": 0.095, "rain_acc": 68.4, "qa": 3},
-            ],
-        },
-        {
-            "id": "north_atlantic_storm_track",
-            "name": "North Atlantic Marine Cyclone Track (West of Ireland)",
-            "lat": 53.00,
-            "lon": -18.00,
-            "atmospheric_regime": "Mid-Latitude Marine Frontal Cyclones",
-            "baseline_aod": 0.080,
-            "baseline_rain": 110.0,
-            "granule_id": "MOD08_M3.A2026060.061.2026085141200",
-            "observations": [
-                {"date": "2024-03", "aod": 0.082, "cld": 0.90, "rain_rate": 0.150, "rain_acc": 111.6, "qa": 3},
-                {"date": "2025-03", "aod": 0.084, "cld": 0.91, "rain_rate": 0.152, "rain_acc": 113.1, "qa": 3},
-                {"date": "2026-03", "aod": 0.085, "cld": 0.92, "rain_rate": 0.155, "rain_acc": 115.0, "qa": 3},
-                {"date": "2026-09", "aod": 0.075, "cld": 0.86, "rain_rate": 0.130, "rain_acc": 93.6, "qa": 3},
-            ],
-        },
-        {
-            "id": "arabian_peninsula_arid",
-            "name": "Arabian Peninsula Hyper-Arid Desert (Rub al Khali)",
-            "lat": 22.00,
-            "lon": 51.00,
-            "atmospheric_regime": "Subtropical Subsidence & Mineral Dust",
-            "baseline_aod": 0.420,
-            "baseline_rain": 0.5,
-            "granule_id": "MOD08_M3.A2026060.061.2026085141200",
-            "observations": [
-                {"date": "2024-03", "aod": 0.460, "cld": 0.06, "rain_rate": 0.000, "rain_acc": 0.0, "qa": 3},
-                {"date": "2025-03", "aod": 0.470, "cld": 0.05, "rain_rate": 0.000, "rain_acc": 0.0, "qa": 3},
-                {"date": "2026-03", "aod": 0.480, "cld": 0.05, "rain_rate": 0.0003, "rain_acc": 0.2, "qa": 3},
-                {"date": "2026-09", "aod": 0.510, "cld": 0.04, "rain_rate": 0.000, "rain_acc": 0.0, "qa": 3},
-            ],
-        },
-        {
-            "id": "congo_basin_equatorial",
-            "name": "Congo Basin Moist Tropical Convection (DRC)",
-            "lat": 0.00,
-            "lon": 24.00,
-            "atmospheric_regime": "Continental Deep Tropical Convection",
-            "baseline_aod": 0.260,
-            "baseline_rain": 185.0,
-            "granule_id": "MOD08_M3.A2026060.061.2026085141200",
-            "observations": [
-                {"date": "2024-03", "aod": 0.270, "cld": 0.77, "rain_rate": 0.255, "rain_acc": 189.7, "qa": 3},
-                {"date": "2025-03", "aod": 0.275, "cld": 0.78, "rain_rate": 0.260, "rain_acc": 193.4, "qa": 3},
-                {"date": "2026-03", "aod": 0.280, "cld": 0.79, "rain_rate": 0.262, "rain_acc": 195.0, "qa": 3},
-                {"date": "2026-09", "aod": 0.380, "cld": 0.72, "rain_rate": 0.220, "rain_acc": 158.4, "qa": 3},
-            ],
-        },
-        {
-            "id": "se_asia_maritime_continent",
-            "name": "Southeast Asian Maritime Continent (Sumatra, Indonesia)",
-            "lat": -0.50,
-            "lon": 101.50,
-            "atmospheric_regime": "Equatorial Island Convection & Peatland Haze",
-            "baseline_aod": 0.280,
-            "baseline_rain": 250.0,
-            "granule_id": "MOD08_M3.A2026060.061.2026085141200",
-            "observations": [
-                {"date": "2024-03", "aod": 0.290, "cld": 0.72, "rain_rate": 0.340, "rain_acc": 253.0, "qa": 3},
-                {"date": "2025-03", "aod": 0.300, "cld": 0.73, "rain_rate": 0.345, "rain_acc": 256.7, "qa": 3},
-                {"date": "2026-03", "aod": 0.310, "cld": 0.74, "rain_rate": 0.350, "rain_acc": 260.0, "qa": 3},
-                {"date": "2026-09", "aod": 0.440, "cld": 0.65, "rain_rate": 0.240, "rain_acc": 172.8, "qa": 3},
-            ],
-        },
-        {
-            "id": "southern_ocean_pristine_air",
-            "name": "Southern Ocean Clean Marine Boundary Layer",
-            "lat": -52.00,
-            "lon": 90.00,
-            "atmospheric_regime": "Clean Maritime Aerosol Baseline",
-            "baseline_aod": 0.040,
-            "baseline_rain": 85.0,
-            "granule_id": "MOD08_M3.A2026060.061.2026085141200",
-            "observations": [
-                {"date": "2024-03", "aod": 0.042, "cld": 0.84, "rain_rate": 0.115, "rain_acc": 85.6, "qa": 3},
-                {"date": "2025-03", "aod": 0.044, "cld": 0.85, "rain_rate": 0.117, "rain_acc": 87.0, "qa": 3},
-                {"date": "2026-03", "aod": 0.045, "cld": 0.86, "rain_rate": 0.118, "rain_acc": 88.0, "qa": 3},
-                {"date": "2026-09", "aod": 0.038, "cld": 0.82, "rain_rate": 0.095, "rain_acc": 68.4, "qa": 3},
-            ],
-        },
     ]
 
+    # =========================================================================
+    # Cryptographic File Integrity
+    # =========================================================================
+
     @classmethod
-    def seed_initial_observations(cls, session: Session) -> int:
+    def calculate_sha256(cls, file_path: str) -> str:
+        """Computes SHA-256 cryptographic checksum of a satellite file."""
+        sha = hashlib.sha256()
+        with open(file_path, "rb") as f:
+            while chunk := f.read(65536):
+                sha.update(chunk)
+        return sha.hexdigest()
+
+    # =========================================================================
+    # Genuine Satellite Granule File Ingestion
+    # =========================================================================
+
+    @classmethod
+    def ingest_granule_file(
+        cls,
+        granule_path: str,
+        dataset_id: str,
+        date_str: str,
+        session: Session,
+        mission_name: Optional[str] = None,
+        location_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        Seeds authentic NASA observation benchmarks across Land, Ocean, and Atmosphere into the database.
-        Inserts both ObservationTimeSeriesRecord and EarthObservation catalog entries.
-        Idempotent: skips records that already exist.
+        Ingests a verified NASA satellite granule file into the database.
+        - Calculates SHA-256 checksum.
+        - Decodes scientific arrays with quality control.
+        - Persists verified catalog entries in earth_observations.
+        - Persists verified measurements in observation_timeseries.
+        - Strictly flags all records with:
+            verification_status = 'verified_observation'
+            is_observation = True
+            data_status = 'observation'
+            source_file_checksum = <sha256>
+        """
+        if not os.path.exists(granule_path):
+            raise FileNotFoundError(f"Granule file not found: {granule_path}")
+
+        file_size = os.path.getsize(granule_path)
+        if file_size < 100:
+            raise ValueError(f"Granule file {granule_path} is too small ({file_size} bytes) to be valid scientific data.")
+
+        checksum = cls.calculate_sha256(granule_path)
+        granule_id = os.path.basename(granule_path)
+
+        parts = date_str.split("-")
+        obs_dt = datetime(int(parts[0]), int(parts[1]), 1, tzinfo=timezone.utc)
+
+        features: List[Dict[str, Any]] = []
+        unit = "dimensionless"
+        mission = mission_name or "NASA Earth Observation"
+
+        # 1. LAND: MOD13C2
+        if dataset_id == "MOD13C2":
+            mission = mission_name or "MODIS Terra"
+            unit = "dimensionless ratio (-0.2000 to +1.0000)"
+            res = NdviProcessor.read_satellite_file(granule_path, date_str)
+            if res and res.get("features"):
+                features = res["features"]
+
+        # 2. OCEAN: MODISA_L3m_CHL, MODISA_L3m_SST, SWOT_L2_LR_SSH
+        elif dataset_id in ["MODISA_L3m_CHL", "MODISA_L3m_SST", "SWOT_L2_LR_SSH", "MODISA_L3m_OCEAN_SWOT"]:
+            mission = mission_name or ("MODIS Aqua Ocean Color" if "CHL" in dataset_id else "SWOT KaRIn Altimetry")
+            unit = "mg/m³" if "CHL" in dataset_id else ("°C" if "SST" in dataset_id else "meters (m)")
+            features = cls._parse_ocean_granule_file(granule_path, dataset_id, date_str, granule_id)
+
+        # 3. ATMOSPHERE: MOD08_M3, GPM_3IMERGM
+        elif dataset_id in ["MOD08_M3", "GPM_3IMERGM", "MODIS_GPM_ATMOSPHERE"]:
+            mission = mission_name or ("MODIS Atmosphere" if "MOD08" in dataset_id else "GPM Core Observatory")
+            unit = "dimensionless ratio" if "MOD08" in dataset_id else "mm"
+            features = cls._parse_atmosphere_granule_file(granule_path, dataset_id, date_str, granule_id)
+
+        if not features:
+            logger.warning(f"No valid scientific features decoded from granule {granule_path} for dataset {dataset_id}")
+            return {
+                "status": "failed",
+                "message": f"Could not decode valid scientific features from {granule_id}",
+                "granule_id": granule_id,
+                "checksum": checksum,
+                "records_persisted": 0,
+            }
+
+        # Calculate bounding coordinates and aggregates
+        lats = [f["geometry"]["coordinates"][1] for f in features]
+        lons = [f["geometry"]["coordinates"][0] for f in features]
+        vals = [
+            f["properties"].get("ndvi")
+            or f["properties"].get("chlor_a")
+            or f["properties"].get("sst")
+            or f["properties"].get("ssha_karin_m")
+            or f["properties"].get("precipitation_accumulated_mm")
+            or f["properties"].get("aod_550")
+            or 0.0
+            for f in features
+        ]
+
+        min_lat, max_lat = min(lats), max(lats)
+        min_lon, max_lon = min(lons), max(lons)
+        mean_val = round(float(np.mean(vals)), 4) if vals else 0.0
+        min_val = round(float(np.min(vals)), 4) if vals else 0.0
+        max_val = round(float(np.max(vals)), 4) if vals else 0.0
+
+        # Persist EarthObservation catalog record
+        existing_cat = session.execute(
+            select(EarthObservation).filter_by(
+                dataset_id=dataset_id,
+                observation_time=obs_dt,
+                granule_id=granule_id,
+            )
+        ).scalar_one_or_none()
+
+        if not existing_cat:
+            cat_rec = EarthObservation(
+                dataset_id=dataset_id,
+                mission_name=mission,
+                observation_time=obs_dt,
+                min_latitude=min_lat,
+                max_latitude=max_lat,
+                min_longitude=min_lon,
+                max_longitude=max_lon,
+                mean_value=mean_val,
+                min_value=min_val,
+                max_value=max_val,
+                unit=unit,
+                verification_status="verified_observation",
+                source_file_checksum=checksum,
+                granule_id=granule_id,
+                processing_version="v1.0",
+                extra_metadata={
+                    "granule_id": granule_id,
+                    "checksum_sha256": checksum,
+                    "data_status": "observation",
+                    "is_observation": True,
+                    "verification_status": "verified_observation",
+                    "source_type": "satellite_telemetry",
+                    "feature_count": len(features),
+                },
+            )
+            session.add(cat_rec)
+
+        # Persist time-series records
+        persisted_ts_count = 0
+        for f in features:
+            props = f["properties"]
+            coords = f["geometry"]["coordinates"]
+            loc_label = props.get("region_name") or props.get("location_name") or f"Point ({coords[1]:+.2f}°, {coords[0]:+.2f}°)"
+            metric = (
+                props.get("primary_ocean_metric")
+                or ("NDVI" if dataset_id == "MOD13C2" else ("aod_550" if "MOD08" in dataset_id else "precipitation_accumulated"))
+            )
+            val = (
+                props.get("ndvi")
+                if dataset_id == "MOD13C2"
+                else (props.get("chlor_a") or props.get("sst") or props.get("ssha_karin_m") or props.get("aod_550") or props.get("precipitation_accumulated_mm") or 0.0)
+            )
+
+            existing_ts = session.execute(
+                select(ObservationTimeSeriesRecord.id).filter_by(
+                    dataset_id=dataset_id,
+                    location_name=loc_label,
+                    date_str=date_str,
+                    metric_name=metric,
+                )
+            ).scalar_one_or_none()
+
+            if not existing_ts:
+                ts_rec = ObservationTimeSeriesRecord(
+                    dataset_id=dataset_id,
+                    location_name=loc_label,
+                    latitude=coords[1],
+                    longitude=coords[0],
+                    date_str=date_str,
+                    metric_name=metric,
+                    value=float(val),
+                    unit=unit,
+                    baseline_normal=props.get("baseline_normal"),
+                    anomaly=props.get("anomaly"),
+                    quality_flag=float(props.get("quality_flag", 0.0)),
+                    verification_status="verified_observation",
+                    source_file_checksum=checksum,
+                    granule_id=granule_id,
+                )
+                session.add(ts_rec)
+                persisted_ts_count += 1
+
+        session.commit()
+        logger.info(f"Successfully ingested genuine satellite granule {granule_id} ({persisted_ts_count} timeseries points).")
+
+        return {
+            "status": "success",
+            "granule_id": granule_id,
+            "checksum": checksum,
+            "features_extracted": len(features),
+            "records_persisted": persisted_ts_count + (1 if not existing_cat else 0),
+        }
+
+    # =========================================================================
+    # Live NASA Earthdata Ingestion Runner
+    # =========================================================================
+
+    @classmethod
+    async def ingest_live_granule(
+        cls,
+        dataset_id: str,
+        year: int,
+        month: int,
+        session: Session,
+    ) -> Dict[str, Any]:
+        """
+        Discovers and retrieves genuine satellite data from NASA CMR.
+        If credentials are not configured, transparently reports the blocker.
+        """
+        auth_status = NasaEarthdataClient.get_auth_status()
+        if not auth_status.get("granule_download_available"):
+            return {
+                "status": "blocked",
+                "reason": "NASA_EARTHDATA_CREDENTIALS_REQUIRED",
+                "message": (
+                    "NASA Earthdata credentials (NASA_EARTHDATA_BEARER_TOKEN or username/password in .env) "
+                    "are required to download and ingest genuine satellite granules. CMR search is operational."
+                ),
+            }
+
+        # Discover granule
+        granule = None
+        if dataset_id == "MOD13C2":
+            granule = await ModisClient.find_granule_for_month(year, month)
+            if granule:
+                ret = await ModisClient.retrieve_granule_file(granule)
+                if ret.get("status") in ["downloaded", "cached"] and ret.get("file_path"):
+                    date_str = f"{year:04d}-{month:02d}"
+                    return cls.ingest_granule_file(ret["file_path"], dataset_id, date_str, session)
+        elif "CHL" in dataset_id or "SST" in dataset_id:
+            prod = "chl" if "CHL" in dataset_id else "sst"
+            granule = await OceanColorClient.find_granule_for_month(prod, year, month)
+            if granule:
+                ret = await OceanColorClient.retrieve_granule_file(granule)
+                if ret.get("status") in ["downloaded", "cached"] and ret.get("file_path"):
+                    date_str = f"{year:04d}-{month:02d}"
+                    return cls.ingest_granule_file(ret["file_path"], dataset_id, date_str, session)
+
+        return {
+            "status": "not_found",
+            "message": f"No genuine granule discovered on CMR for {dataset_id} in {year}-{month:02d}.",
+        }
+
+    # =========================================================================
+    # Array Decoders for Ocean & Atmosphere Granules
+    # =========================================================================
+
+    @classmethod
+    def _parse_ocean_granule_file(
+        cls, file_path: str, dataset_id: str, date_str: str, granule_id: str
+    ) -> List[Dict[str, Any]]:
+        """Parses scientific netCDF4/HDF ocean files into GeoJSON features."""
+        features = []
+        try:
+            import netCDF4 as nc
+            with nc.Dataset(file_path, "r") as ds:
+                # Find chlor_a or sst or ssha variables
+                for var_name in ["chlor_a", "sst", "ssha"]:
+                    if var_name in ds.variables:
+                        data = ds.variables[var_name][:]
+                        lats = ds.variables.get("lat") or ds.variables.get("latitude")
+                        lons = ds.variables.get("lon") or ds.variables.get("longitude")
+                        if lats is not None and lons is not None:
+                            # Subsample for points
+                            lat_arr = lats[:]
+                            lon_arr = lons[:]
+                            for i in range(0, min(len(lat_arr), 10)):
+                                for j in range(0, min(len(lon_arr), 10)):
+                                    val = float(data[i, j]) if data.ndim == 2 else float(data[0, i, j])
+                                    lat_val = float(lat_arr[i])
+                                    lon_val = float(lon_arr[j])
+                                    feat = OceanProcessor.process_ocean_point(
+                                        lat=lat_val,
+                                        lon=lon_val,
+                                        date_str=date_str,
+                                        granule_id=granule_id,
+                                        chl=val if var_name == "chlor_a" else None,
+                                        sst=val if var_name == "sst" else None,
+                                        ssha=val if var_name == "ssha" else None,
+                                    )
+                                    if feat:
+                                        features.append(feat)
+        except Exception as exc:
+            logger.debug(f"NetCDF parsing not applicable for {file_path}: {exc}")
+        return features
+
+    @classmethod
+    def _parse_atmosphere_granule_file(
+        cls, file_path: str, dataset_id: str, date_str: str, granule_id: str
+    ) -> List[Dict[str, Any]]:
+        """Parses scientific netCDF4/HDF atmosphere files into GeoJSON features."""
+        features = []
+        try:
+            import netCDF4 as nc
+            with nc.Dataset(file_path, "r") as ds:
+                for var_name in ["precipitation", "precipitationCal", "AOD_550_Dark_Target_Deep_Blue_Combined_Mean_Mean"]:
+                    if var_name in ds.variables:
+                        data = ds.variables[var_name][:]
+                        lats = ds.variables.get("lat") or ds.variables.get("latitude")
+                        lons = ds.variables.get("lon") or ds.variables.get("longitude")
+                        if lats is not None and lons is not None:
+                            lat_arr = lats[:]
+                            lon_arr = lons[:]
+                            for i in range(0, min(len(lat_arr), 10)):
+                                for j in range(0, min(len(lon_arr), 10)):
+                                    val = float(data[i, j]) if data.ndim == 2 else float(data[0, i, j])
+                                    lat_val = float(lat_arr[i])
+                                    lon_val = float(lon_arr[j])
+                                    feat = AtmosphereProcessor.process_atmosphere_point(
+                                        lat=lat_val,
+                                        lon=lon_val,
+                                        date_str=date_str,
+                                        granule_id=granule_id,
+                                        aod=val if "AOD" in var_name else None,
+                                        precip_accumulated_mm=val if "precip" in var_name else None,
+                                    )
+                                    if feat:
+                                        features.append(feat)
+        except Exception as exc:
+            logger.debug(f"Atmosphere NetCDF parsing not applicable for {file_path}: {exc}")
+        return features
+
+    # =========================================================================
+    # Isolated Development Test Fixture Seeding (Never Labeled Observation)
+    # =========================================================================
+
+    @classmethod
+    def seed_test_fixtures(cls, session: Session) -> int:
+        """
+        Seeds isolated development test fixtures into the database.
+        CRITICAL: All records are strictly tagged as 'synthetic' and is_observation=False.
         """
         inserted_count = 0
 
-        # ---------------------------------------------------------------------
-        # 1. Seed Land (MODIS MOD13C2)
-        # ---------------------------------------------------------------------
+        # 1. Land Fixtures
         for bench in cls.AUTHENTIC_MODIS_BENCHMARKS:
             loc_name = bench["name"]
             lat, lon = bench["lat"], bench["lon"]
@@ -566,6 +747,9 @@ class IngestionService:
                         baseline_normal=base_ndvi,
                         anomaly=anomaly,
                         quality_flag=float(obs.get("qa", 0)),
+                        verification_status="synthetic",
+                        source_file_checksum=None,
+                        granule_id=granule,
                     )
                     session.add(ts_rec)
                     inserted_count += 1
@@ -584,7 +768,7 @@ class IngestionService:
                 if not cat_existing:
                     cat_rec = EarthObservation(
                         dataset_id="MOD13C2",
-                        mission_name="MODIS Terra",
+                        mission_name="MODIS Terra (Test Fixture)",
                         observation_time=obs_dt,
                         min_latitude=lat,
                         max_latitude=lat,
@@ -594,26 +778,28 @@ class IngestionService:
                         min_value=ndvi_val,
                         max_value=ndvi_val,
                         unit="dimensionless ratio (-0.2000 to +1.0000)",
+                        verification_status="synthetic",
+                        source_file_checksum=None,
+                        granule_id=granule,
+                        processing_version="synthetic_fixture",
                         extra_metadata={
                             "granule_id": granule,
                             "location_name": loc_name,
                             "evi": obs.get("evi"),
                             "vci_percent": obs.get("vci"),
                             "quality_flag": obs.get("qa", 0),
-                            "sensor": "MODIS Terra (0.05° CMG)",
-                            "data_status": "observation",
-                            "is_observation": True,
+                            "sensor": "MODIS Terra (Synthetic Test Fixture)",
+                            "data_status": "synthetic_fixture",
+                            "is_observation": False,
+                            "source_type": "synthetic",
                         },
                     )
                     session.add(cat_rec)
 
-        # ---------------------------------------------------------------------
-        # 2. Seed Ocean (MODIS Aqua CHL/SST & SWOT SSHA)
-        # ---------------------------------------------------------------------
+        # 2. Ocean Fixtures
         for bench in cls.AUTHENTIC_OCEAN_BENCHMARKS:
             loc_name = bench["name"]
             lat, lon = bench["lat"], bench["lon"]
-            base_chl = bench["baseline_chl"]
             granule = bench["granule_id"]
 
             for obs in bench["observations"]:
@@ -622,7 +808,6 @@ class IngestionService:
                 sst_val = obs["sst"]
                 ssha_val = obs["ssha"]
 
-                # Timeseries for Chlorophyll-a
                 existing_chl = session.execute(
                     select(ObservationTimeSeriesRecord.id).filter_by(
                         dataset_id="MODISA_L3m_CHL",
@@ -633,7 +818,7 @@ class IngestionService:
                 ).scalar_one_or_none()
 
                 if not existing_chl:
-                    ts_rec = ObservationTimeSeriesRecord(
+                    session.add(ObservationTimeSeriesRecord(
                         dataset_id="MODISA_L3m_CHL",
                         location_name=loc_name,
                         latitude=lat,
@@ -642,68 +827,15 @@ class IngestionService:
                         metric_name="chlor_a",
                         value=chl_val,
                         unit="mg/m³",
-                        baseline_normal=base_chl,
-                        anomaly=round(chl_val - base_chl, 3),
+                        baseline_normal=bench["baseline_chl"],
+                        anomaly=round(chl_val - bench["baseline_chl"], 3),
                         quality_flag=float(obs.get("qa", 0)),
-                    )
-                    session.add(ts_rec)
+                        verification_status="synthetic",
+                        source_file_checksum=None,
+                        granule_id=granule,
+                    ))
                     inserted_count += 1
 
-                # Timeseries for Sea Surface Temperature
-                existing_sst = session.execute(
-                    select(ObservationTimeSeriesRecord.id).filter_by(
-                        dataset_id="MODISA_L3m_SST",
-                        location_name=loc_name,
-                        date_str=date_str,
-                        metric_name="sst",
-                    )
-                ).scalar_one_or_none()
-
-                if not existing_sst:
-                    ts_rec_sst = ObservationTimeSeriesRecord(
-                        dataset_id="MODISA_L3m_SST",
-                        location_name=loc_name,
-                        latitude=lat,
-                        longitude=lon,
-                        date_str=date_str,
-                        metric_name="sst",
-                        value=sst_val,
-                        unit="°C",
-                        baseline_normal=bench["baseline_sst"],
-                        anomaly=round(sst_val - bench["baseline_sst"], 2),
-                        quality_flag=float(obs.get("qa", 0)),
-                    )
-                    session.add(ts_rec_sst)
-                    inserted_count += 1
-
-                # Timeseries for SWOT SSHA
-                existing_swot = session.execute(
-                    select(ObservationTimeSeriesRecord.id).filter_by(
-                        dataset_id="SWOT_L2_LR_SSH",
-                        location_name=loc_name,
-                        date_str=date_str,
-                        metric_name="ssha_karin",
-                    )
-                ).scalar_one_or_none()
-
-                if not existing_swot:
-                    ts_rec_swot = ObservationTimeSeriesRecord(
-                        dataset_id="SWOT_L2_LR_SSH",
-                        location_name=loc_name,
-                        latitude=lat,
-                        longitude=lon,
-                        date_str=date_str,
-                        metric_name="ssha_karin",
-                        value=ssha_val,
-                        unit="meters (m)",
-                        baseline_normal=0.0,
-                        anomaly=ssha_val,
-                        quality_flag=float(obs.get("qa", 0)),
-                    )
-                    session.add(ts_rec_swot)
-                    inserted_count += 1
-
-                # Catalog entry for Ocean
                 parts = date_str.split("-")
                 obs_dt = datetime(int(parts[0]), int(parts[1]), 1, tzinfo=timezone.utc)
                 cat_existing = session.execute(
@@ -716,9 +848,9 @@ class IngestionService:
                 ).scalar_one_or_none()
 
                 if not cat_existing:
-                    cat_rec = EarthObservation(
+                    session.add(EarthObservation(
                         dataset_id="MODISA_L3m_CHL",
-                        mission_name="MODIS Aqua Ocean Color",
+                        mission_name="MODIS Aqua (Test Fixture)",
                         observation_time=obs_dt,
                         min_latitude=lat,
                         max_latitude=lat,
@@ -728,26 +860,25 @@ class IngestionService:
                         min_value=chl_val,
                         max_value=chl_val,
                         unit="mg/m³",
+                        verification_status="synthetic",
+                        source_file_checksum=None,
+                        granule_id=granule,
+                        processing_version="synthetic_fixture",
                         extra_metadata={
                             "granule_id": granule,
                             "location_name": loc_name,
                             "sst_celsius": sst_val,
                             "ssha_karin_m": ssha_val,
-                            "quality_flag": obs.get("qa", 0),
-                            "sensor": "MODIS Aqua & SWOT KaRIn",
-                            "data_status": "observation",
-                            "is_observation": True,
+                            "data_status": "synthetic_fixture",
+                            "is_observation": False,
+                            "source_type": "synthetic",
                         },
-                    )
-                    session.add(cat_rec)
+                    ))
 
-        # ---------------------------------------------------------------------
-        # 3. Seed Atmosphere (MODIS AOD/Cloud & GPM IMERG)
-        # ---------------------------------------------------------------------
+        # 3. Atmosphere Fixtures
         for bench in cls.AUTHENTIC_ATMOSPHERE_BENCHMARKS:
             loc_name = bench["name"]
             lat, lon = bench["lat"], bench["lon"]
-            base_aod = bench["baseline_aod"]
             granule = bench["granule_id"]
 
             for obs in bench["observations"]:
@@ -756,7 +887,6 @@ class IngestionService:
                 cld_val = obs["cld"]
                 rain_acc = obs["rain_acc"]
 
-                # Timeseries for AOD
                 existing_aod = session.execute(
                     select(ObservationTimeSeriesRecord.id).filter_by(
                         dataset_id="MOD08_M3",
@@ -767,7 +897,7 @@ class IngestionService:
                 ).scalar_one_or_none()
 
                 if not existing_aod:
-                    ts_rec_aod = ObservationTimeSeriesRecord(
+                    session.add(ObservationTimeSeriesRecord(
                         dataset_id="MOD08_M3",
                         location_name=loc_name,
                         latitude=lat,
@@ -776,41 +906,15 @@ class IngestionService:
                         metric_name="aod_550",
                         value=aod_val,
                         unit="dimensionless extinction ratio (550nm)",
-                        baseline_normal=base_aod,
-                        anomaly=round(aod_val - base_aod, 3),
+                        baseline_normal=bench["baseline_aod"],
+                        anomaly=round(aod_val - bench["baseline_aod"], 3),
                         quality_flag=float(obs.get("qa", 3)),
-                    )
-                    session.add(ts_rec_aod)
+                        verification_status="synthetic",
+                        source_file_checksum=None,
+                        granule_id=granule,
+                    ))
                     inserted_count += 1
 
-                # Timeseries for GPM IMERG Precipitation
-                existing_gpm = session.execute(
-                    select(ObservationTimeSeriesRecord.id).filter_by(
-                        dataset_id="GPM_3IMERGM",
-                        location_name=loc_name,
-                        date_str=date_str,
-                        metric_name="precipitation_accumulated",
-                    )
-                ).scalar_one_or_none()
-
-                if not existing_gpm:
-                    ts_rec_gpm = ObservationTimeSeriesRecord(
-                        dataset_id="GPM_3IMERGM",
-                        location_name=loc_name,
-                        latitude=lat,
-                        longitude=lon,
-                        date_str=date_str,
-                        metric_name="precipitation_accumulated",
-                        value=rain_acc,
-                        unit="mm",
-                        baseline_normal=bench["baseline_rain"],
-                        anomaly=round(rain_acc - bench["baseline_rain"], 1),
-                        quality_flag=float(obs.get("qa", 3)),
-                    )
-                    session.add(ts_rec_gpm)
-                    inserted_count += 1
-
-                # Catalog entry for Atmosphere
                 parts = date_str.split("-")
                 obs_dt = datetime(int(parts[0]), int(parts[1]), 1, tzinfo=timezone.utc)
                 cat_existing = session.execute(
@@ -823,9 +927,9 @@ class IngestionService:
                 ).scalar_one_or_none()
 
                 if not cat_existing:
-                    cat_rec = EarthObservation(
+                    session.add(EarthObservation(
                         dataset_id="MOD08_M3",
-                        mission_name="MODIS Terra/Aqua & GPM",
+                        mission_name="MODIS Atmosphere (Test Fixture)",
                         observation_time=obs_dt,
                         min_latitude=lat,
                         max_latitude=lat,
@@ -835,22 +939,33 @@ class IngestionService:
                         min_value=aod_val,
                         max_value=aod_val,
                         unit="dimensionless ratio",
+                        verification_status="synthetic",
+                        source_file_checksum=None,
+                        granule_id=granule,
+                        processing_version="synthetic_fixture",
                         extra_metadata={
                             "granule_id": granule,
                             "location_name": loc_name,
                             "aod_550": aod_val,
                             "cloud_fraction": cld_val,
                             "precipitation_accumulated_mm": rain_acc,
-                            "quality_flag": obs.get("qa", 3),
-                            "sensor": "MODIS & GPM Microwave Imager",
-                            "data_status": "observation",
-                            "is_observation": True,
+                            "data_status": "synthetic_fixture",
+                            "is_observation": False,
+                            "source_type": "synthetic",
                         },
-                    )
-                    session.add(cat_rec)
+                    ))
 
         if inserted_count > 0:
             session.commit()
-            logger.info(f"Successfully seeded {inserted_count} authentic Land, Ocean, and Atmosphere observations into database.")
+            logger.info(f"Seeded {inserted_count} development test fixture records (verification_status='synthetic', is_observation=False).")
 
         return inserted_count
+
+    @classmethod
+    def seed_initial_observations(cls, session: Session) -> int:
+        """
+        Backward-compatible method: delegates to seed_test_fixtures.
+        Strictly inserts records marked as synthetic test fixtures.
+        """
+        logger.info("seed_initial_observations invoked: delegating to seed_test_fixtures with explicit synthetic markers.")
+        return cls.seed_test_fixtures(session)

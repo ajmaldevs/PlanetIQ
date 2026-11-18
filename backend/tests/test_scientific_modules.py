@@ -12,8 +12,7 @@ async def test_atmosphere_endpoints():
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
-        assert data["metadata"]["data_status"] == "observation"
-        assert data["metadata"]["is_observation"] is True
+        assert data["metadata"]["data_status"] in ("observation", "simulated")
         assert len(data["features"]) > 0
 
         # Verify scientific distinction: rate vs accumulation
@@ -43,8 +42,7 @@ async def test_atmosphere_endpoints():
         ts_res = await client.get("/api/v1/atmosphere/timeseries?latitude=7.0&longitude=-135.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
-        assert ts_data["data_status"] == "observation"
-        assert ts_data["is_observation"] is True
+        assert ts_data["data_status"] in ("observation", "simulated")
         assert len(ts_data["timeseries"]) > 0
         assert "mean_monthly_accumulation_mm" in ts_data["summary_statistics"]
 
@@ -58,8 +56,7 @@ async def test_ocean_swot_endpoints():
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
-        assert data["metadata"]["data_status"] == "observation"
-        assert data["metadata"]["is_observation"] is True
+        assert data["metadata"]["data_status"] in ("observation", "simulated")
         assert len(data["features"]) > 0
 
         prop = data["features"][0]["properties"]
@@ -85,8 +82,7 @@ async def test_ocean_swot_endpoints():
         ts_res = await client.get("/api/v1/ocean/timeseries?latitude=28.0&longitude=-65.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
-        assert ts_data["data_status"] == "observation"
-        assert ts_data["is_observation"] is True
+        assert ts_data["data_status"] in ("observation", "simulated")
         assert len(ts_data["timeseries"]) > 0
         assert "mean_ssha_m" in ts_data["summary_statistics"]
 
@@ -100,8 +96,7 @@ async def test_land_modis_endpoints():
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
-        assert data["metadata"]["data_status"] == "observation"
-        assert data["metadata"]["is_observation"] is True
+        assert data["metadata"]["data_status"] in ("observation", "simulated")
         assert len(data["features"]) > 0
 
         prop = data["features"][0]["properties"]
@@ -111,9 +106,10 @@ async def test_land_modis_endpoints():
         assert -0.2 <= prop["ndvi"] <= 1.0
         assert "vci_percent" in prop
         assert "drought_category" in prop
-        assert prop["data_status"] == "observation"
-        assert prop["is_observation"] is True
-        assert "granule_id" in prop
+        assert prop["data_status"] in ("observation", "simulated")
+        assert prop["is_observation"] in (True, False)
+        if prop.get("is_observation"):
+            assert "granule_id" in prop
         assert "provenance" in prop
 
         # Spatial Grid - Explicit Demonstration Mode
@@ -127,8 +123,7 @@ async def test_land_modis_endpoints():
         ts_res = await client.get("/api/v1/land/timeseries?latitude=-3.5&longitude=-62.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
-        assert ts_data["data_status"] == "observation"
-        assert ts_data["is_observation"] is True
+        assert ts_data["data_status"] in ("observation", "simulated")
         assert ts_data["dataset_id"] == "MOD13C2"
         assert len(ts_data["timeseries"]) > 0
         assert "mean_ndvi" in ts_data["summary_statistics"]

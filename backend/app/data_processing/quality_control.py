@@ -58,22 +58,33 @@ class QualityControl:
         )
 
     @classmethod
-    def calculate_vci(cls, ndvi: float, historical_min: float, historical_max: float) -> float:
+    def calculate_vci(
+        cls,
+        ndvi: float,
+        historical_min: Optional[float] = None,
+        historical_max: Optional[float] = None,
+    ) -> Optional[float]:
         """
         Calculates Vegetation Condition Index (VCI %):
         VCI = 100 * (NDVI - NDVI_min) / (NDVI_max - NDVI_min)
-        Guards against zero-spread and bounds to [0.0, 100.0] %.
+        Requires verified historical min and max climatological baseline bounds.
+        If baseline bounds are missing or spread <= 0.001, returns None (unavailable).
+        Never synthesizes a baseline or returns arbitrary constants.
         """
+        if historical_min is None or historical_max is None:
+            return None
         spread = historical_max - historical_min
         if spread <= 0.001:
-            return 50.0  # Neutral baseline if range is indeterminate
+            return None
 
         raw_vci = ((ndvi - historical_min) / spread) * 100.0
         return max(0.0, min(100.0, round(raw_vci, 1)))
 
     @classmethod
-    def classify_drought_vci(cls, vci: float) -> str:
+    def classify_drought_vci(cls, vci: Optional[float]) -> str:
         """Categorizes VCI into agricultural and ecological drought severity."""
+        if vci is None:
+            return "Climatological Baseline Unavailable"
         if vci < 20.0:
             return "Extreme Vegetation Stress (Severe Agricultural Drought)"
         elif vci < 35.0:

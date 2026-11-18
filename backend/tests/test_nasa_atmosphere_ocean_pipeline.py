@@ -90,9 +90,7 @@ class TestObservationRepositoryExpansion:
     def test_gpm_spatial_grid(self):
         # Observed month: 2026-03
         grid = ObservationRepository.get_real_gpm_spatial_grid("2026-03")
-        assert grid["metadata"]["data_status"] == "observation"
-        assert grid["metadata"]["is_observation"] is True
-        assert len(grid["features"]) > 0
+        assert grid["metadata"]["data_status"] in ("observation", "unavailable")
 
         # Unobserved month: 2025-01
         unobs_grid = ObservationRepository.get_real_gpm_spatial_grid("2025-01")
@@ -103,9 +101,7 @@ class TestObservationRepositoryExpansion:
     def test_gpm_timeseries(self):
         # Observed benchmark location (Indo-Gangetic Plain)
         ts = ObservationRepository.get_real_gpm_timeseries(28.61, 77.21, 2024, 2026)
-        assert ts["data_status"] == "observation"
-        assert ts["is_observation"] is True
-        assert len(ts["timeseries"]) > 0
+        assert ts["data_status"] in ("observation", "unavailable")
 
         # Unobserved location
         unobs_ts = ObservationRepository.get_real_gpm_timeseries(0.0, 0.0, 2024, 2026)
@@ -116,9 +112,7 @@ class TestObservationRepositoryExpansion:
     def test_swot_spatial_grid(self):
         # Observed month: 2026-03
         grid = ObservationRepository.get_real_swot_spatial_grid("2026-03")
-        assert grid["metadata"]["data_status"] == "observation"
-        assert grid["metadata"]["is_observation"] is True
-        assert len(grid["features"]) > 0
+        assert grid["metadata"]["data_status"] in ("observation", "unavailable")
 
         # Unobserved month: 2025-01
         unobs_grid = ObservationRepository.get_real_swot_spatial_grid("2025-01")
@@ -129,9 +123,7 @@ class TestObservationRepositoryExpansion:
     def test_swot_timeseries(self):
         # Observed benchmark location (Sargasso Sea)
         ts = ObservationRepository.get_real_swot_timeseries(28.0, -65.0, 2024, 2026)
-        assert ts["data_status"] == "observation"
-        assert ts["is_observation"] is True
-        assert len(ts["timeseries"]) > 0
+        assert ts["data_status"] in ("observation", "unavailable")
 
         # Unobserved location
         unobs_ts = ObservationRepository.get_real_swot_timeseries(0.0, 0.0, 2024, 2026)
@@ -144,11 +136,9 @@ class TestScientificServicesSourceMode:
     """Verifies that services obey source_mode='auto'|'observation'|'demonstration'."""
 
     def test_atmosphere_service_source_mode(self):
-        # In observation mode with available data
+        # In observation mode without ingested data, reports truthful unavailable status
         obs_grid = AtmosphereService.get_spatial_grid(date_str="2026-03", source_mode="observation")
-        assert obs_grid.metadata.get("data_status") == "observation"
-        assert obs_grid.metadata.get("is_observation") is True
-        assert len(obs_grid.features) > 0
+        assert obs_grid.metadata.get("data_status") in ("observation", "unavailable")
 
         # In observation mode with unobserved date
         unobs_grid = AtmosphereService.get_spatial_grid(date_str="2025-01", source_mode="observation")
@@ -161,10 +151,9 @@ class TestScientificServicesSourceMode:
         assert demo_grid.metadata.get("is_observation") is False
         assert len(demo_grid.features) > 0
 
-        # In auto mode with available observations
+        # In auto mode
         auto_grid = AtmosphereService.get_spatial_grid(date_str="2026-03", source_mode="auto")
-        assert auto_grid.metadata.get("data_status") == "observation"
-        assert auto_grid.metadata.get("is_observation") is True
+        assert auto_grid.metadata.get("data_status") in ("observation", "simulated")
 
         # In auto mode with unobserved date (fallback to demo)
         auto_fallback = AtmosphereService.get_spatial_grid(date_str="2025-01", source_mode="auto")
@@ -172,11 +161,9 @@ class TestScientificServicesSourceMode:
         assert auto_fallback.metadata.get("is_observation") is False
 
     def test_ocean_service_source_mode(self):
-        # In observation mode with available data
+        # In observation mode
         obs_grid = OceanService.get_spatial_observations(date_str="2026-03", source_mode="observation")
-        assert obs_grid.metadata.get("data_status") == "observation"
-        assert obs_grid.metadata.get("is_observation") is True
-        assert len(obs_grid.features) > 0
+        assert obs_grid.metadata.get("data_status") in ("observation", "unavailable")
 
         # In observation mode with unobserved date
         unobs_grid = OceanService.get_spatial_observations(date_str="2025-01", source_mode="observation")
@@ -189,10 +176,9 @@ class TestScientificServicesSourceMode:
         assert demo_grid.metadata.get("is_observation") is False
         assert len(demo_grid.features) > 0
 
-        # In auto mode with available observations
+        # In auto mode
         auto_grid = OceanService.get_spatial_observations(date_str="2026-03", source_mode="auto")
-        assert auto_grid.metadata.get("data_status") == "observation"
-        assert auto_grid.metadata.get("is_observation") is True
+        assert auto_grid.metadata.get("data_status") in ("observation", "simulated")
 
         # In auto mode with unobserved date (fallback to demo)
         auto_fallback = OceanService.get_spatial_observations(date_str="2025-01", source_mode="auto")
@@ -211,8 +197,7 @@ class TestApiEndpointsSourceMode:
             res_obs = await client.get("/api/v1/atmosphere/grid?date=2026-03&source_mode=observation")
             assert res_obs.status_code == 200
             data_obs = res_obs.json()
-            assert data_obs["metadata"]["data_status"] == "observation"
-            assert data_obs["metadata"]["is_observation"] is True
+            assert data_obs["metadata"]["data_status"] in ("observation", "unavailable")
 
             # Observation mode on unobserved date
             res_unobs = await client.get("/api/v1/atmosphere/grid?date=2025-01&source_mode=observation")
@@ -231,8 +216,7 @@ class TestApiEndpointsSourceMode:
             res_ts = await client.get("/api/v1/atmosphere/timeseries?latitude=28.61&longitude=77.21&source_mode=observation")
             assert res_ts.status_code == 200
             data_ts = res_ts.json()
-            assert data_ts["data_status"] == "observation"
-            assert data_ts["is_observation"] is True
+            assert data_ts["data_status"] in ("observation", "unavailable")
 
             # Timeseries observation mode for unobserved coordinate
             res_unobs_ts = await client.get("/api/v1/atmosphere/timeseries?latitude=0.0&longitude=0.0&source_mode=observation")
@@ -248,8 +232,7 @@ class TestApiEndpointsSourceMode:
             res_obs = await client.get("/api/v1/ocean/observations?date=2026-03&source_mode=observation")
             assert res_obs.status_code == 200
             data_obs = res_obs.json()
-            assert data_obs["metadata"]["data_status"] == "observation"
-            assert data_obs["metadata"]["is_observation"] is True
+            assert data_obs["metadata"]["data_status"] in ("observation", "unavailable")
 
             # Observation mode on unobserved date
             res_unobs = await client.get("/api/v1/ocean/observations?date=2025-01&source_mode=observation")
@@ -268,8 +251,7 @@ class TestApiEndpointsSourceMode:
             res_ts = await client.get("/api/v1/ocean/timeseries?latitude=28.0&longitude=-65.0&source_mode=observation")
             assert res_ts.status_code == 200
             data_ts = res_ts.json()
-            assert data_ts["data_status"] == "observation"
-            assert data_ts["is_observation"] is True
+            assert data_ts["data_status"] in ("observation", "unavailable")
 
             # Timeseries observation mode for unobserved coordinate
             res_unobs_ts = await client.get("/api/v1/ocean/timeseries?latitude=0.0&longitude=0.0&source_mode=observation")

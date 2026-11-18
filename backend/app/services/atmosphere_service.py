@@ -19,6 +19,7 @@ from app.schemas.scientific import (
 )
 from app.repositories.observation_repository import ObservationRepository
 from app.services.demo_data_service import DemoDataService
+from app.core.config import settings
 
 
 class AtmosphereService:
@@ -113,13 +114,19 @@ class AtmosphereService:
                 metadata=real_data.get("metadata", {}),
             )
 
-        # Fallback to isolated demo model
-        return DemoDataService.get_simulated_atmosphere_grid(
-            date_str=date_str,
-            min_lat=min_lat,
-            max_lat=max_lat,
-            min_lon=min_lon,
-            max_lon=max_lon,
+        if settings.ALLOW_DEMO_FALLBACK:
+            return DemoDataService.get_simulated_atmosphere_grid(
+                date_str=date_str,
+                min_lat=min_lat,
+                max_lat=max_lat,
+                min_lon=min_lon,
+                max_lon=max_lon,
+            )
+
+        return GeoJSONFeatureCollection(
+            type="FeatureCollection",
+            features=[],
+            metadata=real_data.get("metadata", {}),
         )
 
     @classmethod
@@ -209,9 +216,24 @@ class AtmosphereService:
                 timeseries=points,
             )
 
-        return DemoDataService.get_simulated_atmosphere_timeseries(
+        if settings.ALLOW_DEMO_FALLBACK:
+            return DemoDataService.get_simulated_atmosphere_timeseries(
+                latitude=latitude,
+                longitude=longitude,
+                start_year=start_year,
+                end_year=end_year,
+            )
+
+        return AtmosphereTimeSeriesResponse(
+            data_status="unavailable",
+            is_observation=False,
+            dataset_id=real_data.get("dataset_id", "GPM_3IMERGM"),
+            dataset_name=real_data.get("dataset_name", "NASA GPM IMERG Final Monthly Precipitation"),
+            location_name=real_data.get("location_name", "GPM Observation Site"),
             latitude=latitude,
             longitude=longitude,
-            start_year=start_year,
-            end_year=end_year,
+            unit_rate="mm/hr",
+            unit_accumulation="mm",
+            summary_statistics=real_data.get("summary_statistics", {}),
+            timeseries=[],
         )

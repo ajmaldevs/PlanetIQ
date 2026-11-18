@@ -1,13 +1,30 @@
 """
-Tests for Satellite Ingestion Service & Database Persistence.
+Tests for Satellite Ingestion Service & Scientific Integrity Verification.
 Verifies:
-- Seeding of authentic NASA MODIS MOD13C2 observation benchmarks into SQLite / PostgreSQL.
-- Provenance enforcement: is_observation=True, data_status='observation'.
-- Idempotency of database ingestion.
-- Correct coordinate and attribute persistence in EarthObservation and ObservationTimeSeriesRecord.
+1. Hardcoded development fixtures are strictly tagged as synthetic:
+   - verification_status = "synthetic"
+   - is_observation = False
+   - data_status = "synthetic_fixture"
+   - NEVER labeled as real satellite observations.
+2. Genuine satellite granule ingestion:
+   - Computes SHA-256 file checksum.
+   - Extracts arrays and quality control.
+   - Persists verified observations with:
+     - verification_status = "verified_observation"
+     - is_observation = True
+     - data_status = "observation"
+     - source_file_checksum = <sha256>
+3. ObservationRepository strictly quarantines synthetic records:
+   - Queries only return records with verification_status = "verified_observation".
+   - Synthetic fixtures return unavailable when queried for observations.
+4. Transparent credential gating:
+   - Live ingestion blocks with explicit status when NASA credentials are not configured.
 """
 
 import pytest
+import os
+import rasterio
+import numpy as np
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
@@ -15,6 +32,7 @@ from app.models.base import Base
 from app.models.observation import EarthObservation
 from app.models.timeseries import ObservationTimeSeriesRecord
 from app.services.ingestion_service import IngestionService
+from app.repositories.observation_repository import ObservationRepository
 
 
 @pytest.fixture
@@ -27,59 +45,99 @@ def db_session():
     session.close()
 
 
-def test_seed_initial_observations_idempotent(db_session):
-    """Verifies that authentic satellite benchmarks are correctly persisted across Land, Ocean, and Atmosphere and idempotent."""
-    # First seeding
+def test_seed_development_fixtures_strictly_synthetic(db_session):
+    """Verifies that development benchmarks are strictly tagged as synthetic and never labeled as observations."""
     inserted = IngestionService.seed_initial_observations(db_session)
     assert inserted > 0
 
-    # Query all timeseries records
     records = db_session.execute(
         select(ObservationTimeSeriesRecord)
     ).scalars().all()
     assert len(records) == inserted
 
-    # Check Land (MODIS Punjab)
-    punjab_recs = [r for r in records if "Punjab" in r.location_name and r.dataset_id == "MOD13C2"]
-    assert len(punjab_recs) == 4
-    for r in punjab_recs:
-        assert r.metric_name == "NDVI"
-        assert 0.0 <= r.value <= 1.0
-        assert r.baseline_normal == 0.485
-        assert r.unit == "dimensionless ratio (-0.2000 to +1.0000)"
+    for r in records:
+        assert r.verification_status == "synthetic"
+        assert r.source_file_checksum is None
+        assert "SYNTHETIC_DEV_FIXTURE" in r.granule_id
 
-    # Check Ocean (MODIS Aqua Chlorophyll-a & SST / SWOT SSHA)
-    ocean_recs = [r for r in records if "Arabian Sea" in r.location_name]
-    assert len(ocean_recs) >= 4
-    chl_recs = [r for r in ocean_recs if r.metric_name == "chlor_a"]
-    assert len(chl_recs) == 4
-    for r in chl_recs:
-        assert r.value > 0.0
-        assert r.unit == "mg/m³"
-
-    # Check Atmosphere (MODIS AOD & GPM Precipitation)
-    atmo_recs = [r for r in records if "Indo-Gangetic" in r.location_name]
-    assert len(atmo_recs) >= 4
-    aod_recs = [r for r in atmo_recs if r.metric_name == "aod_550"]
-    assert len(aod_recs) == 4
-    for r in aod_recs:
-        assert r.value > 0.0
-
-    # Query EarthObservation catalog entries across all 3 domains
     cat_entries = db_session.execute(
         select(EarthObservation)
     ).scalars().all()
     assert len(cat_entries) > 0
-    domains_present = {c.dataset_id for c in cat_entries}
-    assert "MOD13C2" in domains_present
-    assert "MODISA_L3m_CHL" in domains_present
-    assert "MOD08_M3" in domains_present
 
     for c in cat_entries:
-        assert c.extra_metadata["is_observation"] is True
-        assert c.extra_metadata["data_status"] == "observation"
-        assert "granule_id" in c.extra_metadata
+        assert c.verification_status == "synthetic"
+        assert c.extra_metadata["is_observation"] is False
+        assert c.extra_metadata["data_status"] == "synthetic_fixture"
+        assert c.extra_metadata["source_type"] == "synthetic"
 
-    # Second seeding run should insert 0 new records (idempotent)
-    second_inserted = IngestionService.seed_initial_observations(db_session)
-    assert second_inserted == 0
+
+def test_observation_repository_quarantines_synthetic_fixtures(db_session):
+    """Verifies that ObservationRepository rejects synthetic fixtures and returns unavailable."""
+    IngestionService.seed_initial_observations(db_session)
+
+    # When querying real observations, synthetic fixtures MUST NOT be returned as genuine observations
+    grid = ObservationRepository.get_real_modis_spatial_grid("2026-03", session=db_session)
+    assert grid["metadata"]["data_status"] == "unavailable"
+    assert grid["metadata"]["is_observation"] is False
+    assert len(grid["features"]) == 0
+
+    ocean_grid = ObservationRepository.get_real_ocean_spatial_grid("2026-03", session=db_session)
+    assert ocean_grid["metadata"]["data_status"] == "unavailable"
+    assert ocean_grid["metadata"]["is_observation"] is False
+    assert len(ocean_grid["features"]) == 0
+
+    atmo_grid = ObservationRepository.get_real_atmosphere_spatial_grid("2026-03", session=db_session)
+    assert atmo_grid["metadata"]["data_status"] == "unavailable"
+    assert atmo_grid["metadata"]["is_observation"] is False
+    assert len(atmo_grid["features"]) == 0
+
+
+def test_ingest_genuine_satellite_granule_with_checksum(tmp_path, db_session):
+    """Verifies that genuine satellite files are ingested with verified checksum and observation status."""
+    granule_path = str(tmp_path / "MOD13C2.A2026060.061.verified.tif")
+    
+    # Create valid synthetic satellite GeoTIFF array
+    with rasterio.open(granule_path, "w", driver="GTiff", height=20, width=20, count=3, dtype="int16") as dst:
+        dst.write(np.full((20, 20), 7420, dtype="int16"), 1)  # NDVI band (0.7420)
+        dst.write(np.full((20, 20), 5200, dtype="int16"), 2)  # EVI band (0.5200)
+        dst.write(np.zeros((20, 20), dtype="int16"), 3)       # QA band (0 = Good Data)
+
+    res = IngestionService.ingest_granule_file(
+        granule_path=granule_path,
+        dataset_id="MOD13C2",
+        date_str="2026-03",
+        session=db_session,
+        mission_name="MODIS Terra (Verified Ingestion)",
+    )
+
+    assert res["status"] == "success"
+    assert len(res["checksum"]) == 64
+    assert res["records_persisted"] > 0
+
+    # Verify EarthObservation record
+    cat_rec = db_session.execute(
+        select(EarthObservation).filter_by(granule_id=os.path.basename(granule_path))
+    ).scalar_one()
+
+    assert cat_rec.verification_status == "verified_observation"
+    assert cat_rec.source_file_checksum == res["checksum"]
+    assert cat_rec.extra_metadata["is_observation"] is True
+    assert cat_rec.extra_metadata["data_status"] == "observation"
+
+    # Verify that ObservationRepository NOW returns this genuine observation
+    grid = ObservationRepository.get_real_modis_spatial_grid("2026-03", session=db_session)
+    assert grid["metadata"]["data_status"] == "observation"
+    assert grid["metadata"]["is_observation"] is True
+    assert len(grid["features"]) > 0
+    assert grid["features"][0]["properties"]["verification_status"] == "verified_observation"
+    assert grid["features"][0]["properties"]["source_file_checksum"] == res["checksum"]
+
+
+@pytest.mark.asyncio
+async def test_live_granule_ingestion_blocks_without_credentials(db_session):
+    """Verifies that live ingestion transparently blocks when NASA credentials are not configured."""
+    res = await IngestionService.ingest_live_granule("MOD13C2", 2026, 3, db_session)
+    assert res["status"] == "blocked"
+    assert res["reason"] == "NASA_EARTHDATA_CREDENTIALS_REQUIRED"
+    assert "NASA Earthdata credentials" in res["message"]

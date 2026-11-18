@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
+    ALLOW_DEMO_FALLBACK: bool = True  # Allows calibrated simulation models when live mission granules are not ingested
 
     # Server Configuration
     HOST: str = "0.0.0.0"
