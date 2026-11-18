@@ -1,5 +1,5 @@
 """
-Authoritative Scientific AI Tools for TerraLens.
+Authoritative Scientific AI Tools for PlanetIQ.
 Structured for Google Gen AI SDK (google-genai) tool calling.
 
 Tools:
@@ -32,7 +32,7 @@ from app.services.geocoding_service import GeocodingService
 from app.services.nasa_earthdata_client import NasaEarthdataClient
 from app.services.scientific_analytics import ScientificAnalytics
 
-logger = logging.getLogger("terralens.ai_tools")
+logger = logging.getLogger("planetiq.ai_tools")
 
 
 # --- Validation Helpers ---

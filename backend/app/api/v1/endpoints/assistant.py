@@ -12,7 +12,7 @@ router = APIRouter()
 )
 async def query_assistant(request: AssistantQueryRequest):
     """
-    Submits a natural language scientific question to the TerraLens AI Assistant.
+    Submits a natural language scientific question to the PlanetIQ AI Assistant.
     Provides context-grounded analysis of SWOT, GPM IMERG, MODIS NDVI,
     and cross-system Earth dynamics with scientific accuracy safeguards.
     """

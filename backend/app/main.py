@@ -3,6 +3,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
+from app.core.database import check_database_connection
 from app.api.v1.router import api_router
 
 logging.basicConfig(level=logging.INFO)
@@ -13,6 +14,11 @@ logger = logging.getLogger("planetiq")
 async def lifespan(app: FastAPI):
     """Lifespan event handler for startup and shutdown."""
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION} [{settings.ENVIRONMENT}]")
+    try:
+        db_check = await check_database_connection()
+        logger.info(f"Database status: {db_check.get('status')} (PostGIS available: {db_check.get('postgis_available')})")
+    except Exception as e:
+        logger.warning(f"Database startup check note: {e}")
     yield
     logger.info(f"Shutting down {settings.PROJECT_NAME}")
 

@@ -1,4 +1,4 @@
-# Production Multi-Stage Dockerfile for TerraLens Backend
+# Production Multi-Stage Dockerfile for PlanetIQ Backend
 FROM python:3.11-slim as builder
 
 WORKDIR /app

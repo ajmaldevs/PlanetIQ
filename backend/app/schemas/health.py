@@ -12,7 +12,7 @@ class DatabaseHealth(BaseModel):
 
 class SystemHealthResponse(BaseModel):
     status: str = Field(..., json_schema_extra={"example": "healthy"})
-    service: str = Field(..., json_schema_extra={"example": "TerraLens Backend"})
+    service: str = Field(..., json_schema_extra={"example": "PlanetIQ Backend"})
     version: str = Field(..., json_schema_extra={"example": "0.1.0"})
     environment: str = Field(..., json_schema_extra={"example": "development"})
     database: DatabaseHealth

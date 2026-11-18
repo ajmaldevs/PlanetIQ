@@ -1,6 +1,6 @@
 
 services:
-  # TerraLens FastAPI Backend API
+  # PlanetIQ FastAPI Backend API
   - type: web
     name: terralens-backend
     runtime: python
@@ -52,7 +52,7 @@ services:
       - key: NASA_EARTHDATA_BEARER_TOKEN
         sync: false
 
-  # TerraLens React Frontend (Static Site)
+  # PlanetIQ React Frontend (Static Site)
   - type: web
     runtime: static
     name: terralens-frontend

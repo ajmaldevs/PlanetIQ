@@ -14,7 +14,7 @@ router = APIRouter()
 def get_all_datasets():
     """
     Returns complete scientific catalog metadata, sensors, resolutions,
-    units, processing methods, and known limitations for all TerraLens modules.
+    units, processing methods, and known limitations for all PlanetIQ modules.
     """
     return DatasetService.get_all_datasets()
 

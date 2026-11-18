@@ -2,7 +2,7 @@ from typing import Any, AsyncGenerator
 import logging
 from app.core.config import settings
 
-logger = logging.getLogger("terralens.database")
+logger = logging.getLogger("planetiq.database")
 
 # Async PostgreSQL + PostGIS Engine
 try:
