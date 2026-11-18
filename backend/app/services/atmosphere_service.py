@@ -8,7 +8,7 @@ Preserves strict data source distinction:
 - SIMULATED DEMONSTRATION DATA: Calibrated mathematical precipitation models isolated in DemoDataService.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Optional
 import calendar
 from app.schemas.scientific import (
     GeoJSONFeatureCollection,

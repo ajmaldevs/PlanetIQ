@@ -12,7 +12,7 @@ Every response produced by this service is strictly labelled with:
 Simulated values MUST NEVER be presented as genuine NASA satellite observations.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 import calendar
 import math
 from app.schemas.scientific import (

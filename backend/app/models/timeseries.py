@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Float, DateTime, Index
+from sqlalchemy import Column, String, Float, Index
 from app.models.base import TimeStampedModel
 
 

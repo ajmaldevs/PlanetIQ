@@ -4,7 +4,7 @@ Provides verified dataset specifications, mission documentation, instrument phys
 uncertainty metrics, and official citations with persistent DOIs for NASA Earth observation systems.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 import re
 from app.schemas.scientific import ScientificCitation
 

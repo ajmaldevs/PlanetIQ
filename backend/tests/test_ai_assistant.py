@@ -19,7 +19,6 @@ from app.main import app
 from app.schemas.scientific import (
     AssistantQueryRequest,
     AssistantContext,
-    AssistantMessage,
 )
 from app.services.ai_tools import (
     get_ocean_observations,

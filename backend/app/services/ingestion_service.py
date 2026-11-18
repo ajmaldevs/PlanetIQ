@@ -33,7 +33,6 @@ from app.models.timeseries import ObservationTimeSeriesRecord
 from app.data_processing.ndvi_processor import NdviProcessor
 from app.data_processing.ocean_processor import OceanProcessor
 from app.data_processing.atmosphere_processor import AtmosphereProcessor
-from app.data_processing.quality_control import QualityControl
 from app.integrations.nasa.earthdata_client import NasaEarthdataClient
 from app.integrations.nasa.modis_client import ModisClient
 from app.integrations.nasa.ocean_color_client import OceanColorClient

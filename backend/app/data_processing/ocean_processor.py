@@ -12,11 +12,9 @@ Scientific Safeguards:
 - Formats standard GeoJSON feature collections with complete satellite provenance.
 """
 
-from typing import Dict, Any, List, Optional, Tuple
-import os
+from typing import Dict, Any, List, Optional
 import math
 import logging
-import numpy as np
 
 logger = logging.getLogger("planetiq.ocean_processor")
 

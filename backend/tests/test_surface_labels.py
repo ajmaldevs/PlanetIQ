@@ -10,11 +10,8 @@ Verifies:
 7. Seamless state preservation when switching between 2D and 3D exploration modes.
 """
 
-import json
 from pathlib import Path
-import re
 import math
-import pytest
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 APP_TSX = ROOT_DIR / "frontend" / "src" / "App.tsx"

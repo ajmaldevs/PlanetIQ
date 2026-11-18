@@ -18,7 +18,6 @@ returns structured results with physical units and provenance, and handles error
 
 from typing import Dict, Any, List, Optional, Tuple
 import calendar
-import math
 import re
 import logging
 
@@ -27,7 +26,6 @@ from app.services.atmosphere_service import AtmosphereService
 from app.services.land_service import LandService
 from app.services.demo_data_service import DemoDataService
 from app.services.cross_system_service import CrossSystemService
-from app.services.comparison_service import ComparisonService
 from app.services.dataset_service import DatasetService
 from app.services.geocoding_service import GeocodingService
 from app.services.nasa_earthdata_client import NasaEarthdataClient
@@ -209,7 +207,7 @@ def get_ocean_observations(
     # Single point or resolved region lookup
     if resolved_lat is not None and resolved_lon is not None:
         ts = OceanService.get_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026)
-        
+
         # Strict scientific integrity: do not fabricate observations when data is unavailable
         if not ts.timeseries or ts.data_status == "unavailable":
             return {

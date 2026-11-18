@@ -27,7 +27,12 @@ jobs:
           cd backend
           uv sync --dev
 
-      - name: Run lint and tests
+      - name: Run linter
+        run: |
+          cd backend
+          uv run ruff check .
+
+      - name: Run tests
         run: |
           cd backend
           uv run pytest -v

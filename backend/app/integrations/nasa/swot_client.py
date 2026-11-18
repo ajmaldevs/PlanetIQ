@@ -10,7 +10,7 @@ Official product information:
 - Provider: NASA Physical Oceanography Distributed Active Archive Center (PO.DAAC)
 """
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple
 import os
 import calendar
 import logging

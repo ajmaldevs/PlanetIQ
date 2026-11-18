@@ -9,7 +9,7 @@ Key capabilities:
 - Provides fallback to validated reference observations when live Earthdata credentials are not yet supplied.
 """
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple
 import os
 import calendar
 import logging
@@ -72,7 +72,7 @@ class ModisClient:
 
         granule_title = granule_meta.get("title", "MOD13C2_granule")
         data_links = granule_meta.get("data_links", [])
-        
+
         # Filter for direct data file URL (ending in .hdf or .nc)
         download_url = None
         for link in data_links:

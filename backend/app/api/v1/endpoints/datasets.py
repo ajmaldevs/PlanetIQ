@@ -1,5 +1,5 @@
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
+from typing import List
+from fastapi import APIRouter, HTTPException, Query
 from app.schemas.scientific import DatasetCatalogItem
 from app.services.dataset_service import DatasetService
 from app.integrations.nasa.earthdata_client import NasaEarthdataClient

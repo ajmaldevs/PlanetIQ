@@ -1,4 +1,3 @@
-import pytest
 from app.services.geocoding_service import GeocodingService
 
 

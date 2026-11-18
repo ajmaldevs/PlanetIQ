@@ -12,9 +12,8 @@ Features:
 - Resilient granule download with streaming, redirects, authentication, and atomic write validation.
 """
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple
 import os
-import re
 import logging
 import httpx
 from app.core.config import settings
@@ -210,7 +209,7 @@ class NasaEarthdataClient:
             params["bounding_box"] = f"{min_lon},{min_lat},{max_lon},{max_lat}"
 
         headers = {"User-Agent": f"PlanetIQ/{settings.VERSION} (NASA Earth Observation Platform)"}
-        
+
         # Only attach Authorization header if a real valid bearer token is configured
         if cls._is_valid_credential(settings.NASA_EARTHDATA_BEARER_TOKEN):
             headers["Authorization"] = f"Bearer {settings.NASA_EARTHDATA_BEARER_TOKEN.strip()}"

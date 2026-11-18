@@ -7,7 +7,6 @@ and cross-device API network configuration.
 
 import json
 from pathlib import Path
-import pytest
 from app.core.config import settings
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent

@@ -96,7 +96,7 @@ def test_observation_repository_quarantines_synthetic_fixtures(db_session):
 def test_ingest_genuine_satellite_granule_with_checksum(tmp_path, db_session):
     """Verifies that genuine satellite files are ingested with verified checksum and observation status."""
     granule_path = str(tmp_path / "MOD13C2.A2026060.061.verified.tif")
-    
+
     # Create valid synthetic satellite GeoTIFF array
     with rasterio.open(granule_path, "w", driver="GTiff", height=20, width=20, count=3, dtype="int16") as dst:
         dst.write(np.full((20, 20), 7420, dtype="int16"), 1)  # NDVI band (0.7420)

@@ -8,7 +8,7 @@ for f in data['features']:
     name = props['name']
     geom = f['geometry']
     coords = geom['coordinates']
-    
+
     # Flatten coordinates to find min/max lon and lat
     lons, lats = [], []
     def extract_pts(c):
@@ -19,7 +19,7 @@ for f in data['features']:
             for sub in c:
                 extract_pts(sub)
     extract_pts(coords)
-    
+
     if lons and lats:
         min_lon = round(min(lons), 4)
         min_lat = round(min(lats), 4)

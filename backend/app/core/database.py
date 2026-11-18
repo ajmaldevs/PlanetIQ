@@ -22,7 +22,7 @@ try:
         pool_size=settings.DATABASE_POOL_SIZE,
         max_overflow=settings.DATABASE_MAX_OVERFLOW,
         future=True,
-    )   
+    )
     AsyncSessionLocal = async_sessionmaker(
         bind=async_engine,
         class_=AsyncSession,

@@ -9,7 +9,7 @@ Preserves strict data source distinction:
 - SIMULATED DEMONSTRATION DATA: Calibrated mathematical eddy vortex models isolated in DemoDataService.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Optional
 from app.schemas.scientific import (
     GeoJSONFeatureCollection,
     GeoJSONFeature,

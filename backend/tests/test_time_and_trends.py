@@ -1,7 +1,5 @@
-import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from app.services.comparison_service import ComparisonService
 from app.services.atmosphere_service import AtmosphereService
 from app.services.ocean_service import OceanService
 from app.services.land_service import LandService

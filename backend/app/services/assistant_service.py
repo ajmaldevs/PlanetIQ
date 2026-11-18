@@ -15,7 +15,6 @@ Implements:
 
 from typing import List, Dict, Any, Optional
 import os
-import re
 import asyncio
 import logging
 from app.core.config import settings
@@ -24,7 +23,6 @@ from app.schemas.scientific import (
     AssistantQueryResponse,
     AssistantContext,
     AssistantMessage,
-    ScientificCitation,
     MetricCardBlock,
     MetricCardItem,
     TimeseriesChartBlock,
@@ -36,7 +34,6 @@ from app.schemas.scientific import (
 from app.services.ai_tools import SCIENTIFIC_TOOLS, SCIENTIFIC_TOOL_MAP
 from app.services.scientific_rag import ScientificRAG
 from app.services.scientific_analytics import ScientificAnalytics
-from app.services.geocoding_service import GeocodingService
 
 logger = logging.getLogger("planetiq.assistant")
 
@@ -712,8 +709,8 @@ class AssistantService:
 
         # Standard, professional notice without leaking internals or keys
         status_notice = (
-            f"\n\n> [!NOTE]\n"
-            f"> AI reasoning is temporarily unavailable. The authoritative scientific satellite measurements are displayed above."
+            "\n\n> [!NOTE]\n"
+            "> AI reasoning is temporarily unavailable. The authoritative scientific satellite measurements are displayed above."
         )
 
         full_text = lead_text + status_notice

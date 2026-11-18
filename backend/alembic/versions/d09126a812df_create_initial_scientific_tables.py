@@ -1,7 +1,7 @@
 """create_initial_scientific_tables
 
 Revision ID: d09126a812df
-Revises: 
+Revises:
 Create Date: 2026-11-14 17:56:53.000000
 
 """

@@ -12,9 +12,8 @@ Tests:
 
 import pytest
 import numpy as np
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import patch, AsyncMock
 
-from app.integrations.nasa.earthdata_client import NasaEarthdataClient
 from app.integrations.nasa.modis_client import ModisClient
 from app.data_processing.quality_control import QualityControl
 from app.data_processing.ndvi_processor import NdviProcessor

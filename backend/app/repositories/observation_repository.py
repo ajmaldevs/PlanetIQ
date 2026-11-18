@@ -20,13 +20,10 @@ CRITICAL SCIENTIFIC INTEGRITY RULES:
 
 from typing import Dict, Any, List, Optional
 import os
-import math
 import logging
-from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
-from app.models.observation import EarthObservation
 from app.models.timeseries import ObservationTimeSeriesRecord
 from app.data_processing.quality_control import QualityControl
 from app.data_processing.ocean_processor import OceanProcessor

@@ -78,7 +78,7 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-   
+
     op.create_index(op.f('ix_earth_observations_dataset_id'), 'earth_observations', ['dataset_id'], unique=False)
     op.create_index(op.f('ix_earth_observations_id'), 'earth_observations', ['id'], unique=False)
     op.create_index(op.f('ix_earth_observations_mission_name'), 'earth_observations', ['mission_name'], unique=False)

@@ -13,7 +13,7 @@ Official product specifications:
   Provider: NASA Goddard Earth Sciences Data and Information Services Center (GES DISC)
 """
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple
 import os
 import calendar
 import logging

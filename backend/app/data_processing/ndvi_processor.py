@@ -5,7 +5,7 @@ filters out fill values (-3000), processes pixel reliability bitmasks, preserves
 and outputs verified GeoJSON feature collections with complete satellite provenance.
 """
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple
 import os
 import math
 import logging

@@ -8,7 +8,7 @@ Preserves strict data source distinction:
 - SIMULATED DEMONSTRATION DATA: Calibrated mathematical phenology models isolated in DemoDataService.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import Optional
 from app.schemas.scientific import (
     GeoJSONFeatureCollection,
     GeoJSONFeature,

@@ -1,4 +1,3 @@
-import json
 import re
 
 content = open('frontend/src/services/gisDatabase.ts', 'r', encoding='utf-8').read()

@@ -1,7 +1,7 @@
 import json
 import os
 import re
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from app.schemas.geocoding import GeocodingResult, GeocodingSearchResponse
 
 # Major Natural Features Database (Rivers, Lakes, Mountain Ranges, Seas)

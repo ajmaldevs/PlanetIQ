@@ -9,8 +9,6 @@ Provides rigorous calculations for:
 
 from typing import Dict, Any, Optional, Tuple
 import calendar
-import math
-import re
 
 
 class ScientificAnalytics:

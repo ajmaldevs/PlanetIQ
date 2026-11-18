@@ -6,7 +6,6 @@ unit validation, and numerical safeguards across Land, Atmosphere, and Ocean pro
 
 from typing import Dict, Any, Tuple, Optional
 import calendar
-import math
 import logging
 
 logger = logging.getLogger("planetiq.quality_control")
