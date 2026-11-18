@@ -134,8 +134,8 @@ npm run build
 ## 🌐 Production Deployment
 
 PlanetIQ is configured as a synchronized multi-service architecture on **Render**:
-* **Backend Web Service**: Python / FastAPI running on `https://planetiq-1.onrender.com/` with automated health checks at `/api/v1/health`.
-* **Frontend Static Site**: React / Vite SPA with SPA rewrite routes and asset cache headers.
+* **Frontend Web App (Static Site)**: React / Vite SPA running on `https://planetiq-1.onrender.com/` with SPA rewrite routes and asset cache headers.
+* **Backend API Service**: Python / FastAPI running on `https://planetiq.onrender.com/` (Docs: `https://planetiq.onrender.com/docs`, Health: `https://planetiq.onrender.com/api/v1/health`).
 * **Database**: PostgreSQL 16 with PostGIS extension.
 
 Deployment blueprint specification: [`render.yaml`](render.yaml)

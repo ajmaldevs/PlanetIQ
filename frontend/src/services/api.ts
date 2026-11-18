@@ -15,9 +15,9 @@ export function getApiBaseUrl(): string {
   if (typeof window !== 'undefined' && window.location) {
     const { hostname, protocol, port, origin } = window.location;
 
-    // Render deployment link: planetiq-1.onrender.com
+    // Render deployment link: planetiq-1.onrender.com (frontend) -> planetiq.onrender.com (backend)
     if (hostname === 'planetiq-1.onrender.com') {
-      return 'https://planetiq-1.onrender.com/api/v1';
+      return 'https://planetiq.onrender.com/api/v1';
     }
     if (hostname.endsWith('.onrender.com')) {
       return `${origin}/api/v1`;
