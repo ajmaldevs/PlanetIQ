@@ -26,7 +26,7 @@ class Settings(BaseSettings):
         default_factory=lambda: (
             os.getenv("ALLOW_DEMO_FALLBACK", "").strip().lower() in ("true", "1", "yes")
             if os.getenv("ALLOW_DEMO_FALLBACK") is not None and os.getenv("ALLOW_DEMO_FALLBACK").strip() != ""
-            else (os.getenv("ENVIRONMENT", "development").strip().lower() != "production")
+            else (os.getenv("ENVIRONMENT", "development").strip().lower() not in ("production", "prod"))
         )
     )
 
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
                 return v.strip().lower() in ("true", "1", "yes")
             return bool(v)
         env = os.getenv("ENVIRONMENT", "development").strip().lower()
-        return env != "production"
+        return env not in ("production", "prod")
 
     # Server Configuration
     HOST: str = "0.0.0.0"
@@ -108,20 +108,40 @@ class Settings(BaseSettings):
         if not clean:
             return None
         import urllib.parse
+        import socket
         parsed = urllib.parse.urlsplit(clean)
         # Preserve SQLite URLs for isolated tests
         if parsed.scheme.startswith("sqlite"):
             return clean
 
-        # If already matching target dialect, return as-is
-        if parsed.scheme == f"postgresql+{dialect}":
-            return clean
-
-        # Convert postgres://, postgresql://, or alternate dialects to postgresql+{dialect}://
         scheme = f"postgresql+{dialect}"
         netloc = parsed.netloc
         path = parsed.path
         query = parsed.query
+
+        # If hostname is an internal Render handle (dpg-*) that does not resolve in current environment,
+        # fallback to the external Frankfurt Render domain with SSL
+        if parsed.hostname and parsed.hostname.startswith("dpg-") and "." not in parsed.hostname:
+            resolves = False
+            try:
+                socket.gethostbyname(parsed.hostname)
+                resolves = True
+            except Exception:
+                resolves = False
+
+            if not resolves:
+                external_host = f"{parsed.hostname}.frankfurt-postgres.render.com"
+                port_part = f":{parsed.port}" if parsed.port else ":5432"
+                auth_part = ""
+                if parsed.username:
+                    auth_part = parsed.username
+                    if parsed.password:
+                        auth_part += f":{parsed.password}"
+                    auth_part += "@"
+                netloc = f"{auth_part}{external_host}{port_part}"
+                if "sslmode=" not in query and dialect != "asyncpg":
+                    query = f"{query}&sslmode=require" if query else "sslmode=require"
+
         return urllib.parse.urlunsplit((scheme, netloc, path, query, ""))
 
     @property
@@ -171,7 +191,10 @@ class Settings(BaseSettings):
     def resolve_nasa_username(cls, v: Optional[str]) -> str:
         def _clean(val: Optional[str]) -> Optional[str]:
             if val and isinstance(val, str) and not val.strip().startswith("your_"):
-                return val.strip()
+                cleaned = val.strip()
+                if cleaned.lower() == "ajmal-r":
+                    return "ajmal_roshan"
+                return cleaned
             return None
 
         c_v = _clean(v)

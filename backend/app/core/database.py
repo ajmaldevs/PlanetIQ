@@ -16,11 +16,17 @@ try:
 
     Base = declarative_base()
 
+    async_connect_args: dict[str, Any] = {}
+    if "render.com" in settings.ASYNC_DATABASE_URL or "dpg-" in settings.ASYNC_DATABASE_URL or "sslmode=require" in settings.ASYNC_DATABASE_URL:
+        async_connect_args["ssl"] = True
+
     async_kwargs: dict[str, Any] = {
         "echo": settings.DEBUG,
         "pool_pre_ping": True,
         "future": True,
     }
+    if async_connect_args:
+        async_kwargs["connect_args"] = async_connect_args
     if not settings.ASYNC_DATABASE_URL.startswith("sqlite"):
         async_kwargs["pool_size"] = settings.DATABASE_POOL_SIZE
         async_kwargs["max_overflow"] = settings.DATABASE_MAX_OVERFLOW
@@ -56,6 +62,8 @@ try:
     sync_connect_args = {}
     if "postgres" in settings.SYNC_DATABASE_URL:
         sync_connect_args["connect_timeout"] = 5
+        if "render.com" in settings.SYNC_DATABASE_URL or "dpg-" in settings.SYNC_DATABASE_URL or "sslmode=require" in settings.SYNC_DATABASE_URL:
+            sync_connect_args["sslmode"] = "require"
 
     sync_kwargs: dict[str, Any] = {
         "echo": settings.DEBUG,

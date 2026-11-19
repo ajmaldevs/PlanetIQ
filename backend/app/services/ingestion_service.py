@@ -666,8 +666,10 @@ class IngestionService:
                             # Subsample for points
                             lat_arr = lats[:]
                             lon_arr = lons[:]
-                            for i in range(0, min(len(lat_arr), 10)):
-                                for j in range(0, min(len(lon_arr), 10)):
+                            stride_lat = max(1, len(lat_arr) // 30)
+                            stride_lon = max(1, len(lon_arr) // 45)
+                            for i in range(0, len(lat_arr), stride_lat):
+                                for j in range(0, len(lon_arr), stride_lon):
                                     val = float(data[i, j]) if data.ndim == 2 else float(data[0, i, j])
                                     lat_val = float(lat_arr[i])
                                     lon_val = float(lon_arr[j])
@@ -703,8 +705,10 @@ class IngestionService:
                         if lats is not None and lons is not None:
                             lat_arr = lats[:]
                             lon_arr = lons[:]
-                            for i in range(0, min(len(lat_arr), 10)):
-                                for j in range(0, min(len(lon_arr), 10)):
+                            stride_lat = max(1, len(lat_arr) // 30)
+                            stride_lon = max(1, len(lon_arr) // 45)
+                            for i in range(0, len(lat_arr), stride_lat):
+                                for j in range(0, len(lon_arr), stride_lon):
                                     val = float(data[i, j]) if data.ndim == 2 else float(data[0, i, j])
                                     lat_val = float(lat_arr[i])
                                     lon_val = float(lon_arr[j])
