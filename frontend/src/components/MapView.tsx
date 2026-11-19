@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import maplibregl from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { GeoJSONFeatureCollection, GeoJSONFeature } from '../services/api';
 import { GISPlace, GIS_PLACES, findPlaceById } from '../services/gisDatabase';
@@ -257,7 +257,7 @@ export const MapView: React.FC<MapViewProps> = ({
         });
       });
 
-      m.on('error', (e) => {
+      m.on('error', (e: any) => {
         console.warn('MapLibre error occurred:', e);
         if (!m.isStyleLoaded()) {
           try {
