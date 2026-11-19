@@ -516,8 +516,17 @@ class IngestionService:
             )
             session.add(cat_rec)
 
-        # Persist time-series records
+        # Persist time-series records in batch
+        existing_rows = session.execute(
+            select(ObservationTimeSeriesRecord.location_name, ObservationTimeSeriesRecord.metric_name).filter_by(
+                dataset_id=dataset_id,
+                date_str=date_str,
+            )
+        ).all()
+        existing_keys = {(r[0], r[1]) for r in existing_rows}
+
         persisted_ts_count = 0
+        new_records = []
         for f in features:
             props = f["properties"]
             coords = f["geometry"]["coordinates"]
@@ -532,16 +541,8 @@ class IngestionService:
                 else (props.get("chlor_a") or props.get("sst") or props.get("ssha_karin_m") or props.get("aod_550") or props.get("precipitation_accumulated_mm") or 0.0)
             )
 
-            existing_ts = session.execute(
-                select(ObservationTimeSeriesRecord.id).filter_by(
-                    dataset_id=dataset_id,
-                    location_name=loc_label,
-                    date_str=date_str,
-                    metric_name=metric,
-                )
-            ).scalar_one_or_none()
-
-            if not existing_ts:
+            if (loc_label, metric) not in existing_keys:
+                existing_keys.add((loc_label, metric))
                 ts_rec = ObservationTimeSeriesRecord(
                     dataset_id=dataset_id,
                     location_name=loc_label,
@@ -558,8 +559,11 @@ class IngestionService:
                     source_file_checksum=checksum,
                     granule_id=granule_id,
                 )
-                session.add(ts_rec)
+                new_records.append(ts_rec)
                 persisted_ts_count += 1
+
+        if new_records:
+            session.add_all(new_records)
 
         session.commit()
         logger.info(f"Successfully ingested genuine satellite granule {granule_id} ({persisted_ts_count} timeseries points).")

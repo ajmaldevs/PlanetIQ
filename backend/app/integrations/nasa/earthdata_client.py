@@ -306,15 +306,21 @@ class NasaEarthdataClient:
     @classmethod
     async def download_granule(
         cls,
-        granule_url: str,
-        destination_path: str,
+        granule_url: str = "",
+        destination_path: str = "",
         timeout_seconds: float = 120.0,
+        url: Optional[str] = None,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """
         Downloads a granule from NASA Earthdata.
         Handles Earthdata Login (EDL) redirects, authenticates via bearer token or basic auth,
         streams to a temporary file, and performs validation before finalizing.
         """
+        target_url = (granule_url or url or kwargs.get("download_url") or "").strip()
+        if not target_url:
+            return {"status": "missing_download_link", "message": "No valid granule URL provided."}
+        granule_url = target_url
         auth_status = cls.get_auth_status()
         if not auth_status["granule_download_available"]:
             return {

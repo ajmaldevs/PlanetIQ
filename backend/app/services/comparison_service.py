@@ -1,4 +1,5 @@
 from typing import Optional, List
+from app.core.config import settings
 from app.schemas.scientific import (
     PeriodComparisonResponse,
     PeriodObservation,
@@ -14,6 +15,7 @@ class ComparisonService:
     Scientific service for comparing Earth system observations across two historical periods (Period A vs Period B).
     Respects physical units, computes absolute differences and valid percentage changes,
     and provides regional geographic difference arrays with grounded scientific interpretations.
+    Never falls back to synthetic or demonstration data in production workflows.
     """
 
     @classmethod
@@ -24,14 +26,15 @@ class ComparisonService:
         period_b: str,
         latitude: float = 0.0,
         longitude: float = 0.0,
+        source_mode: str = "auto",
     ) -> PeriodComparisonResponse:
         mod = module.lower().strip()
         if mod == "atmosphere":
-            return cls._compare_atmosphere(period_a, period_b, latitude, longitude)
+            return cls._compare_atmosphere(period_a, period_b, latitude, longitude, source_mode=source_mode)
         elif mod == "ocean":
-            return cls._compare_ocean(period_a, period_b, latitude, longitude)
+            return cls._compare_ocean(period_a, period_b, latitude, longitude, source_mode=source_mode)
         elif mod == "land":
-            return cls._compare_land(period_a, period_b, latitude, longitude)
+            return cls._compare_land(period_a, period_b, latitude, longitude, source_mode=source_mode)
         else:
             raise ValueError(f"Unsupported module '{module}'. Choose 'atmosphere', 'ocean', or 'land'.")
 
@@ -42,10 +45,17 @@ class ComparisonService:
         period_b: str,
         lat: float,
         lon: float,
+        source_mode: str = "auto",
     ) -> PeriodComparisonResponse:
-        ts = AtmosphereService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026)
+        ts = AtmosphereService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode=source_mode)
         if not ts.timeseries or period_a not in {p.date for p in ts.timeseries} or period_b not in {p.date for p in ts.timeseries}:
-            ts = AtmosphereService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode="demonstration")
+            if source_mode == "demonstration" or (source_mode == "auto" and settings.ALLOW_DEMO_FALLBACK):
+                ts = AtmosphereService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode="demonstration")
+            else:
+                raise ValueError(
+                    f"Authentic atmospheric satellite observations are unavailable for requested periods ({period_a}, {period_b}) "
+                    f"at ({lat}, {lon}). Missing observations are not fabricated in production."
+                )
         pts_by_date = {p.date: p for p in ts.timeseries}
 
         pt_a = pts_by_date.get(period_a) or ts.timeseries[0]
@@ -72,9 +82,12 @@ class ComparisonService:
         # Regional differences across standard GPM benchmark locations
         regional_diffs: List[RegionalDiffPoint] = []
         for reg in AtmosphereService.ATMOSPHERE_REGIONS[:5]:
-            reg_ts = AtmosphereService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026)
+            reg_ts = AtmosphereService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode=source_mode)
             if not reg_ts.timeseries:
-                reg_ts = AtmosphereService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode="demonstration")
+                if source_mode == "demonstration" or (source_mode == "auto" and settings.ALLOW_DEMO_FALLBACK):
+                    reg_ts = AtmosphereService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode="demonstration")
+                else:
+                    continue
             if not reg_ts.timeseries:
                 continue
             reg_pts = {p.date: p for p in reg_ts.timeseries}
@@ -150,10 +163,17 @@ class ComparisonService:
         period_b: str,
         lat: float,
         lon: float,
+        source_mode: str = "auto",
     ) -> PeriodComparisonResponse:
-        ts = OceanService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026)
+        ts = OceanService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode=source_mode)
         if not ts.timeseries or period_a not in {p.date for p in ts.timeseries} or period_b not in {p.date for p in ts.timeseries}:
-            ts = OceanService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode="demonstration")
+            if source_mode == "demonstration" or (source_mode == "auto" and settings.ALLOW_DEMO_FALLBACK):
+                ts = OceanService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode="demonstration")
+            else:
+                raise ValueError(
+                    f"Authentic ocean satellite observations are unavailable for requested periods ({period_a}, {period_b}) "
+                    f"at ({lat}, {lon}). Missing observations are not fabricated in production."
+                )
         pts_by_date = {p.date: p for p in ts.timeseries}
 
         pt_a = pts_by_date.get(period_a) or ts.timeseries[0]
@@ -173,9 +193,12 @@ class ComparisonService:
 
         regional_diffs: List[RegionalDiffPoint] = []
         for reg in OceanService.OCEAN_REGIONS[:5]:
-            reg_ts = OceanService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026)
+            reg_ts = OceanService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode=source_mode)
             if not reg_ts.timeseries:
-                reg_ts = OceanService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode="demonstration")
+                if source_mode == "demonstration" or (source_mode == "auto" and settings.ALLOW_DEMO_FALLBACK):
+                    reg_ts = OceanService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode="demonstration")
+                else:
+                    continue
             if not reg_ts.timeseries:
                 continue
             reg_pts = {p.date: p for p in reg_ts.timeseries}
@@ -251,10 +274,17 @@ class ComparisonService:
         period_b: str,
         lat: float,
         lon: float,
+        source_mode: str = "auto",
     ) -> PeriodComparisonResponse:
-        ts = LandService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026)
+        ts = LandService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode=source_mode)
         if not ts.timeseries or period_a not in {p.date for p in ts.timeseries} or period_b not in {p.date for p in ts.timeseries}:
-            ts = LandService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode="demonstration")
+            if source_mode == "demonstration" or (source_mode == "auto" and settings.ALLOW_DEMO_FALLBACK):
+                ts = LandService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode="demonstration")
+            else:
+                raise ValueError(
+                    f"Authentic terrestrial vegetation satellite observations are unavailable for requested periods ({period_a}, {period_b}) "
+                    f"at ({lat}, {lon}). Missing observations are not fabricated in production."
+                )
         pts_by_date = {p.date: p for p in ts.timeseries}
 
         pt_a = pts_by_date.get(period_a) or ts.timeseries[0]
@@ -279,9 +309,12 @@ class ComparisonService:
 
         regional_diffs: List[RegionalDiffPoint] = []
         for reg in LandService.LAND_REGIONS[:5]:
-            reg_ts = LandService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026)
+            reg_ts = LandService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode=source_mode)
             if not reg_ts.timeseries:
-                reg_ts = LandService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode="demonstration")
+                if source_mode == "demonstration" or (source_mode == "auto" and settings.ALLOW_DEMO_FALLBACK):
+                    reg_ts = LandService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode="demonstration")
+                else:
+                    continue
             if not reg_ts.timeseries:
                 continue
             reg_pts = {p.date: p for p in reg_ts.timeseries}

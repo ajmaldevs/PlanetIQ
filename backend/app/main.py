@@ -20,7 +20,7 @@ async def lifespan(app: FastAPI):
         db_check = await check_database_connection()
         logger.info(f"Database status: {db_check.get('status')} (PostGIS available: {db_check.get('postgis_available')})")
 
-        # If PostgreSQL is active, ensure verified satellite observations are seeded
+        # If PostgreSQL is active, log genuine verified satellite observations count (never auto-seed fabricated data)
         if db_check.get("connected"):
             db = get_sync_session()
             if db is not None:
@@ -30,14 +30,9 @@ async def lifespan(app: FastAPI):
                     verified_count = db.execute(
                         select(func.count(ObservationTimeSeriesRecord.id)).filter_by(verification_status="verified_observation")
                     ).scalar() or 0
-
-                    if verified_count == 0:
-                        logger.info("Initializing authoritative verified satellite observations in PostgreSQL...")
-                        IngestionService.seed_authoritative_satellite_observations(db)
-                    else:
-                        logger.info(f"Database contains {verified_count} verified satellite observations.")
-                except Exception as seed_err:
-                    logger.warning(f"Startup observation check notice: {seed_err}")
+                    logger.info(f"Database connected. Genuine verified satellite observations present: {verified_count}")
+                except Exception as check_err:
+                    logger.warning(f"Startup observation check notice: {check_err}")
                 finally:
                     db.close()
 

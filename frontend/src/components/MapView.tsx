@@ -107,7 +107,7 @@ const OFFLINE_FALLBACK_STYLE: maplibregl.StyleSpecification = {
       paint: { 'line-color': '#f59e0b', 'line-width': 0.6, 'line-opacity': 0.45 },
     },
   ],
-  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+  glyphs: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/fonts/{fontstack}/{range}.pbf',
 };
 
 // Authoritative GeoJSON FeatureCollection of all 1,214 global GIS places for progressive 2D labeling
@@ -217,6 +217,23 @@ export const MapView: React.FC<MapViewProps> = ({
       if (!isInternalFlyRef.current) onCenterChangeRef.current?.(lat, lng);
     };
 
+    const isWebGLAvailable = (): boolean => {
+      try {
+        const canvas = document.createElement('canvas');
+        return Boolean(
+          window.WebGLRenderingContext &&
+          (canvas.getContext('webgl') || canvas.getContext('experimental-webgl'))
+        );
+      } catch {
+        return false;
+      }
+    };
+
+    if (!isWebGLAvailable()) {
+      console.warn('MapLibre GL cannot initialize: WebGL is disabled or unavailable.');
+      return;
+    }
+
     try {
       const m = new maplibregl.Map({
         container: mapContainer.current,
@@ -263,9 +280,16 @@ export const MapView: React.FC<MapViewProps> = ({
       });
 
       m.on('error', (e: any) => {
-        console.warn('MapLibre error occurred:', e);
-        if (!m.isStyleLoaded()) {
+        console.warn('MapLibre error event:', e);
+        // Do not destroy the primary basemap style on transient tile, font, or sprite errors
+        if (e.dataType === 'tile' || e.dataType === 'glyphs' || e.tile) {
+          return;
+        }
+
+        // Only switch to offline boundary fallback if the primary style itself failed to load
+        if (e.dataType === 'style' && !m.isStyleLoaded()) {
           try {
+            console.warn('Primary basemap style failed to load. Switching to offline natural earth fallback.');
             m.setStyle(OFFLINE_FALLBACK_STYLE);
             setUsingFallbackStyle(true);
           } catch (err) {
@@ -346,14 +370,17 @@ export const MapView: React.FC<MapViewProps> = ({
     prevVisibleRef.current = visible;
     if (!wasVisible && visible && map.current) {
       const targetZoom = distanceToMapZoom(cameraDistance ?? 4.6);
-      map.current.resize();
-      if (center && !selectedPlace && !selectedFeature) {
-        map.current.jumpTo({
-          center: [center.lon, center.lat],
-          zoom: targetZoom,
-        });
-      }
-      map.current.resize();
+      requestAnimationFrame(() => {
+        if (!map.current) return;
+        map.current.resize();
+        if (center && !selectedPlace && !selectedFeature) {
+          map.current.jumpTo({
+            center: [center.lon, center.lat],
+            zoom: targetZoom,
+          });
+        }
+        map.current.resize();
+      });
     }
   }, [visible, mapLoaded, center, cameraDistance, selectedPlace, selectedFeature]);
 

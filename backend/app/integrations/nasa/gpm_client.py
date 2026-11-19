@@ -100,7 +100,7 @@ class GpmClient:
             }
 
         dl_res = await NasaEarthdataClient.download_granule(
-            url=download_url,
+            granule_url=download_url,
             destination_path=local_path,
         )
 

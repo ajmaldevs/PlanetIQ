@@ -15,7 +15,7 @@ class ObservationTimeSeriesRecord(TimeStampedModel):
     date_str = Column(String(10), index=True, nullable=False)  # YYYY-MM
     metric_name = Column(String(64), index=True, nullable=False)
     value = Column(Float, nullable=False)
-    unit = Column(String(32), nullable=False)
+    unit = Column(String(64), nullable=False)
     baseline_normal = Column(Float, nullable=True)
     anomaly = Column(Float, nullable=True)
     quality_flag = Column(Float, default=1.0)
