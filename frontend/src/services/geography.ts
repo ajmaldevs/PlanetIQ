@@ -217,7 +217,7 @@ export function resolveGeographicContext(
 
 /**
  * Converts geographic (lat, lon) in degrees to a 3D Cartesian Vector3 on a sphere of radius R.
- * Standard spherical-to-Cartesian convention matching TerraLens Three.js world coordinates.
+ * Standard spherical-to-Cartesian convention matching PlanetIQ Three.js world coordinates.
  */
 export function latLonToVector3(lat: number, lon: number, radius: number): THREE.Vector3 {
   const phi = (90 - lat) * (Math.PI / 180);
@@ -234,16 +234,21 @@ export function latLonToVector3(lat: number, lon: number, radius: number): THREE
  * - Ocean: Chlorophyll-a (mg/m³), SST (°C), SSHA (meters)
  * - Atmosphere: Precipitation Rate (mm/hr), Accumulation (mm), AOD 550nm (turbidity), Cloud Fraction (%)
  * - Land: MODIS NDVI / EVI (-0.2 to 1.0)
+ * Unobserved or missing measurements return neutral no-data gray (#64748b).
  */
 export function getScientificObservationHexColor(
   properties: Record<string, any>,
   moduleName: string | null,
   metricType: string = 'rate'
 ): string {
+  const NO_DATA_COLOR = '#64748b';
+
+  if (!properties) return NO_DATA_COLOR;
+
   if (moduleName === 'ocean') {
     if (metricType === 'chlor_a') {
       const chl = properties.chlor_a_mg_m3 ?? properties.chlor_a;
-      if (chl === undefined || chl === null) return '#0284c7';
+      if (chl === undefined || chl === null) return NO_DATA_COLOR;
       if (chl < 0.1) return '#1e40af';      // Oligotrophic blue
       if (chl < 0.5) return '#06b6d4';      // Moderate turquoise
       if (chl < 1.5) return '#10b981';      // Productive shelf green
@@ -252,7 +257,7 @@ export function getScientificObservationHexColor(
 
     if (metricType === 'sst') {
       const sst = properties.sst_celsius ?? properties.sst;
-      if (sst === undefined || sst === null) return '#06b6d4';
+      if (sst === undefined || sst === null) return NO_DATA_COLOR;
       if (sst < 8.0) return '#1d4ed8';      // Subpolar cold
       if (sst < 18.0) return '#06b6d4';     // Temperate cool
       if (sst < 26.0) return '#f59e0b';     // Warm subtropical
@@ -260,7 +265,8 @@ export function getScientificObservationHexColor(
     }
 
     // Default: SSHA or SSH
-    const ssha = properties.ssha_karin_m ?? properties.ssha ?? 0;
+    const ssha = properties.ssha_karin_m ?? properties.ssha;
+    if (ssha === undefined || ssha === null) return NO_DATA_COLOR;
     if (ssha <= -0.15) return '#2563eb';
     if (ssha < 0) return '#38bdf8';
     if (ssha <= 0.15) return '#f59e0b';
@@ -270,7 +276,7 @@ export function getScientificObservationHexColor(
   if (moduleName === 'atmosphere') {
     if (metricType === 'aod') {
       const aod = properties.aod_550;
-      if (aod === undefined || aod === null) return '#38bdf8';
+      if (aod === undefined || aod === null) return NO_DATA_COLOR;
       if (aod < 0.10) return '#38bdf8';     // Pristine maritime
       if (aod < 0.30) return '#eab308';     // Light aerosol background
       if (aod < 0.60) return '#f97316';     // Regional industrial haze
@@ -279,7 +285,7 @@ export function getScientificObservationHexColor(
 
     if (metricType === 'cloud') {
       const cld = properties.cloud_fraction ?? (properties.cloud_fraction_percent ? properties.cloud_fraction_percent / 100 : null);
-      if (cld === undefined || cld === null) return '#7dd3fc';
+      if (cld === undefined || cld === null) return NO_DATA_COLOR;
       if (cld < 0.25) return '#0284c7';     // Clear skies
       if (cld < 0.55) return '#7dd3fc';     // Scattered clouds
       if (cld < 0.80) return '#cbd5e1';     // Broken cloud cover
@@ -287,13 +293,15 @@ export function getScientificObservationHexColor(
     }
 
     if (metricType === 'rate') {
-      const rate = properties.precipitation_rate_mm_hr ?? 0;
+      const rate = properties.precipitation_rate_mm_hr;
+      if (rate === undefined || rate === null) return NO_DATA_COLOR;
       if (rate < 0.1) return '#38bdf8';
       if (rate < 0.3) return '#0284c7';
       if (rate < 0.5) return '#6366f1';
       return '#ec4899';
     } else {
-      const acc = properties.precipitation_accumulated_mm ?? 0;
+      const acc = properties.precipitation_accumulated_mm;
+      if (acc === undefined || acc === null) return NO_DATA_COLOR;
       if (acc < 80) return '#38bdf8';
       if (acc < 200) return '#0284c7';
       if (acc < 350) return '#6366f1';
@@ -302,12 +310,13 @@ export function getScientificObservationHexColor(
   }
 
   if (moduleName === 'land') {
-    const ndvi = properties.ndvi ?? 0.5;
+    const ndvi = properties.ndvi;
+    if (ndvi === undefined || ndvi === null) return NO_DATA_COLOR;
     if (ndvi < 0.2) return '#d97706';
     if (ndvi < 0.45) return '#ca8a04';
     if (ndvi < 0.7) return '#84cc16';
     return '#10b981';
   }
 
-  return '#38bdf8';
+  return NO_DATA_COLOR;
 }

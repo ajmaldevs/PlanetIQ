@@ -12,7 +12,7 @@ async def test_atmosphere_endpoints():
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
-        assert data["metadata"]["data_status"] in ("observation", "unavailable", "simulated")
+        assert data["metadata"]["data_status"] in ("observation", "unavailable", "demonstration_model", "simulated")
         if data["metadata"]["data_status"] == "observation":
             assert len(data["features"]) > 0
 
@@ -28,7 +28,7 @@ async def test_atmosphere_endpoints():
         demo_res = await client.get("/api/v1/atmosphere/grid?date=2026-03&source_mode=demonstration")
         assert demo_res.status_code == 200
         demo_data = demo_res.json()
-        assert demo_data["metadata"]["data_status"] == "simulated"
+        assert demo_data["metadata"]["data_status"] in ("demonstration_model", "simulated")
         assert demo_data["metadata"]["is_observation"] is False
         assert len(demo_data["features"]) > 0
 
@@ -44,7 +44,7 @@ async def test_atmosphere_endpoints():
         ts_res = await client.get("/api/v1/atmosphere/timeseries?latitude=7.0&longitude=-135.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
-        assert ts_data["data_status"] in ("observation", "unavailable", "simulated")
+        assert ts_data["data_status"] in ("observation", "unavailable", "demonstration_model", "simulated")
 
 
 @pytest.mark.asyncio
@@ -56,7 +56,7 @@ async def test_ocean_swot_endpoints():
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
-        assert data["metadata"]["data_status"] in ("observation", "unavailable", "simulated")
+        assert data["metadata"]["data_status"] in ("observation", "unavailable", "demonstration_model", "simulated")
 
         # Spatial Swaths - Explicit Observation Mode for unobserved date (Reports truthful unavailable status)
         obs_res = await client.get("/api/v1/ocean/observations?date=2025-01&source_mode=observation")
@@ -70,7 +70,7 @@ async def test_ocean_swot_endpoints():
         demo_res = await client.get("/api/v1/ocean/observations?date=2026-03&source_mode=demonstration")
         assert demo_res.status_code == 200
         demo_data = demo_res.json()
-        assert demo_data["metadata"]["data_status"] == "simulated"
+        assert demo_data["metadata"]["data_status"] in ("demonstration_model", "simulated")
         assert demo_data["metadata"]["is_observation"] is False
         assert len(demo_data["features"]) > 0
 
@@ -82,7 +82,7 @@ async def test_ocean_swot_endpoints():
         ts_res = await client.get("/api/v1/ocean/timeseries?latitude=28.0&longitude=-65.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
-        assert ts_data["data_status"] in ("observation", "unavailable", "simulated")
+        assert ts_data["data_status"] in ("observation", "unavailable", "demonstration_model", "simulated")
 
 
 @pytest.mark.asyncio
@@ -94,13 +94,13 @@ async def test_land_modis_endpoints():
         assert res.status_code == 200
         data = res.json()
         assert data["type"] == "FeatureCollection"
-        assert data["metadata"]["data_status"] in ("observation", "unavailable", "simulated")
+        assert data["metadata"]["data_status"] in ("observation", "unavailable", "demonstration_model", "simulated")
 
         # Spatial Grid - Explicit Demonstration Mode
         demo_res = await client.get("/api/v1/land/grid?date=2026-03&source_mode=demonstration")
         assert demo_res.status_code == 200
         demo_data = demo_res.json()
-        assert demo_data["metadata"]["data_status"] == "simulated"
+        assert demo_data["metadata"]["data_status"] in ("demonstration_model", "simulated")
         assert demo_data["metadata"]["is_observation"] is False
         assert len(demo_data["features"]) > 0
 
@@ -111,7 +111,7 @@ async def test_land_modis_endpoints():
         assert -0.2 <= prop["ndvi"] <= 1.0
         assert "vci_percent" in prop
         assert "drought_category" in prop
-        assert prop["data_status"] in ("observation", "simulated")
+        assert prop["data_status"] in ("observation", "demonstration_model", "simulated")
         assert prop["is_observation"] in (True, False)
         assert "provenance" in prop
 
@@ -119,14 +119,14 @@ async def test_land_modis_endpoints():
         ts_res = await client.get("/api/v1/land/timeseries?latitude=-3.5&longitude=-62.0")
         assert ts_res.status_code == 200
         ts_data = ts_res.json()
-        assert ts_data["data_status"] in ("observation", "unavailable", "simulated")
+        assert ts_data["data_status"] in ("observation", "unavailable", "demonstration_model", "simulated")
         assert ts_data["dataset_id"] == "MOD13C2"
 
         # Timeseries - Explicit Demonstration Mode
         demo_ts_res = await client.get("/api/v1/land/timeseries?latitude=-3.5&longitude=-62.0&source_mode=demonstration")
         assert demo_ts_res.status_code == 200
         demo_ts_data = demo_ts_res.json()
-        assert demo_ts_data["data_status"] == "simulated"
+        assert demo_ts_data["data_status"] in ("demonstration_model", "simulated")
         assert demo_ts_data["is_observation"] is False
 
 

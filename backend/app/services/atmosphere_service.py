@@ -140,10 +140,10 @@ class AtmosphereService:
             points = [
                 AtmosphereTimeSeriesPoint(
                     date=p["date"],
-                    precipitation_rate_mm_hr=p["precipitation_rate_mm_hr"],
-                    precipitation_accumulated_mm=p["precipitation_accumulated_mm"],
-                    climatological_normal_mm=p["climatological_normal_mm"],
-                    anomaly_mm=p["anomaly_mm"],
+                    precipitation_rate_mm_hr=p.get("precipitation_rate_mm_hr"),
+                    precipitation_accumulated_mm=p.get("precipitation_accumulated_mm"),
+                    climatological_normal_mm=p.get("climatological_normal_mm"),
+                    anomaly_mm=p.get("anomaly_mm"),
                     aod_550=p.get("aod_550"),
                     cloud_fraction=p.get("cloud_fraction"),
                 )

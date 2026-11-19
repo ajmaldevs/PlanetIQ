@@ -66,6 +66,68 @@ class ObservationRepository:
         from app.core.database import mark_sync_db_failed
         mark_sync_db_failed()
 
+    @classmethod
+    def _is_postgis_available(cls, session: Session) -> bool:
+        """Checks if the active session is connected to PostgreSQL with PostGIS."""
+        try:
+            bind = session.get_bind()
+            return bind is not None and bind.dialect.name == "postgresql"
+        except Exception:
+            return False
+
+    @classmethod
+    def _apply_bbox_filter(
+        cls,
+        query,
+        session: Session,
+        min_lat: Optional[float] = None,
+        max_lat: Optional[float] = None,
+        min_lon: Optional[float] = None,
+        max_lon: Optional[float] = None,
+    ):
+        """
+        Applies spatial bounding filter using PostGIS ST_Intersects and ST_MakeEnvelope
+        on PostgreSQL, with transparent fallback to scalar float coordinate filters on SQLite.
+        """
+        if all(v is not None for v in (min_lat, max_lat, min_lon, max_lon)):
+            if cls._is_postgis_available(session):
+                from geoalchemy2.functions import ST_Intersects, ST_MakeEnvelope
+                from sqlalchemy import or_, and_
+                # ST_MakeEnvelope(xmin, ymin, xmax, ymax, srid=4326) where x=lon, y=lat
+                envelope = ST_MakeEnvelope(min_lon, min_lat, max_lon, max_lat, 4326)
+                return query.filter(
+                    or_(
+                        and_(
+                            ObservationTimeSeriesRecord.geom.isnot(None),
+                            ST_Intersects(ObservationTimeSeriesRecord.geom, envelope),
+                        ),
+                        and_(
+                            ObservationTimeSeriesRecord.geom.is_(None),
+                            ObservationTimeSeriesRecord.latitude >= min_lat,
+                            ObservationTimeSeriesRecord.latitude <= max_lat,
+                            ObservationTimeSeriesRecord.longitude >= min_lon,
+                            ObservationTimeSeriesRecord.longitude <= max_lon,
+                        ),
+                    )
+                )
+            else:
+                return query.filter(
+                    ObservationTimeSeriesRecord.latitude >= min_lat,
+                    ObservationTimeSeriesRecord.latitude <= max_lat,
+                    ObservationTimeSeriesRecord.longitude >= min_lon,
+                    ObservationTimeSeriesRecord.longitude <= max_lon,
+                )
+        else:
+            if min_lat is not None:
+                query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
+            if max_lat is not None:
+                query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
+            if min_lon is not None:
+                query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
+            if max_lon is not None:
+                query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
+            return query
+
     # =========================================================================
     # 1. LAND (NASA MODIS MOD13C2 v061 0.05° CMG)
     # =========================================================================
@@ -96,14 +158,7 @@ class ObservationRepository:
                         ObservationTimeSeriesRecord.date_str == date_str,
                         ObservationTimeSeriesRecord.verification_status == "verified_observation",
                     )
-                    if min_lat is not None:
-                        query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
-                    if max_lat is not None:
-                        query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
-                    if min_lon is not None:
-                        query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
-                    if max_lon is not None:
-                        query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
+                    query = cls._apply_bbox_filter(query, db, min_lat, max_lat, min_lon, max_lon)
 
                     records = db.execute(query).scalars().all()
 
@@ -204,8 +259,11 @@ class ObservationRepository:
                         ObservationTimeSeriesRecord.dataset_id == "MOD13C2",
                         ObservationTimeSeriesRecord.metric_name == "NDVI",
                         ObservationTimeSeriesRecord.verification_status == "verified_observation",
-                        ObservationTimeSeriesRecord.latitude.between(latitude - 1.0, latitude + 1.0),
-                        ObservationTimeSeriesRecord.longitude.between(longitude - 1.0, longitude + 1.0),
+                    )
+                    query = cls._apply_bbox_filter(
+                        query, db,
+                        min_lat=latitude - 1.0, max_lat=latitude + 1.0,
+                        min_lon=longitude - 1.0, max_lon=longitude + 1.0,
                     ).order_by(ObservationTimeSeriesRecord.date_str)
 
                     recs = db.execute(query).scalars().all()
@@ -299,14 +357,7 @@ class ObservationRepository:
                         ObservationTimeSeriesRecord.date_str == date_str,
                         ObservationTimeSeriesRecord.verification_status == "verified_observation",
                     )
-                    if min_lat is not None:
-                        query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
-                    if max_lat is not None:
-                        query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
-                    if min_lon is not None:
-                        query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
-                    if max_lon is not None:
-                        query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
+                    query = cls._apply_bbox_filter(query, db, min_lat, max_lat, min_lon, max_lon)
 
                     records = db.execute(query).scalars().all()
                     for rec in records:
@@ -365,14 +416,68 @@ class ObservationRepository:
         max_lon: Optional[float] = None,
         session: Optional[Session] = None,
     ) -> Dict[str, Any]:
-        """SWOT KaRIn Sea Surface Height query wrapper."""
-        return cls.get_real_ocean_spatial_grid(
+        """
+        SWOT KaRIn Sea Surface Height query strictly isolated from MODIS optical datasets.
+        Only returns verified SWOT altimetry observations (ssha_karin).
+        """
+        features: List[Dict[str, Any]] = []
+        target_granule = ""
+
+        with session_scope(session) as db:
+            if db is not None:
+                try:
+                    query = select(ObservationTimeSeriesRecord).filter(
+                        ObservationTimeSeriesRecord.dataset_id == "SWOT_L2_LR_SSH",
+                        ObservationTimeSeriesRecord.metric_name.in_(["ssha", "ssha_karin", "ssh_karin"]),
+                        ObservationTimeSeriesRecord.date_str == date_str,
+                        ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                    )
+                    query = cls._apply_bbox_filter(query, db, min_lat, max_lat, min_lon, max_lon)
+
+                    records = db.execute(query).scalars().all()
+                    for rec in records:
+                        target_granule = rec.granule_id or "SWOT_KARIN_VERIFIED"
+                        feat = OceanProcessor.process_ocean_point(
+                            lat=rec.latitude,
+                            lon=rec.longitude,
+                            date_str=date_str,
+                            granule_id=target_granule,
+                            chl=None,
+                            sst=None,
+                            ssha=rec.value,
+                            quality_flag=int(rec.quality_flag or 0),
+                            location_name=rec.location_name,
+                        )
+                        if feat:
+                            feat["properties"]["verification_status"] = "verified_observation"
+                            feat["properties"]["source_file_checksum"] = rec.source_file_checksum
+                            features.append(feat)
+                except Exception as exc:
+                    cls.mark_db_failed()
+                    logger.debug(f"DB error in get_real_swot_spatial_grid: {exc}")
+
+        if not features:
+            return {
+                "type": "FeatureCollection",
+                "metadata": {
+                    "dataset_id": "SWOT_L2_LR_SSH",
+                    "date": date_str,
+                    "data_status": "unavailable",
+                    "is_observation": False,
+                    "source_type": "none",
+                    "agency": "NASA PO.DAAC / CNES / CSA / UKSA",
+                    "sensor": "Ka-band Radar Interferometer (KaRIn)",
+                    "feature_count": 0,
+                    "units": {"ssha": "meters (m)"},
+                    "data_notice": f"No authentic SWOT satellite observations available for calendar period {date_str}.",
+                },
+                "features": [],
+            }
+
+        return OceanProcessor.create_feature_collection(
+            features=features,
             date_str=date_str,
-            min_lat=min_lat,
-            max_lat=max_lat,
-            min_lon=min_lon,
-            max_lon=max_lon,
-            session=session,
+            granule_id=target_granule,
         )
 
     @classmethod
@@ -395,23 +500,41 @@ class ObservationRepository:
                     query = select(ObservationTimeSeriesRecord).filter(
                         ObservationTimeSeriesRecord.dataset_id.in_(["MODISA_L3m_CHL", "MODISA_L3m_SST", "SWOT_L2_LR_SSH"]),
                         ObservationTimeSeriesRecord.verification_status == "verified_observation",
-                        ObservationTimeSeriesRecord.latitude.between(latitude - 2.0, latitude + 2.0),
-                        ObservationTimeSeriesRecord.longitude.between(longitude - 2.0, longitude + 2.0),
+                    )
+                    query = cls._apply_bbox_filter(
+                        query, db,
+                        min_lat=latitude - 2.0, max_lat=latitude + 2.0,
+                        min_lon=longitude - 2.0, max_lon=longitude + 2.0,
                     ).order_by(ObservationTimeSeriesRecord.date_str)
 
                     recs = db.execute(query).scalars().all()
+                    merged: Dict[str, Dict[str, Any]] = {}
                     for r in recs:
                         parts = r.date_str.split("-")
                         yr = int(parts[0])
-                        if start_year <= yr <= end_year:
-                            target_granule = r.granule_id
-                            region_name = r.location_name
-                            points.append({
-                                "date": r.date_str,
-                                "ssha_mean_m": r.value if "SSH" in r.dataset_id else 0.0,
-                                "chlor_a": r.value if "CHL" in r.dataset_id else None,
-                                "sst": r.value if "SST" in r.dataset_id else None,
-                            })
+                        if not (start_year <= yr <= end_year):
+                            continue
+                        target_granule = r.granule_id
+                        region_name = r.location_name
+                        d = r.date_str
+                        if d not in merged:
+                            merged[d] = {
+                                "date": d,
+                                "ssha_mean_m": None,
+                                "ssha_min_m": None,
+                                "ssha_max_m": None,
+                                "eddy_kinetic_energy_cm2_s2": None,
+                                "chlor_a": None,
+                                "sst": None,
+                            }
+                        if r.dataset_id == "SWOT_L2_LR_SSH" or "SSH" in r.dataset_id or r.metric_name in ["ssha", "ssha_karin"]:
+                            merged[d]["ssha_mean_m"] = r.value
+                        elif r.dataset_id == "MODISA_L3m_CHL" or r.metric_name == "chlor_a":
+                            merged[d]["chlor_a"] = r.value
+                        elif r.dataset_id == "MODISA_L3m_SST" or r.metric_name == "sst":
+                            merged[d]["sst"] = r.value
+
+                    points = [merged[d] for d in sorted(merged.keys())]
                 except Exception as exc:
                     cls.mark_db_failed()
                     logger.debug(f"DB error in get_real_ocean_timeseries: {exc}")
@@ -464,14 +587,90 @@ class ObservationRepository:
         end_year: int = 2026,
         session: Optional[Session] = None,
     ) -> Dict[str, Any]:
-        """SWOT KaRIn time series wrapper."""
-        return cls.get_real_ocean_timeseries(
-            latitude=latitude,
-            longitude=longitude,
-            start_year=start_year,
-            end_year=end_year,
-            session=session,
-        )
+        """SWOT KaRIn time series query strictly isolated to SWOT_L2_LR_SSH altimetry."""
+        points = []
+        region_name = f"Ocean Coordinate ({latitude:+.2f}°, {longitude:+.2f}°)"
+        target_granule = None
+
+        with session_scope(session) as db:
+            if db is not None:
+                try:
+                    query = select(ObservationTimeSeriesRecord).filter(
+                        ObservationTimeSeriesRecord.dataset_id == "SWOT_L2_LR_SSH",
+                        ObservationTimeSeriesRecord.metric_name.in_(["ssha", "ssha_karin"]),
+                        ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                    )
+                    query = cls._apply_bbox_filter(
+                        query, db,
+                        min_lat=latitude - 2.0, max_lat=latitude + 2.0,
+                        min_lon=longitude - 2.0, max_lon=longitude + 2.0,
+                    ).order_by(ObservationTimeSeriesRecord.date_str)
+
+                    recs = db.execute(query).scalars().all()
+                    merged: Dict[str, Dict[str, Any]] = {}
+                    for r in recs:
+                        parts = r.date_str.split("-")
+                        yr = int(parts[0])
+                        if not (start_year <= yr <= end_year):
+                            continue
+                        target_granule = r.granule_id
+                        region_name = r.location_name
+                        d = r.date_str
+                        if d not in merged:
+                            merged[d] = {
+                                "date": d,
+                                "ssha_mean_m": None,
+                                "ssha_min_m": None,
+                                "ssha_max_m": None,
+                                "eddy_kinetic_energy_cm2_s2": None,
+                                "chlor_a": None,
+                                "sst": None,
+                            }
+                        merged[d]["ssha_mean_m"] = r.value
+
+                    points = [merged[d] for d in sorted(merged.keys())]
+                except Exception as exc:
+                    cls.mark_db_failed()
+                    logger.debug(f"DB error in get_real_swot_timeseries: {exc}")
+
+        if not points:
+            return {
+                "dataset_id": "SWOT_L2_LR_SSH",
+                "dataset_name": "NASA/CNES SWOT KaRIn Ocean Altimetry",
+                "region_name": region_name,
+                "latitude": latitude,
+                "longitude": longitude,
+                "data_status": "unavailable",
+                "is_observation": False,
+                "source_type": "none",
+                "unit_height": "meters (m)",
+                "summary_statistics": {
+                    "data_status": "unavailable",
+                    "is_observation": False,
+                    "message": "No authentic SWOT satellite observation records ingested for this coordinate.",
+                },
+                "timeseries": [],
+            }
+
+        return {
+            "dataset_id": "SWOT_L2_LR_SSH",
+            "dataset_name": "NASA/CNES SWOT KaRIn Ocean Altimetry",
+            "region_name": region_name,
+            "latitude": latitude,
+            "longitude": longitude,
+            "data_status": "observation",
+            "is_observation": True,
+            "source_type": "satellite_direct",
+            "unit_height": "meters (m)",
+            "summary_statistics": {
+                "data_status": "observation",
+                "is_observation": True,
+                "observation_count": len(points),
+                "granule_id": target_granule,
+                "provenance": "NASA PO.DAAC / CNES / CSA / UKSA",
+            },
+            "timeseries": points,
+        }
 
     # =========================================================================
     # 3. ATMOSPHERE (NASA MODIS Atmosphere & GPM IMERG)
@@ -502,14 +701,7 @@ class ObservationRepository:
                         ObservationTimeSeriesRecord.date_str == date_str,
                         ObservationTimeSeriesRecord.verification_status == "verified_observation",
                     )
-                    if min_lat is not None:
-                        query = query.filter(ObservationTimeSeriesRecord.latitude >= min_lat)
-                    if max_lat is not None:
-                        query = query.filter(ObservationTimeSeriesRecord.latitude <= max_lat)
-                    if min_lon is not None:
-                        query = query.filter(ObservationTimeSeriesRecord.longitude >= min_lon)
-                    if max_lon is not None:
-                        query = query.filter(ObservationTimeSeriesRecord.longitude <= max_lon)
+                    query = cls._apply_bbox_filter(query, db, min_lat, max_lat, min_lon, max_lon)
 
                     records = db.execute(query).scalars().all()
                     for rec in records:
@@ -567,14 +759,66 @@ class ObservationRepository:
         max_lon: Optional[float] = None,
         session: Optional[Session] = None,
     ) -> Dict[str, Any]:
-        """GPM IMERG spatial grid wrapper."""
-        return cls.get_real_atmosphere_spatial_grid(
+        """
+        GPM IMERG Final Monthly Precipitation query strictly isolated from MODIS aerosol datasets.
+        Only returns verified GPM IMERG precipitation observations.
+        """
+        features: List[Dict[str, Any]] = []
+        target_granule = ""
+
+        with session_scope(session) as db:
+            if db is not None:
+                try:
+                    query = select(ObservationTimeSeriesRecord).filter(
+                        ObservationTimeSeriesRecord.dataset_id == "GPM_3IMERGM",
+                        ObservationTimeSeriesRecord.date_str == date_str,
+                        ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                    )
+                    query = cls._apply_bbox_filter(query, db, min_lat, max_lat, min_lon, max_lon)
+
+                    records = db.execute(query).scalars().all()
+                    for rec in records:
+                        target_granule = rec.granule_id or "GPM_3IMERGM_VERIFIED"
+                        feat = AtmosphereProcessor.process_atmosphere_point(
+                            lat=rec.latitude,
+                            lon=rec.longitude,
+                            date_str=date_str,
+                            granule_id=target_granule,
+                            aod=None,
+                            precip_accumulated_mm=rec.value if "precip" in rec.metric_name else None,
+                            quality_flag=int(rec.quality_flag or 3),
+                            location_name=rec.location_name,
+                        )
+                        if feat:
+                            feat["properties"]["verification_status"] = "verified_observation"
+                            feat["properties"]["source_file_checksum"] = rec.source_file_checksum
+                            features.append(feat)
+                except Exception as exc:
+                    cls.mark_db_failed()
+                    logger.debug(f"DB error in get_real_gpm_spatial_grid: {exc}")
+
+        if not features:
+            return {
+                "type": "FeatureCollection",
+                "metadata": {
+                    "dataset_id": "GPM_3IMERGM",
+                    "date": date_str,
+                    "data_status": "unavailable",
+                    "is_observation": False,
+                    "source_type": "none",
+                    "agency": "NASA GES DISC / JAXA",
+                    "sensor": "GPM DPR & GMI",
+                    "feature_count": 0,
+                    "units": {"precipitation": "mm (liquid depth)"},
+                    "data_notice": f"No authentic GPM IMERG precipitation observations available for calendar period {date_str}.",
+                },
+                "features": [],
+            }
+
+        return AtmosphereProcessor.create_feature_collection(
+            features=features,
             date_str=date_str,
-            min_lat=min_lat,
-            max_lat=max_lat,
-            min_lon=min_lon,
-            max_lon=max_lon,
-            session=session,
+            granule_id=target_granule,
         )
 
     @classmethod
@@ -597,22 +841,48 @@ class ObservationRepository:
                     query = select(ObservationTimeSeriesRecord).filter(
                         ObservationTimeSeriesRecord.dataset_id.in_(["MOD08_M3", "GPM_3IMERGM", "MODIS_GPM_ATMOSPHERE"]),
                         ObservationTimeSeriesRecord.verification_status == "verified_observation",
-                        ObservationTimeSeriesRecord.latitude.between(latitude - 2.0, latitude + 2.0),
-                        ObservationTimeSeriesRecord.longitude.between(longitude - 2.0, longitude + 2.0),
+                    )
+                    query = cls._apply_bbox_filter(
+                        query, db,
+                        min_lat=latitude - 2.0, max_lat=latitude + 2.0,
+                        min_lon=longitude - 2.0, max_lon=longitude + 2.0,
                     ).order_by(ObservationTimeSeriesRecord.date_str)
 
                     recs = db.execute(query).scalars().all()
+                    merged: Dict[str, Dict[str, Any]] = {}
                     for r in recs:
                         parts = r.date_str.split("-")
                         yr = int(parts[0])
-                        if start_year <= yr <= end_year:
-                            target_granule = r.granule_id
-                            region_name = r.location_name
-                            points.append({
-                                "date": r.date_str,
-                                "precipitation_accumulated_mm": r.value if "precip" in r.metric_name else 0.0,
-                                "aod_550": r.value if r.metric_name == "aod_550" else None,
-                            })
+                        mo = int(parts[1]) if len(parts) > 1 else 1
+                        if not (start_year <= yr <= end_year):
+                            continue
+                        target_granule = r.granule_id
+                        region_name = r.location_name
+                        d = r.date_str
+                        if d not in merged:
+                            merged[d] = {
+                                "date": d,
+                                "precipitation_rate_mm_hr": None,
+                                "precipitation_accumulated_mm": None,
+                                "climatological_normal_mm": None,
+                                "anomaly_mm": None,
+                                "aod_550": None,
+                                "cloud_fraction": None,
+                            }
+                        if "GPM" in r.dataset_id or "precip" in r.metric_name:
+                            import calendar
+                            days = calendar.monthrange(yr, mo)[1]
+                            acc = r.value
+                            merged[d]["precipitation_accumulated_mm"] = acc
+                            merged[d]["precipitation_rate_mm_hr"] = round(acc / (24.0 * days), 4)
+                            merged[d]["climatological_normal_mm"] = r.baseline_normal
+                            merged[d]["anomaly_mm"] = r.anomaly
+                        elif "MOD08" in r.dataset_id or r.metric_name == "aod_550":
+                            merged[d]["aod_550"] = r.value
+                        elif r.metric_name == "cloud_fraction":
+                            merged[d]["cloud_fraction"] = r.value
+
+                    points = [merged[d] for d in sorted(merged.keys())]
                 except Exception as exc:
                     cls.mark_db_failed()
                     logger.debug(f"DB error in get_real_atmosphere_timeseries: {exc}")
@@ -667,11 +937,96 @@ class ObservationRepository:
         end_year: int = 2026,
         session: Optional[Session] = None,
     ) -> Dict[str, Any]:
-        """GPM IMERG timeseries wrapper."""
-        return cls.get_real_atmosphere_timeseries(
-            latitude=latitude,
-            longitude=longitude,
-            start_year=start_year,
-            end_year=end_year,
-            session=session,
-        )
+        """GPM IMERG timeseries query strictly isolated to GPM_3IMERGM precipitation."""
+        points = []
+        region_name = f"Atmospheric Coordinate ({latitude:+.2f}°, {longitude:+.2f}°)"
+        target_granule = None
+
+        with session_scope(session) as db:
+            if db is not None:
+                try:
+                    query = select(ObservationTimeSeriesRecord).filter(
+                        ObservationTimeSeriesRecord.dataset_id == "GPM_3IMERGM",
+                        ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                    )
+                    query = cls._apply_bbox_filter(
+                        query, db,
+                        min_lat=latitude - 2.0, max_lat=latitude + 2.0,
+                        min_lon=longitude - 2.0, max_lon=longitude + 2.0,
+                    ).order_by(ObservationTimeSeriesRecord.date_str)
+
+                    recs = db.execute(query).scalars().all()
+                    merged: Dict[str, Dict[str, Any]] = {}
+                    for r in recs:
+                        parts = r.date_str.split("-")
+                        yr = int(parts[0])
+                        mo = int(parts[1]) if len(parts) > 1 else 1
+                        if not (start_year <= yr <= end_year):
+                            continue
+                        target_granule = r.granule_id
+                        region_name = r.location_name
+                        d = r.date_str
+                        if d not in merged:
+                            merged[d] = {
+                                "date": d,
+                                "precipitation_rate_mm_hr": None,
+                                "precipitation_accumulated_mm": None,
+                                "climatological_normal_mm": None,
+                                "anomaly_mm": None,
+                                "aod_550": None,
+                                "cloud_fraction": None,
+                            }
+                        if "precip" in r.metric_name or r.dataset_id == "GPM_3IMERGM":
+                            import calendar
+                            days = calendar.monthrange(yr, mo)[1]
+                            acc = r.value
+                            merged[d]["precipitation_accumulated_mm"] = acc
+                            merged[d]["precipitation_rate_mm_hr"] = round(acc / (24.0 * days), 4)
+                            merged[d]["climatological_normal_mm"] = r.baseline_normal
+                            merged[d]["anomaly_mm"] = r.anomaly
+
+                    points = [merged[d] for d in sorted(merged.keys())]
+                except Exception as exc:
+                    cls.mark_db_failed()
+                    logger.debug(f"DB error in get_real_gpm_timeseries: {exc}")
+
+        if not points:
+            return {
+                "dataset_id": "GPM_3IMERGM",
+                "dataset_name": "NASA GPM IMERG Final Monthly Precipitation (GES DISC)",
+                "location_name": region_name,
+                "latitude": latitude,
+                "longitude": longitude,
+                "data_status": "unavailable",
+                "is_observation": False,
+                "source_type": "none",
+                "unit_rate": "mm/hr",
+                "unit_accumulation": "mm",
+                "summary_statistics": {
+                    "data_status": "unavailable",
+                    "is_observation": False,
+                    "message": "No authentic GPM IMERG precipitation observation records ingested for this coordinate.",
+                },
+                "timeseries": [],
+            }
+
+        return {
+            "dataset_id": "GPM_3IMERGM",
+            "dataset_name": "NASA GPM IMERG Final Monthly Precipitation (GES DISC)",
+            "location_name": region_name,
+            "latitude": latitude,
+            "longitude": longitude,
+            "data_status": "observation",
+            "is_observation": True,
+            "source_type": "satellite_direct",
+            "unit_rate": "mm/hr",
+            "unit_accumulation": "mm",
+            "summary_statistics": {
+                "data_status": "observation",
+                "is_observation": True,
+                "observation_count": len(points),
+                "granule_id": target_granule,
+                "provenance": "NASA GES DISC / JAXA",
+            },
+            "timeseries": points,
+        }

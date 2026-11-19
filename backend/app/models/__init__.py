@@ -3,6 +3,7 @@ from app.models.observation import EarthObservation
 from app.models.dataset import DatasetCatalogModel
 from app.models.timeseries import ObservationTimeSeriesRecord
 from app.models.cross_system import CrossSystemRecord
+from app.models.quarantine import QuarantineAuditLog
 
 __all__ = [
     "Base",
@@ -11,4 +12,5 @@ __all__ = [
     "DatasetCatalogModel",
     "ObservationTimeSeriesRecord",
     "CrossSystemRecord",
+    "QuarantineAuditLog",
 ]

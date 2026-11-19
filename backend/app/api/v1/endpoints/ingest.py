@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional
 from datetime import datetime
+import secrets
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func, text
@@ -26,24 +27,47 @@ def require_admin_authorization(
     authorization: Optional[str] = Header(None),
 ) -> None:
     """Protects expensive satellite ingestion endpoints from unauthorized public execution."""
-    expected_key = settings.ADMIN_API_KEY
-    if not expected_key:
-        return
+    expected_key = (settings.ADMIN_API_KEY or "").strip()
+    insecure_defaults = {
+        "planetiq-admin-secret-2026",
+        "terralens-admin-secret-2026",
+        "admin",
+        "secret",
+        "password",
+        "changeme",
+    }
 
-    # Check X-Admin-Key header
-    if x_admin_key and x_admin_key.strip() == expected_key:
-        return
+    if settings.IS_PRODUCTION and (not expected_key or expected_key in insecure_defaults):
+        raise HTTPException(
+            status_code=500,
+            detail="Administrative key not configured",
+        )
 
-    # Check Authorization: Bearer <key>
-    if authorization:
+    provided_key: Optional[str] = None
+    if x_admin_key and x_admin_key.strip():
+        provided_key = x_admin_key.strip()
+    elif authorization and authorization.strip():
         parts = authorization.strip().split()
-        if len(parts) == 2 and parts[0].lower() == "bearer" and parts[1] == expected_key:
-            return
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            provided_key = parts[1].strip()
 
-    raise HTTPException(
-        status_code=401,
-        detail="Unauthorized. Scientific granule ingestion requires administrative authentication (X-Admin-Key header).",
-    )
+    if not provided_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Admin authorization header required. Scientific granule ingestion requires administrative authentication (X-Admin-Key header).",
+        )
+
+    if not expected_key:
+        raise HTTPException(
+            status_code=500,
+            detail="Administrative key not configured",
+        )
+
+    if not secrets.compare_digest(provided_key, expected_key):
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid admin key",
+        )
 
 
 @router.get(

@@ -1,5 +1,7 @@
+from geoalchemy2 import Geometry
 from sqlalchemy import Column, String, Float, Index
 from app.models.base import TimeStampedModel
+import app.models.observation  # noqa: F401 - ensures SQLite spatial stubs and after_create hooks are active
 
 
 class ObservationTimeSeriesRecord(TimeStampedModel):
@@ -12,6 +14,13 @@ class ObservationTimeSeriesRecord(TimeStampedModel):
     location_name = Column(String(128), index=True, nullable=False)
     latitude = Column(Float, nullable=False)
     longitude = Column(Float, nullable=False)
+
+    # PostGIS Point geometry (WGS84 / SRID 4326) with automatic GiST spatial index
+    geom = Column(
+        Geometry(geometry_type="POINT", srid=4326, spatial_index=True),
+        nullable=True,
+    )
+
     date_str = Column(String(10), index=True, nullable=False)  # YYYY-MM
     metric_name = Column(String(64), index=True, nullable=False)
     value = Column(Float, nullable=False)

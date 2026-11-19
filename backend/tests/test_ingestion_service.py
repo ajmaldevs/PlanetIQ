@@ -114,8 +114,21 @@ def test_ingest_genuine_satellite_granule_with_checksum(tmp_path, db_session):
 
     assert cat_rec.verification_status == "verified_observation"
     assert cat_rec.source_file_checksum == res["checksum"]
+    assert cat_rec.spatial_bounds is not None
+    assert "polygon" in str(cat_rec.spatial_bounds).lower()
     assert cat_rec.extra_metadata["is_observation"] is True
     assert cat_rec.extra_metadata["data_status"] == "observation"
+    assert cat_rec.extra_metadata["collection_id"] in ["MOD13C2", "C2565788914-LPCLOUD"]
+    assert cat_rec.extra_metadata["version"] == "061"
+    assert "download_url" in cat_rec.extra_metadata
+    assert "metadata_url" in cat_rec.extra_metadata
+    assert "observation_start_time" in cat_rec.extra_metadata
+    assert "observation_end_time" in cat_rec.extra_metadata
+    assert "extracted_variables" in cat_rec.extra_metadata
+    assert "units" in cat_rec.extra_metadata
+    assert "quality_flags" in cat_rec.extra_metadata
+    assert "checksum_sha256" in cat_rec.extra_metadata
+    assert "ingestion_timestamp" in cat_rec.extra_metadata
 
     # Verify that ObservationRepository NOW returns this genuine observation
     grid = ObservationRepository.get_real_modis_spatial_grid("2026-03", session=db_session)
@@ -133,3 +146,44 @@ async def test_live_granule_ingestion_blocks_without_credentials(db_session):
     assert res["status"] == "blocked"
     assert res["reason"] == "NASA_EARTHDATA_CREDENTIALS_REQUIRED"
     assert "NASA Earthdata credentials" in res["message"]
+
+
+@pytest.mark.asyncio
+async def test_gpm_date_substitution_strictly_prohibited(monkeypatch, db_session):
+    """
+    Regression Test:
+    Verifies that IngestionService strictly prohibits substituting a different month's
+    granule (e.g. September 2025) when a requested period (e.g. March 2026) is unavailable.
+    If a discovered granule's start date does not match the requested date (YYYY-MM),
+    it MUST be rejected with status 'not_found' and never relabeled or persisted under the requested date.
+    """
+    from app.integrations.nasa.earthdata_client import NasaEarthdataClient
+    from app.integrations.nasa.gpm_client import GpmClient
+
+    monkeypatch.setattr(
+        NasaEarthdataClient,
+        "get_auth_status",
+        lambda: {"authenticated": True, "granule_download_available": True}
+    )
+
+    # Return a 2025-09 granule when 2026-03 is requested
+    async def mock_find_granule(year, month, bounding_box=None):
+        return {
+            "title": "3B-MO.MS.MRG.3IMERG.20250901-S000000-E235959.09.V07B.HDF5",
+            "observation_start_time": "2025-09-01T00:00:00Z",
+            "observation_end_time": "2025-09-30T23:59:59Z",
+            "data_links": ["https://gesdisc.earthdata.nasa.gov/data/GPM_L3/sample.nc4"],
+        }
+
+    monkeypatch.setattr(GpmClient, "find_granule_for_month", mock_find_granule)
+
+    res = await IngestionService.ingest_live_granule("GPM_3IMERGM", 2026, 3, db_session)
+
+    assert res["status"] == "not_found"
+    assert "No genuine granule discovered" in res["message"]
+
+    # Verify no records were persisted under 2026-03
+    recs = db_session.execute(
+        select(ObservationTimeSeriesRecord).filter_by(dataset_id="GPM_3IMERGM", date_str="2026-03")
+    ).scalars().all()
+    assert len(recs) == 0

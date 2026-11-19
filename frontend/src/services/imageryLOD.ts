@@ -164,7 +164,7 @@ export class ImageryLODManager {
       case 3:
         return `ArcGIS World Imagery · z${targetZoom}`;
       default:
-        return 'TerraLens base imagery';
+        return 'PlanetIQ base imagery';
     }
   }
 

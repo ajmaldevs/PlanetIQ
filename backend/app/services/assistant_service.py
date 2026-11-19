@@ -296,12 +296,7 @@ class AssistantService:
         if causation_audit:
             final_text += f"\n\n> [!NOTE]\n> {causation_audit}"
 
-        is_real_obs = any(
-            call.get("result", {}).get("is_observation") is True
-            or call.get("result", {}).get("data_status") == "observation"
-            for call in executed_tools
-        )
-        overall_data_status = "observation" if is_real_obs else "simulated"
+        overall_data_status = cls._resolve_overall_data_status(executed_tools)
 
         return AssistantQueryResponse(
             response=final_text,
@@ -312,6 +307,46 @@ class AssistantService:
             visual_blocks=visual_blocks,
             tool_calls_executed=tool_names_called,
         )
+
+    @classmethod
+    def _resolve_overall_data_status(cls, executed_tools: List[Dict[str, Any]]) -> str:
+        """
+        Determines the overall scientific provenance status across executed tools:
+        Returns: 'observation', 'mixed', 'simulated', 'unavailable', or 'error'.
+        """
+        if not executed_tools:
+            return "unavailable"
+
+        statuses = set()
+        for call in executed_tools:
+            res = call.get("result", {})
+            if not isinstance(res, dict):
+                statuses.add("error")
+                continue
+            st = res.get("status")
+            d_st = res.get("data_status")
+            is_obs = res.get("is_observation")
+
+            if st == "error" or d_st == "error":
+                statuses.add("unavailable")
+            elif st == "unavailable" or d_st == "unavailable":
+                statuses.add("unavailable")
+            elif is_obs is True or d_st == "observation":
+                statuses.add("observation")
+            elif is_obs is False or d_st in ("simulated", "demonstration_model"):
+                statuses.add("demonstration_model")
+            else:
+                statuses.add("unavailable")
+
+        if not statuses:
+            return "unavailable"
+        if statuses == {"observation"}:
+            return "observation"
+        if "demonstration_model" in statuses:
+            return "demonstration_model"
+        if "observation" in statuses:
+            return "observation"
+        return "unavailable"
 
     @classmethod
     def _format_context_block(cls, context: AssistantContext) -> str:
@@ -478,13 +513,17 @@ class AssistantService:
                 blocks.append(alert.model_dump())
 
         # Transparent DataQualityBlock
-        has_real_obs = any(
-            call.get("result", {}).get("is_observation") is True
-            or call.get("result", {}).get("data_status") == "observation"
-            for call in executed_tools
+        overall_status = cls._resolve_overall_data_status(executed_tools)
+        has_real_obs = (overall_status == "observation")
+        uncertainty = (
+            "AUTHENTIC SATELLITE OBSERVATION: Extracted from official NASA Earth Science telemetry."
+            if overall_status == "observation"
+            else ("UNAVAILABLE: Genuine satellite telemetry is unavailable for the requested window."
+                  if overall_status == "unavailable"
+                  else "DEMONSTRATION MODEL DATA: Calibrated scientific mathematical representation.")
         )
         quality_block = DataQualityBlock(
-            data_status="observation" if has_real_obs else "simulated",
+            data_status=overall_status,
             is_observation=has_real_obs,
             sensor="NASA MODIS Terra/Aqua, SWOT KaRIn, and GPM IMERG Instruments",
             limitations=[
@@ -492,11 +531,7 @@ class AssistantService:
                 "0.05° CMG Climate Modeling Grid / 2 km SWOT ocean swath / 0.1° IMERG precipitation",
                 "Verified against NASA Common Metadata Repository (CMR)",
             ],
-            uncertainty_note=(
-                "AUTHENTIC SATELLITE OBSERVATION: Extracted from official NASA Earth Science telemetry."
-                if has_real_obs
-                else "SIMULATED DEMONSTRATION DATA: Calibrated scientific mathematical representation."
-            ),
+            uncertainty_note=uncertainty,
         )
         blocks.append(quality_block.model_dump())
 
@@ -509,30 +544,41 @@ class AssistantService:
         for call in executed_tools:
             name = call["name"]
             res = call["result"]
+            if res.get("status") == "unavailable" or res.get("data_status") == "unavailable":
+                parts.append(
+                    f"**{res.get('mission', name)} ({res.get('region_name', 'Requested Region')})**:\n"
+                    f"- **Status**: Observations unavailable for {res.get('date', 'requested date')}.\n"
+                    f"- {res.get('message', 'Authentic satellite observations are currently not in the local repository.')}"
+                )
+                continue
+
+            granule_tag = f" [Granule: {res.get('granule_id')}]" if res.get("granule_id") else ""
+            status_tag = " [Verified Observation]" if res.get("is_observation") else " [Simulated Model]"
+
             if name == "get_ocean_observations":
                 meas = res.get("measurements", {})
                 parts.append(
-                    f"**NASA Ocean Satellite Observations ({res.get('region_name', 'Ocean Basin')})**:\n"
-                    f"- **Chlorophyll-a**: **{meas.get('chlorophyll_a_mg_m3', 'N/A')} mg/m³** "
+                    f"**NASA Ocean Satellite Observations ({res.get('region_name', 'Ocean Basin')})**{status_tag}{granule_tag}:\n"
+                    f"- **Chlorophyll-a**: **{meas.get('chlorophyll_a_mg_m3', 'Unobserved')} mg/m³** "
                     f"({res.get('analysis', {}).get('chlorophyll_productivity', 'marine biological regime')})\n"
-                    f"- **Sea Surface Temperature (SST)**: **{meas.get('sea_surface_temp_celsius', 'N/A')} °C**\n"
-                    f"- **Sea Surface Height Anomaly (SSHA)**: **{meas.get('sea_surface_height_anomaly_m', 'N/A')} m** "
+                    f"- **Sea Surface Temperature (SST)**: **{meas.get('sea_surface_temp_celsius', 'Unobserved')} °C**\n"
+                    f"- **Sea Surface Height Anomaly (SSHA)**: **{meas.get('sea_surface_height_anomaly_m', 'Unobserved')} m** "
                     f"({res.get('analysis', {}).get('eddy_classification', 'dynamic sea level')})"
                 )
-            elif name == "get_precipitation_data":
+            elif name in ["get_precipitation_data", "get_atmosphere_observations"]:
                 meas = res.get("measurements", {})
                 parts.append(
-                    f"**NASA GPM IMERG Precipitation ({res.get('region_name', 'Region')})**:\n"
-                    f"- **Monthly Accumulated Depth**: **{meas.get('precipitation_accumulated_mm', 'N/A')} mm**\n"
-                    f"- **Precipitation Rate**: **{meas.get('precipitation_rate_mm_hr', 'N/A')} mm/hr**\n"
-                    f"- **Climatological Anomaly**: **{meas.get('precipitation_anomaly_mm', 'N/A')} mm** relative to 1998–2020 normal"
+                    f"**NASA GPM IMERG Precipitation ({res.get('region_name', 'Region')})**{status_tag}{granule_tag}:\n"
+                    f"- **Monthly Accumulated Depth**: **{meas.get('precipitation_accumulated_mm', 'Unobserved')} mm**\n"
+                    f"- **Precipitation Rate**: **{meas.get('precipitation_rate_mm_hr', 'Unobserved')} mm/hr**\n"
+                    f"- **Climatological Anomaly**: **{meas.get('precipitation_anomaly_mm', 'Unobserved')} mm** relative to 1998–2020 normal"
                 )
             elif name == "get_vegetation_indices":
                 meas = res.get("measurements", {})
                 parts.append(
-                    f"**NASA MODIS Vegetation Dynamics ({res.get('region_name', 'Region')})**:\n"
-                    f"- **Canopy NDVI**: **{meas.get('ndvi', 'N/A')}**\n"
-                    f"- **Vegetation Condition Index (VCI)**: **{meas.get('vci_percent', 'N/A')}%** "
+                    f"**NASA MODIS Vegetation Dynamics ({res.get('region_name', 'Region')})**{status_tag}{granule_tag}:\n"
+                    f"- **Canopy NDVI**: **{meas.get('ndvi', 'Unobserved')}**\n"
+                    f"- **Vegetation Condition Index (VCI)**: **{meas.get('vci_percent', 'Unobserved')}%** "
                     f"({res.get('analysis', {}).get('canopy_status', 'canopy vitality')})"
                 )
         return "\n\n".join(parts)
@@ -718,12 +764,7 @@ class AssistantService:
         citations = ScientificRAG.get_citations_for_query(user_prompt, context.active_module)
         followups = cls._generate_followups(user_prompt, context)
 
-        is_real_obs = any(
-            call.get("result", {}).get("is_observation") is True
-            or call.get("result", {}).get("data_status") == "observation"
-            for call in executed_tools
-        )
-        overall_status = "observation" if is_real_obs else "simulated"
+        overall_status = cls._resolve_overall_data_status(executed_tools)
 
         return AssistantQueryResponse(
             response=full_text,

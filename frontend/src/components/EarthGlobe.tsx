@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { GeoJSONFeatureCollection, GeoJSONFeature } from '../services/api';
+import { GeoJSONFeatureCollection, GeoJSONFeature, extractFeatureCoordinates } from '../services/api';
 import { GISPlace } from '../services/gisDatabase';
 import { ImageryLODManager } from '../services/imageryLOD';
 import { createCinematicSpaceEnvironment, SpaceEnvironment } from '../services/spaceEnvironment';
@@ -790,7 +790,9 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       return;
     }
 
-    const [selLon, selLat] = selectedFeature.geometry.coordinates;
+    const selCoords = extractFeatureCoordinates(selectedFeature.geometry);
+    if (!selCoords) return;
+    const [selLon, selLat] = selCoords;
     let foundHalo: THREE.Mesh | null = null;
 
     group.children.forEach((child) => {
@@ -820,7 +822,9 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
   // Handle fly-to when selectedFeature changes
   useEffect(() => {
     if (!selectedFeature) return;
-    const [lon, lat] = selectedFeature.geometry.coordinates;
+    const coords = extractFeatureCoordinates(selectedFeature.geometry);
+    if (!coords) return;
+    const [lon, lat] = coords;
     const targetDist = targetCameraDistance.current > 3.8 ? 3.2 : targetCameraDistance.current;
     flyToCoordinates(lat, lon, targetDist);
   }, [selectedFeature]);
@@ -883,7 +887,12 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
       selectedHaloRef.current = null;
       return;
     }
-    const [lon, lat] = selectedFeature.geometry.coordinates;
+    const coords = extractFeatureCoordinates(selectedFeature.geometry);
+    if (!coords) {
+      selectedHaloRef.current = null;
+      return;
+    }
+    const [lon, lat] = coords;
     const hitHalo = markersGroupRef.current.children.find((child) => {
       const feat = child.userData?.feature as GeoJSONFeature | undefined;
       const mesh = child as THREE.Mesh;
@@ -1179,8 +1188,11 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
 
   const recenterOnSelected = () => {
     if (selectedFeature) {
-      const [lon, lat] = selectedFeature.geometry.coordinates;
-      flyToCoordinates(lat, lon, Math.max(2.6, targetCameraDistance.current));
+      const coords = extractFeatureCoordinates(selectedFeature.geometry);
+      if (coords) {
+        const [lon, lat] = coords;
+        flyToCoordinates(lat, lon, Math.max(2.6, targetCameraDistance.current));
+      }
     } else if (selectedPlace) {
       flyToCoordinates(selectedPlace.lat, selectedPlace.lon, Math.max(2.5, targetCameraDistance.current));
     } else {

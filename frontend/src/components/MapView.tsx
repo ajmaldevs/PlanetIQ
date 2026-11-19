@@ -6,7 +6,7 @@ import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 if (typeof maplibregl.setWorkerUrl === 'function') {
   maplibregl.setWorkerUrl(maplibreWorkerUrl);
 }
-import { GeoJSONFeatureCollection, GeoJSONFeature } from '../services/api';
+import { GeoJSONFeatureCollection, GeoJSONFeature, extractFeatureCoordinates } from '../services/api';
 import { GISPlace, GIS_PLACES, findPlaceById } from '../services/gisDatabase';
 import { distanceToMapZoom, mapZoomToDistance } from '../services/surfaceLabels';
 import { ZoomLevel } from './EarthGlobe';
@@ -387,7 +387,9 @@ export const MapView: React.FC<MapViewProps> = ({
   // Synchronize map center when selectedFeature changes
   useEffect(() => {
     if (!map.current || !mapLoaded || !visible || !selectedFeature) return;
-    const [lon, lat] = selectedFeature.geometry.coordinates;
+    const coords = extractFeatureCoordinates(selectedFeature.geometry);
+    if (!coords) return;
+    const [lon, lat] = coords;
     isInternalFlyRef.current = true;
     map.current.flyTo({
       center: [lon, lat],
@@ -994,7 +996,8 @@ function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricT
       if (features.length > 0) {
         const feat = features[0];
         const props = feat.properties || {};
-        const coords = (feat.geometry as any).coordinates.slice();
+        const coords = extractFeatureCoordinates(feat.geometry);
+        if (!coords) return;
         const name = props.location_name || props.region_name || 'Observation Point';
 
         let reading = '';

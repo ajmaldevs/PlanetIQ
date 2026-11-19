@@ -28,6 +28,7 @@ import {
   SystemHealth,
   GeoJSONFeatureCollection,
   GeoJSONFeature,
+  extractFeatureCoordinates,
   AtmosphereTimeSeriesResponse,
   OceanTimeSeriesResponse,
   LandTimeSeriesResponse,
@@ -50,7 +51,7 @@ import {
 } from 'lucide-react';
 
 export const App: React.FC = () => {
-  const introDismissedKey = 'terralens-intro-dismissed-v1';
+  const introDismissedKey = 'planetiq-intro-dismissed-v1';
   const [currentView, setCurrentView] = useState<MainView>('explore');
   const [explorationMode, setExplorationMode] = useState<'3d' | '2d'>('3d');
   const [activeModule, setActiveModule] = useState<EarthModule>(null);
@@ -150,16 +151,20 @@ export const App: React.FC = () => {
 
   const activeTimeseriesPoints = useMemo((): TimeseriesDataPoint[] | null => {
     if (activeModule === 'atmosphere' && atmosphereTimeseries) {
-      return atmosphereTimeseries.timeseries.map((pt) => ({
-        date: pt.date,
-        value: metricType === 'rate' ? pt.precipitation_rate_mm_hr : pt.precipitation_accumulated_mm,
-      }));
+      return atmosphereTimeseries.timeseries
+        .filter((pt) => (metricType === 'rate' ? pt.precipitation_rate_mm_hr != null : pt.precipitation_accumulated_mm != null))
+        .map((pt) => ({
+          date: pt.date,
+          value: (metricType === 'rate' ? pt.precipitation_rate_mm_hr : pt.precipitation_accumulated_mm) as number,
+        }));
     }
     if (activeModule === 'ocean' && oceanTimeseries) {
-      return oceanTimeseries.timeseries.map((pt) => ({
-        date: pt.date,
-        value: pt.ssha_mean_m,
-      }));
+      return oceanTimeseries.timeseries
+        .filter((pt) => pt.ssha_mean_m != null)
+        .map((pt) => ({
+          date: pt.date,
+          value: pt.ssha_mean_m as number,
+        }));
     }
     if (activeModule === 'land' && landTimeseries) {
       return landTimeseries.timeseries.map((pt) => ({
@@ -212,10 +217,11 @@ export const App: React.FC = () => {
     dismissIntro();
   };
 
-  // Set default metric type on module change while preserving spatial selections
+  // Set default metric type on module change while clearing stale observation selection
   const handleSelectModule = (mod: EarthModule) => {
     dismissIntro();
     setActiveModule(mod);
+    setSelectedFeature(null);
     if (mod) {
       setActiveModules((prev) => (prev.includes(mod) ? prev : [mod, ...prev]));
     } else {
@@ -226,6 +232,20 @@ export const App: React.FC = () => {
     if (mod === 'ocean') setMetricType('ssha');
     if (mod === 'land') setMetricType('ndvi');
   };
+
+  const handleSetSelectedDate: React.Dispatch<React.SetStateAction<string>> = useCallback((action) => {
+    setSelectedDate((prev) => {
+      const nextDate = typeof action === 'function' ? action(prev) : action;
+      if (nextDate !== prev) {
+        setSelectedFeature(null);
+      }
+      return nextDate;
+    });
+  }, []);
+
+  const handleDateChange = useCallback((newDate: string) => {
+    handleSetSelectedDate(newDate);
+  }, [handleSetSelectedDate]);
 
   const handleToggleModule = (mod: 'ocean' | 'atmosphere' | 'land') => {
     setActiveModules((prev) => {
@@ -416,8 +436,11 @@ export const App: React.FC = () => {
   const handleFeatureSelect = (feat: GeoJSONFeature) => {
     setSelectedFeature(feat);
     setSelectedPlace(null);
-    const [lon, lat] = feat.geometry.coordinates;
-    setCenterCoords({ lat, lon });
+    const coords = extractFeatureCoordinates(feat.geometry);
+    if (coords) {
+      const [lon, lat] = coords;
+      setCenterCoords({ lat, lon });
+    }
     setSidePanelOpen(true);
   };
 
@@ -629,7 +652,7 @@ export const App: React.FC = () => {
           multiData={multiData}
           loading={dataLoading}
           selectedDate={selectedDate}
-          setSelectedDate={setSelectedDate}
+          setSelectedDate={handleDateChange}
           onSelectFeature={handleFeatureSelect}
           selectedFeature={selectedFeature}
           activeMetric={metricType}
@@ -1023,13 +1046,13 @@ export const App: React.FC = () => {
                       title="Tools and additional options"
                       aria-label="Tools and additional options"
                       aria-expanded={showToolsMenu}
-                      aria-controls="terralens-tools-menu"
+                      aria-controls="planetiq-tools-menu"
                     >
                       <Wrench className="h-3.5 w-3.5 text-cyan-400" />
                       <span className="hidden md:inline">Tools</span>
                     </button>
                     {showToolsMenu && (
-                      <div id="terralens-tools-menu" className="absolute top-full right-0 mt-2 w-[min(18rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-xl border border-slate-700/80 bg-[#080c16]/98 p-2 shadow-2xl backdrop-blur-xl z-50" aria-label="Additional exploration tools">
+                      <div id="planetiq-tools-menu" className="absolute top-full right-0 mt-2 w-[min(18rem,calc(100vw-1.5rem))] max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-xl border border-slate-700/80 bg-[#080c16]/98 p-2 shadow-2xl backdrop-blur-xl z-50" aria-label="Additional exploration tools">
                         <p className="px-2 py-1 text-[10px] uppercase tracking-widest text-slate-500">Systems</p>
                         <button
                           onClick={() => { toggleAllModules(); setShowToolsMenu(false); }}
@@ -1101,7 +1124,7 @@ export const App: React.FC = () => {
                 {/* Unified Earth System Shared Timeline */}
                 <SharedTimeline
                   selectedDate={selectedDate}
-                  onDateChange={(newDate) => setSelectedDate(newDate)}
+                  onDateChange={handleDateChange}
                   activeModules={activeModules.length > 0 ? activeModules : (activeModule ? [activeModule] : [])}
                   sidePanelOpen={sidePanelOpen}
                   trendsOpen={showTrends}
@@ -1144,7 +1167,7 @@ export const App: React.FC = () => {
                 activeModule={activeModule}
                 onSelectModule={handleSelectModule}
                 selectedDate={selectedDate}
-                setSelectedDate={setSelectedDate}
+                setSelectedDate={handleSetSelectedDate}
                 selectedFeature={selectedFeature}
                 metricType={metricType}
                 setMetricType={setMetricType}

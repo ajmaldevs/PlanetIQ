@@ -98,6 +98,7 @@ class SwotClient:
                 "file_path": local_path,
                 "granule_id": granule_title,
                 "size_bytes": os.path.getsize(local_path),
+                "granule_meta": granule_meta,
             }
 
         dl_res = await NasaEarthdataClient.download_granule(
@@ -111,6 +112,9 @@ class SwotClient:
                 "file_path": local_path,
                 "granule_id": granule_title,
                 "size_bytes": os.path.getsize(local_path),
+                "granule_meta": granule_meta,
             }
 
+        if isinstance(dl_res, dict):
+            dl_res["granule_meta"] = granule_meta
         return dl_res

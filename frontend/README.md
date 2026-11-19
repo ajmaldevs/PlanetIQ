@@ -1,4 +1,4 @@
-# TerraLens Frontend
+# PlanetIQ Frontend
 
 Modern, dark-first React 19 application built with TypeScript, Vite, Tailwind CSS, MapLibre GL JS, and Recharts.
 

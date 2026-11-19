@@ -144,7 +144,8 @@ async def test_ingest_trigger_endpoint_authentication():
                 "end_date": "2025-01-31"
             }
         )
-        assert r2.status_code == 401
+        assert r2.status_code == 403
+        assert "Invalid admin key" in r2.json()["detail"]
 
         # Request with correct header but invalid dataset
         r3 = await client.post(

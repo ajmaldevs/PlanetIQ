@@ -352,7 +352,7 @@ class DemoDataService:
                                 "land_cover_type": reg["land_cover"],
                                 "unit": "dimensionless ratio (-0.2000 to +1.0000)",
                                 "sensor": "MODIS Terra/Aqua (Simulation Model)",
-                                "data_status": "simulated",
+                                "data_status": "demonstration_model",
                                 "is_observation": False,
                                 "source_type": "synthetic",
                                 "provenance": "Calibrated Mathematical Simulation Model (Demonstration Only)",
@@ -363,7 +363,7 @@ class DemoDataService:
         return GeoJSONFeatureCollection(
             features=features,
             metadata={
-                "data_status": "simulated",
+                "data_status": "demonstration_model",
                 "is_observation": False,
                 "source_type": "synthetic",
                 "data_notice": "SIMULATED DEMONSTRATION DATA: Calibrated mathematical phenology model. Not genuine satellite observations.",
@@ -427,10 +427,10 @@ class DemoDataService:
             latitude=latitude,
             longitude=longitude,
             unit="dimensionless index (-0.2000 to +1.0000)",
-            data_status="simulated",
+            data_status="demonstration_model",
             is_observation=False,
             summary_statistics={
-                "data_status": "simulated",
+                "data_status": "demonstration_model",
                 "is_observation": False,
                 "source_type": "synthetic",
                 "mean_ndvi": round(sum(ndvi_values) / max(len(ndvi_values), 1), 3),
@@ -506,7 +506,7 @@ class DemoDataService:
                                 "quality_index": 0.85,
                                 "rate_unit": "mm/hr",
                                 "accumulated_unit": "mm",
-                                "data_status": "simulated",
+                                "data_status": "demonstration_model",
                                 "is_observation": False,
                                 "source_type": "synthetic",
                                 "provenance": "Calibrated Mathematical Simulation Model (Demonstration Only)",
@@ -517,7 +517,7 @@ class DemoDataService:
         return GeoJSONFeatureCollection(
             features=features,
             metadata={
-                "data_status": "simulated",
+                "data_status": "demonstration_model",
                 "is_observation": False,
                 "source_type": "synthetic",
                 "data_notice": "SIMULATED DEMONSTRATION DATA: Calibrated mathematical precipitation model. Not genuine satellite observations.",
@@ -591,10 +591,10 @@ class DemoDataService:
             longitude=longitude,
             unit_rate="mm/hr",
             unit_accumulation="mm",
-            data_status="simulated",
+            data_status="demonstration_model",
             is_observation=False,
             summary_statistics={
-                "data_status": "simulated",
+                "data_status": "demonstration_model",
                 "is_observation": False,
                 "source_type": "synthetic",
                 "mean_monthly_accumulation_mm": mean_monthly_mm,
@@ -678,7 +678,7 @@ class DemoDataService:
                                 "sst_celsius": round(26.8 + 2.8 * math.cos((month - 5) * math.pi / 6.0), 2),
                                 "unit": "meters (m)",
                                 "sensor": "KaRIn Interferometer (Simulation Model)",
-                                "data_status": "simulated",
+                                "data_status": "demonstration_model",
                                 "is_observation": False,
                                 "source_type": "synthetic",
                                 "provenance": "Calibrated Mathematical Simulation Model (Demonstration Only)",
@@ -689,7 +689,7 @@ class DemoDataService:
         return GeoJSONFeatureCollection(
             features=features,
             metadata={
-                "data_status": "simulated",
+                "data_status": "demonstration_model",
                 "is_observation": False,
                 "source_type": "synthetic",
                 "data_notice": "SIMULATED DEMONSTRATION DATA: Calibrated mathematical ocean altimetry model. Not genuine satellite observations.",
@@ -754,10 +754,10 @@ class DemoDataService:
             latitude=latitude,
             longitude=longitude,
             unit_height="meters (m)",
-            data_status="simulated",
+            data_status="demonstration_model",
             is_observation=False,
             summary_statistics={
-                "data_status": "simulated",
+                "data_status": "demonstration_model",
                 "is_observation": False,
                 "source_type": "synthetic",
                 "mean_ssha_m": round(sum(ssha_values) / max(len(ssha_values), 1), 3),

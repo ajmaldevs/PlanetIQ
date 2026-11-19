@@ -14,3 +14,7 @@ from app.core.config import settings
 # For development test suite, permit demo fallback in development only
 if not settings.IS_PRODUCTION:
     settings.ALLOW_DEMO_FALLBACK = True
+
+# Ensure test admin API key is available for test suite runs
+if not settings.ADMIN_API_KEY:
+    settings.ADMIN_API_KEY = "test-admin-secret-key"

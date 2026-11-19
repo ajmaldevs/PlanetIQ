@@ -1,5 +1,9 @@
 from typing import List, Dict, Any
+from sqlalchemy import select
 from app.schemas.scientific import CrossSystemResponse, CrossSystemCorrelationPoint
+from app.models.timeseries import ObservationTimeSeriesRecord
+from app.core.database import session_scope
+from app.core.config import settings
 
 
 class CrossSystemService:
@@ -7,6 +11,7 @@ class CrossSystemService:
     Scientific analysis service modeling coupled Earth system teleconnections
     across Ocean (SWOT SSH), Atmosphere (GPM IMERG), and Land (MODIS NDVI).
     Adheres strictly to the scientific rule: Correlation != Causation.
+    Queries verified satellite observations from PostgreSQL when available.
     """
 
     TELECONNECTIONS: Dict[str, Dict[str, Any]] = {
@@ -44,8 +49,82 @@ class CrossSystemService:
     def get_teleconnection_analysis(cls, phenomenon_id: str = "enso_walker") -> CrossSystemResponse:
         config = cls.TELECONNECTIONS.get(phenomenon_id, cls.TELECONNECTIONS["enso_walker"])
 
-        # Multi-month synchronized timeline for 2024 to late 2026
-        timeseries_data: List[CrossSystemCorrelationPoint] = []
+        # Attempt to query authentic aligned observation records from the database
+        aligned_points: List[CrossSystemCorrelationPoint] = []
+        with session_scope() as session:
+            if session is not None:
+                try:
+                    # Query verified records across SWOT, GPM, and MODIS
+                    records = session.execute(
+                        select(ObservationTimeSeriesRecord).filter(
+                            ObservationTimeSeriesRecord.verification_status == "verified_observation",
+                            ObservationTimeSeriesRecord.dataset_id.in_(["SWOT_L2_LR_SSH", "GPM_3IMERGM", "MOD13C2"])
+                        )
+                    ).scalars().all()
+
+                    # Group by date
+                    by_date: Dict[str, Dict[str, float]] = {}
+                    for r in records:
+                        d = r.date_str
+                        if d not in by_date:
+                            by_date[d] = {}
+                        if "SWOT" in r.dataset_id:
+                            by_date[d]["ssha"] = r.value
+                        elif "GPM" in r.dataset_id and "precip" in r.metric_name:
+                            by_date[d]["precip_anom"] = r.anomaly or 0.0
+                        elif "MOD13C2" in r.dataset_id and r.metric_name == "NDVI":
+                            by_date[d]["ndvi_anom"] = r.anomaly or 0.0
+
+                    for d in sorted(by_date.keys()):
+                        vals = by_date[d]
+                        if "ssha" in vals and "precip_anom" in vals and "ndvi_anom" in vals:
+                            phase = "Warm Anomaly" if vals["ssha"] > 0.05 else ("Cool Anomaly" if vals["ssha"] < -0.05 else "Neutral Transition")
+                            aligned_points.append(
+                                CrossSystemCorrelationPoint(
+                                    date=d,
+                                    ocean_ssha_m=vals["ssha"],
+                                    atmosphere_precipitation_anomaly_mm=vals["precip_anom"],
+                                    land_ndvi_anomaly=vals["ndvi_anom"],
+                                    teleconnection_phase=phase,
+                                )
+                            )
+                except Exception:
+                    pass
+
+        if aligned_points:
+            return CrossSystemResponse(
+                data_status="observation",
+                is_observation=True,
+                phenomenon_name=config["name"],
+                description=config["description"],
+                primary_ocean_metric=config["ocean_metric"],
+                primary_atmosphere_metric=config["atmosphere_metric"],
+                primary_land_metric=config["land_metric"],
+                scientific_coupling_mechanism=config["coupling_mechanism"],
+                causation_vs_correlation_note=config["causation_note"],
+                timeseries=aligned_points,
+                key_insights=config["key_insights"]
+            )
+
+        # In production, do not return fabricated timeseries points
+        if settings.IS_PRODUCTION or not settings.DEMO_FALLBACK_PERMITTED:
+            return CrossSystemResponse(
+                data_status="unavailable",
+                is_observation=False,
+                phenomenon_name=config["name"],
+                description=f"{config['description']} (Aligned empirical satellite observations for simultaneous SWOT, GPM, and MODIS periods are currently unavailable in the verified repository).",
+                primary_ocean_metric=config["ocean_metric"],
+                primary_atmosphere_metric=config["atmosphere_metric"],
+                primary_land_metric=config["land_metric"],
+                scientific_coupling_mechanism=config["coupling_mechanism"],
+                causation_vs_correlation_note=config["causation_note"],
+                timeseries=[],
+                key_insights=config["key_insights"] + [
+                    "Empirical cross-system observation requires simultaneous ingestion of verified SWOT KaRIn, GPM IMERG, and MODIS MOD13C2 granules across aligned calendar months."
+                ]
+            )
+
+        # Reference theoretical demonstration timeline for offline local development
         months = [
             ("2024-01", 0.16, -42.0, -0.05, "El Niño Peak"),
             ("2024-04", 0.11, -35.0, -0.07, "El Niño Decaying"),
@@ -60,19 +139,20 @@ class CrossSystemService:
             ("2026-07", 0.13, -36.0, -0.06, "El Niño Developing"),
             ("2026-10", 0.15, -48.0, -0.08, "El Niño Active"),
         ]
-
-        for date_val, ssha, precip_anom, ndvi_anom, phase in months:
-            timeseries_data.append(
-                CrossSystemCorrelationPoint(
-                    date=date_val,
-                    ocean_ssha_m=ssha,
-                    atmosphere_precipitation_anomaly_mm=precip_anom,
-                    land_ndvi_anomaly=ndvi_anom,
-                    teleconnection_phase=phase
-                )
+        timeseries_data = [
+            CrossSystemCorrelationPoint(
+                date=date_val,
+                ocean_ssha_m=ssha,
+                atmosphere_precipitation_anomaly_mm=precip_anom,
+                land_ndvi_anomaly=ndvi_anom,
+                teleconnection_phase=phase
             )
+            for date_val, ssha, precip_anom, ndvi_anom, phase in months
+        ]
 
         return CrossSystemResponse(
+            data_status="demonstration_model",
+            is_observation=False,
             phenomenon_name=config["name"],
             description=config["description"],
             primary_ocean_metric=config["ocean_metric"],

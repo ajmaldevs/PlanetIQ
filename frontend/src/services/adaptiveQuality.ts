@@ -178,7 +178,7 @@ class AdaptiveQualityManager {
   private loadSavedMode(): QualityMode {
     if (typeof localStorage === 'undefined') return 'auto';
     try {
-      const saved = localStorage.getItem('terralens_render_quality');
+      const saved = localStorage.getItem('planetiq_render_quality') || localStorage.getItem('terralens_render_quality');
       if (saved === 'high' || saved === 'standard' || saved === 'low' || saved === 'auto') {
         return saved as QualityMode;
       }
@@ -202,7 +202,7 @@ class AdaptiveQualityManager {
     this.mode = mode;
     try {
       if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('terralens_render_quality', mode);
+        localStorage.setItem('planetiq_render_quality', mode);
       }
     } catch {}
 

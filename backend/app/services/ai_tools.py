@@ -234,11 +234,12 @@ def get_ocean_observations(
             return {"status": "unavailable", "data_status": "unavailable", "message": f"No ocean observation at ({resolved_lat}, {resolved_lon}) for {date}"}
 
         eddy_type, eddy_desc = ScientificAnalytics.classify_ocean_eddy(pt.ssha_mean_m)
-        ssh_geoid_ref = round(15.20 + pt.ssha_mean_m, 3)
-        adt_ref = round(0.85 + pt.ssha_mean_m, 3)
+        ssh_geoid_ref = getattr(pt, "ssh_m", None)
+        adt_ref = getattr(pt, "dynamic_topography_m", None)
 
         chlor_val = getattr(pt, "chlor_a", None)
         sst_val = getattr(pt, "sst", None)
+        eke_val = getattr(pt, "eddy_kinetic_energy_cm2_s2", None)
 
         measurements = {
             "chlorophyll_a_mg_m3": chlor_val,
@@ -246,7 +247,7 @@ def get_ocean_observations(
             "sea_surface_height_m": ssh_geoid_ref,
             "sea_surface_height_anomaly_m": pt.ssha_mean_m,
             "dynamic_topography_m": adt_ref,
-            "eddy_kinetic_energy_cm2_s2": pt.eddy_kinetic_energy_cm2_s2,
+            "eddy_kinetic_energy_cm2_s2": eke_val,
         }
 
         units = {
@@ -310,20 +311,20 @@ def get_ocean_observations(
         }
 
     features = fc.features[:25]
-    ssha_values = [f.properties.get("ssha_karin_m", 0.0) for f in features if f.properties.get("ssha_karin_m") is not None]
+    ssha_values = [f.properties.get("ssha_karin_m") for f in features if f.properties.get("ssha_karin_m") is not None]
     chl_values = [f.properties.get("chlor_a_mg_m3") for f in features if f.properties.get("chlor_a_mg_m3") is not None]
     sst_values = [f.properties.get("sst_celsius") for f in features if f.properties.get("sst_celsius") is not None]
 
-    mean_ssha = round(sum(ssha_values) / len(ssha_values), 3) if ssha_values else 0.0
-    mean_chl = round(sum(chl_values) / len(chl_values), 3) if chl_values else 0.38
-    mean_sst = round(sum(sst_values) / len(sst_values), 2) if sst_values else 26.5
+    mean_ssha = round(sum(ssha_values) / len(ssha_values), 3) if ssha_values else None
+    mean_chl = round(sum(chl_values) / len(chl_values), 3) if chl_values else None
+    mean_sst = round(sum(sst_values) / len(sst_values), 2) if sst_values else None
 
     summary = {
         "mean_ssha_m": mean_ssha,
         "mean_chlorophyll_a_mg_m3": mean_chl,
         "mean_sst_celsius": mean_sst,
-        "min_ssha_m": min(ssha_values) if ssha_values else 0.0,
-        "max_ssha_m": max(ssha_values) if ssha_values else 0.0,
+        "min_ssha_m": min(ssha_values) if ssha_values else None,
+        "max_ssha_m": max(ssha_values) if ssha_values else None,
         "units": {"ssha": "meters", "chlorophyll_a": "mg/m³", "sst": "°C"},
     }
 
@@ -425,7 +426,7 @@ def get_precipitation_data(
             "precipitation_accumulated_mm": pt.precipitation_accumulated_mm,
             "climatological_normal_mm": pt.climatological_normal_mm,
             "precipitation_anomaly_mm": pt.anomaly_mm,
-            "gauge_weighting_index": 78.5,
+            "gauge_weighting_index": getattr(pt, "gauge_weighting_index", None),
         }
         if getattr(pt, "aod_550", None) is not None:
             measurements["aod_550"] = pt.aod_550
@@ -485,14 +486,14 @@ def get_precipitation_data(
         }
 
     features = fc.features[:25]
-    accum_vals = [f.properties.get("precipitation_accumulated_mm", 0.0) for f in features if f.properties.get("precipitation_accumulated_mm") is not None]
-    anom_vals = [f.properties.get("precipitation_anomaly_mm", 0.0) for f in features if f.properties.get("precipitation_anomaly_mm") is not None]
+    accum_vals = [f.properties.get("precipitation_accumulated_mm") for f in features if f.properties.get("precipitation_accumulated_mm") is not None]
+    anom_vals = [f.properties.get("precipitation_anomaly_mm") for f in features if f.properties.get("precipitation_anomaly_mm") is not None]
     aod_vals = [f.properties.get("aod_550") for f in features if f.properties.get("aod_550") is not None]
 
     summary = {
-        "mean_accumulated_mm": round(sum(accum_vals) / len(accum_vals), 1) if accum_vals else 0.0,
-        "mean_anomaly_mm": round(sum(anom_vals) / len(anom_vals), 1) if anom_vals else 0.0,
-        "max_accumulated_mm": max(accum_vals) if accum_vals else 0.0,
+        "mean_accumulated_mm": round(sum(accum_vals) / len(accum_vals), 1) if accum_vals else None,
+        "mean_anomaly_mm": round(sum(anom_vals) / len(anom_vals), 1) if anom_vals else None,
+        "max_accumulated_mm": max(accum_vals) if accum_vals else None,
         "units": "mm",
     }
     if aod_vals:
@@ -647,7 +648,7 @@ def get_vegetation_indices(
         }
 
     features = fc.features[:25]
-    ndvi_vals = [f.properties.get("ndvi", 0.0) for f in features]
+    ndvi_vals = [f.properties.get("ndvi") for f in features if f.properties.get("ndvi") is not None]
     meta = fc.metadata
 
     return {
@@ -661,9 +662,9 @@ def get_vegetation_indices(
         "region_name": resolved_name,
         "feature_count": len(features),
         "summary": {
-            "mean_ndvi": round(sum(ndvi_vals) / len(ndvi_vals), 4) if ndvi_vals else 0.0,
-            "min_ndvi": min(ndvi_vals) if ndvi_vals else 0.0,
-            "max_ndvi": max(ndvi_vals) if ndvi_vals else 0.0,
+            "mean_ndvi": round(sum(ndvi_vals) / len(ndvi_vals), 4) if ndvi_vals else None,
+            "min_ndvi": min(ndvi_vals) if ndvi_vals else None,
+            "max_ndvi": max(ndvi_vals) if ndvi_vals else None,
             "units": "dimensionless ratio (-0.2000 to +1.0000)",
         },
         "sample_features": [
@@ -839,8 +840,20 @@ def compare_regions(
                 "message": f"Cannot compare {name_a} and {name_b} because ocean observations are unavailable for {date}.",
             }
 
-        val_a = next((p.ssha_mean_m for p in ts_a.timeseries if p.date == date), 0.0)
-        val_b = next((p.ssha_mean_m for p in ts_b.timeseries if p.date == date), 0.0)
+        val_a = next((p.ssha_mean_m for p in ts_a.timeseries if p.date == date), None)
+        val_b = next((p.ssha_mean_m for p in ts_b.timeseries if p.date == date), None)
+        if val_a is None or val_b is None:
+            missing_name = name_a if val_a is None else name_b
+            return {
+                "status": "unavailable",
+                "data_status": "unavailable",
+                "is_observation": False,
+                "module": mod,
+                "region_a": name_a,
+                "region_b": name_b,
+                "date": date,
+                "message": f"Cannot compare {name_a} and {name_b} because ocean observations for {missing_name} are unavailable for {date}.",
+            }
         unit = "meters (m)"
         metric_label = "Sea Surface Height Anomaly (SSHA)"
     elif mod == "atmosphere":
@@ -858,8 +871,20 @@ def compare_regions(
                 "message": f"Cannot compare {name_a} and {name_b} because atmosphere observations are unavailable for {date}.",
             }
 
-        val_a = next((p.precipitation_accumulated_mm for p in ts_a.timeseries if p.date == date), 0.0)
-        val_b = next((p.precipitation_accumulated_mm for p in ts_b.timeseries if p.date == date), 0.0)
+        val_a = next((p.precipitation_accumulated_mm for p in ts_a.timeseries if p.date == date), None)
+        val_b = next((p.precipitation_accumulated_mm for p in ts_b.timeseries if p.date == date), None)
+        if val_a is None or val_b is None:
+            missing_name = name_a if val_a is None else name_b
+            return {
+                "status": "unavailable",
+                "data_status": "unavailable",
+                "is_observation": False,
+                "module": mod,
+                "region_a": name_a,
+                "region_b": name_b,
+                "date": date,
+                "message": f"Cannot compare {name_a} and {name_b} because atmosphere observations for {missing_name} are unavailable for {date}.",
+            }
         unit = "mm"
         metric_label = "Monthly Accumulated Precipitation"
     else:
@@ -877,8 +902,20 @@ def compare_regions(
                 "message": f"Cannot compare {name_a} and {name_b} because land vegetation observations are unavailable for {date}.",
             }
 
-        val_a = next((p.ndvi for p in ts_a.timeseries if p.date == date), 0.0)
-        val_b = next((p.ndvi for p in ts_b.timeseries if p.date == date), 0.0)
+        val_a = next((p.ndvi for p in ts_a.timeseries if p.date == date), None)
+        val_b = next((p.ndvi for p in ts_b.timeseries if p.date == date), None)
+        if val_a is None or val_b is None:
+            missing_name = name_a if val_a is None else name_b
+            return {
+                "status": "unavailable",
+                "data_status": "unavailable",
+                "is_observation": False,
+                "module": mod,
+                "region_a": name_a,
+                "region_b": name_b,
+                "date": date,
+                "message": f"Cannot compare {name_a} and {name_b} because land vegetation observations for {missing_name} are unavailable for {date}.",
+            }
         unit = "dimensionless ratio"
         metric_label = "NDVI"
 

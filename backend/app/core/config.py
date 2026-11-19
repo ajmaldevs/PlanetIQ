@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """
-    Application Settings for TerraLens.
+    Application Settings for PlanetIQ.
     Loads from .env file or environment variables.
     """
     model_config = SettingsConfigDict(
@@ -28,7 +28,7 @@ class Settings(BaseSettings):
         )
     )
     ADMIN_API_KEY: str = Field(
-        default_factory=lambda: os.getenv("ADMIN_API_KEY", "planetiq-admin-secret-2026")
+        default_factory=lambda: os.getenv("ADMIN_API_KEY", "")
     )
     ALLOW_DEMO_FALLBACK: bool = Field(
         default_factory=lambda: (
@@ -137,9 +137,9 @@ class Settings(BaseSettings):
     INTERNAL_DATABASE_URL: Optional[str] = None
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
-    POSTGRES_USER: str = "terralens_user"
+    POSTGRES_USER: str = Field(default_factory=lambda: os.getenv("POSTGRES_USER", "planetiq_user"))
     POSTGRES_PASSWORD: str = ""
-    POSTGRES_DB: str = "terralens_db"
+    POSTGRES_DB: str = Field(default_factory=lambda: os.getenv("POSTGRES_DB", "planetiq_db"))
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
     DATABASE_POOL_TIMEOUT: int = 30

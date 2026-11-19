@@ -6,6 +6,9 @@ try:
     from app.models.observation import EarthObservation
     from app.models.timeseries import ObservationTimeSeriesRecord
     from app.models.cross_system import CrossSystemRecord
+    from app.models.quarantine import QuarantineAuditLog
+    from geoalchemy2 import Geometry
+    from geoalchemy2.elements import WKTElement
 except (ImportError, Exception) as e:
     pytest.skip(f"SQLAlchemy Cython extension unavailable on host environment: {e}", allow_module_level=True)
 
@@ -81,3 +84,39 @@ def test_cross_system_record_creation():
     assert cs.phenomenon_id == "enso_walker"
     assert cs.ocean_metric_val == 0.12
     assert cs.atmosphere_metric_val == -24.0
+
+
+def test_quarantine_audit_log_model_creation():
+    log = QuarantineAuditLog(
+        record_id="rec-12345",
+        table_name="observation_timeseries",
+        quarantine_reason="Legacy record missing verified NASA Earthdata source checksum or marked unverified/synthetic",
+        provenance_details={"dataset_id": "MOD13C2", "previous_status": "synthetic"},
+    )
+    assert log.record_id == "rec-12345"
+    assert log.table_name == "observation_timeseries"
+    assert "Legacy record" in log.quarantine_reason
+    assert log.provenance_details["dataset_id"] == "MOD13C2"
+
+
+def test_observation_timeseries_geom_point_column():
+    assert hasattr(ObservationTimeSeriesRecord, "geom")
+    geom_col = ObservationTimeSeriesRecord.geom
+    assert isinstance(geom_col.type, Geometry)
+    assert geom_col.type.geometry_type == "POINT"
+    assert geom_col.type.srid == 4326
+
+    ts = ObservationTimeSeriesRecord(
+        dataset_id="MOD13C2",
+        location_name="Amazon Basin",
+        latitude=-3.5,
+        longitude=-62.0,
+        geom=WKTElement("POINT(-62.0 -3.5)", srid=4326),
+        date_str="2026-03",
+        metric_name="ndvi",
+        value=0.82,
+        unit="dimensionless",
+        verification_status="verified_observation",
+    )
+    assert ts.geom is not None
+

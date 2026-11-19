@@ -122,7 +122,7 @@ def test_tool_get_ocean_observations():
     assert "chlorophyll_a_mg_m3" in res["measurements"]
     assert "sea_surface_temp_celsius" in res["measurements"]
     assert "eddy_classification" in res["analysis"]
-    assert res["data_status"] in ("observation", "simulated")
+    assert res["data_status"] in ("observation", "demonstration_model", "simulated")
 
     # Region query
     res_reg = get_ocean_observations(region="Arabian Sea")
@@ -192,7 +192,7 @@ def test_tool_dataset_metadata_and_quality():
 
     qual = get_data_quality_information("SWOT_L2_LR_SSH")
     assert qual["status"] == "success"
-    assert qual["data_status"] == "simulated"
+    assert qual["data_status"] in ("demonstration_model", "simulated")
     assert "scientific_limitations" in qual
 
 
@@ -259,7 +259,7 @@ async def test_assistant_offline_fallback():
         )
         res = await AssistantService.process_query(req)
 
-        assert res.data_status in ("observation", "simulated")
+        assert res.data_status in ("observation", "demonstration_model", "simulated")
         assert "Grounded Scientific Engine" in res.confidence_level
         assert "get_precipitation_data" in res.tool_calls_executed
         assert len(res.visual_blocks) >= 1

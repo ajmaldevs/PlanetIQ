@@ -12,7 +12,7 @@ Features:
 - Resilient granule download with streaming, redirects, authentication, and atomic write validation.
 """
 
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, Union
 import os
 import logging
 import httpx
@@ -41,47 +41,106 @@ COLLECTION_SHORT_NAMES = {
 }
 
 
+TRUSTED_DOMAINS = (
+    "earthdata.nasa.gov",
+    "nasa.gov",
+    "earthdatacloud.nasa.gov",
+)
+
+
 class EarthdataAuth(httpx.Auth):
     """
     HTTPX Auth handler for NASA Earthdata Login.
     Maintains authentication across 302 redirects to urs.earthdata.nasa.gov
-    and handles BasicAuth / Bearer token challenges.
+    and DAAC endpoints while enforcing strict token stripping:
+    - Whitelists trusted NASA hosts (*.earthdata.nasa.gov, *.nasa.gov, *.earthdatacloud.nasa.gov).
+    - Sends Basic Auth to urs.earthdata.nasa.gov when username/password configured.
+    - Sends Bearer token only to trusted NASA domains.
+    - Explicitly strips Authorization header when redirecting to AWS S3 signed URLs
+      or untrusted external domains to prevent credential leakage and S3 HTTP 400 errors.
+    - Caps redirects at MAX_REDIRECTS to eliminate infinite redirect loops.
     """
+    MAX_REDIRECTS = 20
+
     def __init__(self, username: str = "", password: str = "", bearer_token: str = ""):
         self.username = username.strip() if username else ""
         self.password = password.strip() if password else ""
         self.bearer_token = bearer_token.strip() if bearer_token else ""
 
-    def auth_flow(self, request: httpx.Request):
-        if self.bearer_token:
+    @classmethod
+    def is_trusted_host(cls, host: Optional[str]) -> bool:
+        if not host:
+            return False
+        host = host.lower()
+        for domain in TRUSTED_DOMAINS:
+            if host == domain or host.endswith("." + domain):
+                return True
+        return False
+
+    @classmethod
+    def is_s3_url(cls, url: Union[httpx.URL, str]) -> bool:
+        if isinstance(url, str):
+            url = httpx.URL(url)
+        host = (url.host or "").lower()
+        if host == "s3.amazonaws.com" or host.endswith(".s3.amazonaws.com"):
+            return True
+        if host.endswith(".amazonaws.com") and (
+            ".s3." in host or ".s3-" in host or host.startswith("s3-") or host.startswith("s3.")
+        ):
+            return True
+        query = str(url.query.decode("ascii") if hasattr(url.query, "decode") else url.query)
+        s3_indicators = ("AWSAccessKeyId=", "X-Amz-Signature=", "X-Amz-Algorithm=", "Signature=")
+        if any(ind in query for ind in s3_indicators):
+            return True
+        return False
+
+    def _apply_auth(self, request: httpx.Request) -> None:
+        """Applies credentials if host is trusted and not S3; strips otherwise."""
+        if not self.is_trusted_host(request.url.host) or self.is_s3_url(request.url):
+            request.headers.pop("Authorization", None)
+            return
+
+        host = (request.url.host or "").lower()
+        if host == "urs.earthdata.nasa.gov" and self.username and self.password:
+            request.headers["Authorization"] = httpx.BasicAuth(self.username, self.password)._auth_header
+        elif self.bearer_token:
             request.headers["Authorization"] = f"Bearer {self.bearer_token}"
         elif self.username and self.password:
             request.headers["Authorization"] = httpx.BasicAuth(self.username, self.password)._auth_header
+        else:
+            request.headers.pop("Authorization", None)
 
+    def auth_flow(self, request: httpx.Request):
+        self._apply_auth(request)
         response = yield request
 
-        while response.is_redirect or response.status_code == 401:
+        redirects = 0
+        challenged_urls = set()
+
+        while (response.is_redirect or response.status_code == 401) and redirects < self.MAX_REDIRECTS:
+            redirects += 1
             req = response.next_request
+
             if req is None:
-                if response.status_code == 401 and "urs.earthdata.nasa.gov" in str(response.url):
-                    req = request.copy()
-                    req.url = response.url
-                    if self.username and self.password:
-                        req.headers["Authorization"] = httpx.BasicAuth(self.username, self.password)._auth_header
-                    elif self.bearer_token:
-                        req.headers["Authorization"] = f"Bearer {self.bearer_token}"
+                if response.status_code == 401 and "urs.earthdata.nasa.gov" in (response.url.host or ""):
+                    url_str = str(response.url)
+                    if url_str in challenged_urls:
+                        break
+                    challenged_urls.add(url_str)
+
+                    req = httpx.Request(
+                        method=request.method,
+                        url=response.url,
+                        headers=request.headers,
+                        stream=request.stream,
+                        extensions=request.extensions,
+                    )
+                    self._apply_auth(req)
                     response = yield req
                     continue
                 break
 
-            if "urs.earthdata.nasa.gov" in req.url.host:
-                if self.username and self.password:
-                    req.headers["Authorization"] = httpx.BasicAuth(self.username, self.password)._auth_header
-            elif self.bearer_token:
-                req.headers["Authorization"] = f"Bearer {self.bearer_token}"
-            elif self.username and self.password:
-                req.headers["Authorization"] = httpx.BasicAuth(self.username, self.password)._auth_header
-
+            self._apply_auth(req)
             response = yield req
 
 
@@ -223,26 +282,88 @@ class NasaEarthdataClient:
                     entries = feed.get("entry", [])
                     granules = []
                     for e in entries:
-                        links = [
+                        granule_concept_id = e.get("id")
+                        producer_granule_id = e.get("producer_granule_id")
+                        title = e.get("title")
+                        official_granule_id = producer_granule_id or title or granule_concept_id
+                        
+                        time_start = e.get("time_start")
+                        time_end = e.get("time_end")
+                        
+                        coll_id = e.get("collection_concept_id") or concept_id
+                        version_val = COLLECTION_SHORT_NAMES.get(collection_id, {}).get("version", "")
+                        
+                        metadata_url = (
+                            f"https://cmr.earthdata.nasa.gov/search/concepts/{granule_concept_id}.umm_json"
+                            if granule_concept_id else None
+                        )
+                        
+                        raw_links = e.get("links", [])
+                        data_links = [
                             link.get("href")
-                            for link in e.get("links", [])
+                            for link in raw_links
                             if link.get("rel", "").endswith("/data#") or link.get("inherited", False) is False
                         ]
                         browse_links = [
                             link.get("href")
-                            for link in e.get("links", [])
+                            for link in raw_links
                             if "browse" in link.get("rel", "")
                         ]
+                        
+                        download_url = None
+                        for dl in data_links:
+                            if dl.startswith("http") and any(dl.lower().endswith(ext) for ext in (".nc4", ".nc", ".hdf", ".hdf5", ".tif", ".tiff")):
+                                download_url = dl
+                                break
+                        if not download_url and data_links:
+                            download_url = data_links[0]
+                            
+                        boxes = e.get("boxes", [])
+                        polygons = e.get("polygons", [])
+                        spatial_bounding_box = None
+                        if boxes and isinstance(boxes, list) and len(boxes) > 0:
+                            try:
+                                min_lat_b, min_lon_b, max_lat_b, max_lon_b = map(float, boxes[0].split())
+                                spatial_bounding_box = (min_lon_b, min_lat_b, max_lon_b, max_lat_b)
+                            except Exception:
+                                pass
+                        elif polygons and isinstance(polygons, list) and len(polygons) > 0:
+                            try:
+                                raw_poly = polygons[0][0] if isinstance(polygons[0], list) else polygons[0]
+                                poly_coords = [float(x) for x in raw_poly.split()]
+                                lats_p = poly_coords[0::2]
+                                lons_p = poly_coords[1::2]
+                                spatial_bounding_box = (min(lons_p), min(lats_p), max(lons_p), max(lats_p))
+                            except Exception:
+                                pass
+
+                        raw_size = e.get("granule_size")
+                        try:
+                            granule_size_mb = round(float(raw_size), 2) if raw_size is not None else 0.0
+                        except (ValueError, TypeError):
+                            granule_size_mb = 0.0
+
                         granules.append({
-                            "id": e.get("id"),
-                            "title": e.get("title"),
-                            "time_start": e.get("time_start"),
-                            "time_end": e.get("time_end"),
-                            "data_links": links[:4],
+                            "id": granule_concept_id,
+                            "title": title,
+                            "producer_granule_id": producer_granule_id,
+                            "official_granule_id": official_granule_id,
+                            "collection_id": coll_id,
+                            "version": version_val,
+                            "metadata_url": metadata_url,
+                            "download_url": download_url,
+                            "observation_start_time": time_start,
+                            "observation_end_time": time_end,
+                            "time_start": time_start,
+                            "time_end": time_end,
+                            "data_links": data_links[:4],
                             "browse_links": browse_links[:2],
-                            "granule_size_mb": round(float(e.get("granule_size", 0.0)), 2),
+                            "granule_size_mb": granule_size_mb,
                             "day_night_flag": e.get("day_night_flag"),
                             "cloud_cover": e.get("cloud_cover"),
+                            "boxes": boxes,
+                            "polygons": polygons,
+                            "spatial_bounding_box": spatial_bounding_box,
                         })
 
                     return {
@@ -345,7 +466,7 @@ class NasaEarthdataClient:
         temp_path = f"{destination_path}.part"
 
         try:
-            async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True, auth=auth) as client:
+            async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=False, auth=auth) as client:
                 async with client.stream("GET", granule_url, headers=headers) as resp:
                     if resp.status_code != 200:
                         return {

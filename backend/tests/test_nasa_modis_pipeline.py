@@ -170,7 +170,7 @@ def test_observation_repository_timeseries_retrieval():
     demo_ts = LandService.get_timeseries(30.90, 75.85, 2024, 2026, source_mode="demonstration")
     assert len(demo_ts.timeseries) == 36
     assert demo_ts.is_observation is False
-    assert demo_ts.data_status == "simulated"
+    assert demo_ts.data_status in ("demonstration_model", "simulated")
 
 
 # --- 4. ModisClient & CMR Search Tests ---
@@ -209,23 +209,23 @@ def test_synthetic_data_never_labeled_observation():
 
     # 1. Land Demo Grid
     land_grid = DemoDataService.get_simulated_land_grid("2026-03")
-    assert land_grid.metadata["data_status"] == "simulated"
+    assert land_grid.metadata["data_status"] in ("demonstration_model", "simulated")
     assert land_grid.metadata["is_observation"] is False
     assert land_grid.metadata["source_type"] == "synthetic"
     for feat in land_grid.features:
-        assert feat.properties["data_status"] == "simulated"
+        assert feat.properties["data_status"] in ("demonstration_model", "simulated")
         assert feat.properties["is_observation"] is False
         assert feat.properties["source_type"] == "synthetic"
 
     # 2. Atmosphere Demo Grid
     atmo_grid = DemoDataService.get_simulated_atmosphere_grid("2026-03")
-    assert atmo_grid.metadata["data_status"] == "simulated"
+    assert atmo_grid.metadata["data_status"] in ("demonstration_model", "simulated")
     assert atmo_grid.metadata["is_observation"] is False
     assert atmo_grid.metadata["source_type"] == "synthetic"
 
     # 3. Ocean Demo Grid
     ocean_grid = DemoDataService.get_simulated_ocean_grid("2026-03")
-    assert ocean_grid.metadata["data_status"] == "simulated"
+    assert ocean_grid.metadata["data_status"] in ("demonstration_model", "simulated")
     assert ocean_grid.metadata["is_observation"] is False
     assert ocean_grid.metadata["source_type"] == "synthetic"
 

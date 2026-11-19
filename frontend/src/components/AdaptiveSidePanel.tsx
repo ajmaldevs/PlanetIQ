@@ -789,12 +789,14 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                       <div className="flex justify-between">
                         <span>Eddy Kinetic Energy:</span>
                         <span className="text-white">
-                          {selectedFeature?.properties.eddy_kinetic_energy_cm2_s2 ?? '485.2'} cm²/s²
+                          {selectedFeature?.properties.eddy_kinetic_energy_cm2_s2 != null ? `${selectedFeature.properties.eddy_kinetic_energy_cm2_s2} cm²/s²` : 'Unobserved'}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Geostrophic Velocity u/v:</span>
-                        <span className="text-white">±0.45 m/s</span>
+                        <span className="text-white">
+                          {selectedFeature?.properties.geostrophic_velocity != null ? `${selectedFeature.properties.geostrophic_velocity} m/s` : 'Unobserved'}
+                        </span>
                       </div>
                     </>
                   )}
@@ -803,13 +805,13 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                       <div className="flex justify-between">
                         <span>Climatological Normal:</span>
                         <span className="text-white">
-                          {selectedFeature?.properties.climatological_normal_mm ?? '142.0'} mm
+                          {selectedFeature?.properties.climatological_normal_mm != null ? `${selectedFeature.properties.climatological_normal_mm} mm` : 'Unobserved'}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Monthly Anomaly Delta:</span>
                         <span className="text-cyan-300">
-                          {selectedFeature?.properties.anomaly_mm ? `${selectedFeature.properties.anomaly_mm > 0 ? '+' : ''}${selectedFeature.properties.anomaly_mm} mm` : '0.0 mm'}
+                          {selectedFeature?.properties.anomaly_mm != null ? `${selectedFeature.properties.anomaly_mm > 0 ? '+' : ''}${selectedFeature.properties.anomaly_mm} mm` : 'Unobserved'}
                         </span>
                       </div>
                     </>
@@ -819,13 +821,13 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                       <div className="flex justify-between">
                         <span>Historical Median NDVI:</span>
                         <span className="text-white">
-                          {selectedFeature?.properties.historical_ndvi_median ?? '0.68'}
+                          {selectedFeature?.properties.historical_ndvi_median != null ? `${selectedFeature.properties.historical_ndvi_median}` : 'Unobserved'}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span>Vegetation Condition (VCI):</span>
                         <span className="text-emerald-300">
-                          {selectedFeature?.properties.vci_percent ? `${selectedFeature.properties.vci_percent}%` : '58%'}
+                          {selectedFeature?.properties.vci_percent != null ? `${selectedFeature.properties.vci_percent}%` : 'Unobserved'}
                         </span>
                       </div>
                     </>

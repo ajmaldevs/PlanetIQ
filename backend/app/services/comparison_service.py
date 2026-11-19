@@ -87,7 +87,7 @@ class ComparisonService:
         for reg in AtmosphereService.ATMOSPHERE_REGIONS[:5]:
             reg_ts = AtmosphereService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode=source_mode)
             if not reg_ts.timeseries:
-                if source_mode == "demonstration" or (source_mode == "auto" and settings.ALLOW_DEMO_FALLBACK):
+                if source_mode == "demonstration" and not settings.IS_PRODUCTION and settings.DEMO_FALLBACK_PERMITTED:
                     reg_ts = AtmosphereService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode="demonstration")
                 else:
                     continue
@@ -126,7 +126,12 @@ class ComparisonService:
             f"Observations correspond to NASA GPM IMERG Final monthly calibration (GPM_3IMERGM)."
         )
 
+        is_obs = bool(ts.is_observation and source_mode == "observation")
+        d_status = "observation" if is_obs else "demonstration_model"
+
         return PeriodComparisonResponse(
+            data_status=d_status,
+            is_observation=is_obs,
             module="atmosphere",
             period_a=pt_a.date,
             period_b=pt_b.date,
@@ -237,7 +242,12 @@ class ComparisonService:
             f"Measured via NASA/CNES SWOT KaRIn Ka-band radar interferometer (precision ±2.4 cm)."
         )
 
+        is_obs = bool(ts.is_observation and source_mode == "observation")
+        d_status = "observation" if is_obs else "demonstration_model"
+
         return PeriodComparisonResponse(
+            data_status=d_status,
+            is_observation=is_obs,
             module="ocean",
             period_a=pt_a.date,
             period_b=pt_b.date,
@@ -353,7 +363,12 @@ class ComparisonService:
             f"Derived from NASA MODIS Terra/Aqua 16-day composite surface reflectance (MOD13C2 v6.1)."
         )
 
+        is_obs = bool(ts.is_observation and source_mode == "observation")
+        d_status = "observation" if is_obs else "demonstration_model"
+
         return PeriodComparisonResponse(
+            data_status=d_status,
+            is_observation=is_obs,
             module="land",
             period_a=pt_a.date,
             period_b=pt_b.date,

@@ -21,12 +21,15 @@ CRITICAL SCIENTIFIC INTEGRITY RULES:
 
 from typing import Dict, Any, List, Optional
 import os
+import re
+import calendar
 import hashlib
 import logging
 from datetime import datetime, timezone
 import numpy as np
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from geoalchemy2.elements import WKTElement
 
 from app.models.observation import EarthObservation
 from app.models.timeseries import ObservationTimeSeriesRecord
@@ -34,7 +37,11 @@ from app.core.database import session_scope
 from app.data_processing.ndvi_processor import NdviProcessor
 from app.data_processing.ocean_processor import OceanProcessor
 from app.data_processing.atmosphere_processor import AtmosphereProcessor
-from app.integrations.nasa.earthdata_client import NasaEarthdataClient
+from app.integrations.nasa.earthdata_client import (
+    NasaEarthdataClient,
+    COLLECTION_CONCEPT_IDS,
+    COLLECTION_SHORT_NAMES,
+)
 from app.integrations.nasa.modis_client import ModisClient
 from app.integrations.nasa.ocean_color_client import OceanColorClient
 from app.integrations.nasa.atmosphere_client import AtmosphereClient
@@ -398,13 +405,15 @@ class IngestionService:
         session: Session,
         mission_name: Optional[str] = None,
         location_name: Optional[str] = None,
+        granule_meta: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Ingests a verified NASA satellite granule file into the database.
         - Calculates SHA-256 checksum.
-        - Decodes scientific arrays with quality control.
-        - Persists verified catalog entries in earth_observations.
-        - Persists verified measurements in observation_timeseries.
+        - Strictly validates observation date match (no relabeling or substitution).
+        - Decodes scientific arrays with dedicated parsers and quality control.
+        - Persists PostGIS Polygon spatial bounds.
+        - Persists complete 12-item granule provenance metadata.
         - Strictly flags all records with:
             verification_status = 'verified_observation'
             is_observation = True
@@ -422,31 +431,82 @@ class IngestionService:
         granule_id = os.path.basename(granule_path)
 
         parts = date_str.split("-")
-        obs_dt = datetime(int(parts[0]), int(parts[1]), 1, tzinfo=timezone.utc)
+        req_year, req_month = int(parts[0]), int(parts[1])
+        req_ym_compact = f"{req_year:04d}{req_month:02d}"
+        obs_dt = datetime(req_year, req_month, 1, tzinfo=timezone.utc)
+
+        # Strict observation date enforcement: verify granule date against requested date
+        if granule_meta:
+            g_start = granule_meta.get("observation_start_time") or granule_meta.get("time_start") or ""
+            if g_start and g_start[:7] != date_str:
+                raise ValueError(
+                    f"Granule date mismatch: requested {date_str} but granule observation starts at {g_start[:7]}"
+                )
+
+        if "3IMERG" in granule_id or "GPM" in dataset_id:
+            m = re.search(r"(\d{4})(\d{2})\d{2}-S", granule_id)
+            if m:
+                file_ym = f"{m.group(1)}{m.group(2)}"
+                if file_ym != req_ym_compact:
+                    raise ValueError(
+                        f"Granule file {granule_id} date ({m.group(1)}-{m.group(2)}) does not match requested date {date_str}"
+                    )
 
         features: List[Dict[str, Any]] = []
         unit = "dimensionless"
         mission = mission_name or "NASA Earth Observation"
+        extracted_vars: List[str] = []
+        units_dict: Dict[str, str] = {}
+        quality_flags_dict: Dict[str, Any] = {}
 
         # 1. LAND: MOD13C2
         if dataset_id == "MOD13C2":
             mission = mission_name or "MODIS Terra"
             unit = "dimensionless ratio (-0.2000 to +1.0000)"
-            res = NdviProcessor.read_satellite_file(granule_path, date_str)
-            if res and res.get("features"):
-                features = res["features"]
+            from app.data_processing.parsers.modis_parser import ModisParser
+            parsed = ModisParser.parse_granule(granule_path, date_str)
+            features = parsed.get("features", [])
+            extracted_vars = parsed.get("extracted_variables", ["ndvi", "evi"])
+            units_dict = parsed.get("units", {"ndvi": unit, "evi": unit})
+            quality_flags_dict = parsed.get("quality_flags", {"qa_field": "pixel_reliability", "qa_filtered": True})
 
-        # 2. OCEAN: MODISA_L3m_CHL, MODISA_L3m_SST, SWOT_L2_LR_SSH
-        elif dataset_id in ["MODISA_L3m_CHL", "MODISA_L3m_SST", "SWOT_L2_LR_SSH", "MODISA_L3m_OCEAN_SWOT"]:
+        # 2. OCEAN: SWOT_L2_LR_SSH, MODISA_L3m_CHL, MODISA_L3m_SST
+        elif dataset_id in ["SWOT_L2_LR_SSH", "SWOT"]:
+            mission = mission_name or "SWOT KaRIn Altimetry"
+            unit = "m"
+            from app.data_processing.parsers.swot_parser import SwotParser
+            parsed = SwotParser.parse_granule(granule_path, date_str)
+            features = parsed.get("features", [])
+            extracted_vars = parsed.get("extracted_variables", ["ssha_karin", "ssh_karin"])
+            units_dict = parsed.get("units", {"ssha_karin": "m", "ssh_karin": "m"})
+            quality_flags_dict = parsed.get("quality_flags", {"qa_field": "ssh_karin_qual", "valid_qual_flag": 0})
+
+        elif dataset_id in ["MODISA_L3m_CHL", "MODISA_L3m_SST", "MODISA_L3m_OCEAN_SWOT"]:
             mission = mission_name or ("MODIS Aqua Ocean Color" if "CHL" in dataset_id else "SWOT KaRIn Altimetry")
             unit = "mg/m³" if "CHL" in dataset_id else ("°C" if "SST" in dataset_id else "meters (m)")
             features = cls._parse_ocean_granule_file(granule_path, dataset_id, date_str, granule_id)
+            extracted_vars = ["chlor_a"] if "CHL" in dataset_id else ["sst"]
+            units_dict = {extracted_vars[0]: unit}
+            quality_flags_dict = {"qa_filtered": True}
 
-        # 3. ATMOSPHERE: MOD08_M3, GPM_3IMERGM
-        elif dataset_id in ["MOD08_M3", "GPM_3IMERGM", "MODIS_GPM_ATMOSPHERE"]:
+        # 3. ATMOSPHERE: GPM_3IMERGM, MOD08_M3
+        elif dataset_id in ["GPM_3IMERGM", "GPM"]:
+            mission = mission_name or "GPM Core Observatory"
+            unit = "mm"
+            from app.data_processing.parsers.gpm_parser import GpmParser
+            parsed = GpmParser.parse_granule(granule_path, date_str)
+            features = parsed.get("features", [])
+            extracted_vars = parsed.get("extracted_variables", ["precipitation", "precipitation_accumulated"])
+            units_dict = parsed.get("units", {"precipitation": "mm/hr", "precipitation_accumulated": "mm"})
+            quality_flags_dict = parsed.get("quality_flags", {"fill_values_filtered": [-9999.9, -9999.0], "negative_values_filtered": True})
+
+        elif dataset_id in ["MOD08_M3", "MODIS_GPM_ATMOSPHERE"]:
             mission = mission_name or ("MODIS Atmosphere" if "MOD08" in dataset_id else "GPM Core Observatory")
             unit = "dimensionless ratio" if "MOD08" in dataset_id else "mm"
             features = cls._parse_atmosphere_granule_file(granule_path, dataset_id, date_str, granule_id)
+            extracted_vars = ["aod_550"]
+            units_dict = {"aod_550": unit}
+            quality_flags_dict = {"qa_filtered": False}
 
         if not features:
             logger.warning(f"No valid scientific features decoded from granule {granule_path} for dataset {dataset_id}")
@@ -478,7 +538,67 @@ class IngestionService:
         min_val = round(float(np.min(vals)), 4) if vals else 0.0
         max_val = round(float(np.max(vals)), 4) if vals else 0.0
 
-        # Persist EarthObservation catalog record
+        # PostGIS SRID 4326 Polygon bounding box
+        wkt_poly = f"POLYGON(({min_lon} {min_lat}, {max_lon} {min_lat}, {max_lon} {max_lat}, {min_lon} {max_lat}, {min_lon} {min_lat}))"
+        spatial_bounds = WKTElement(wkt_poly, srid=4326)
+
+        # Assemble complete 12 required provenance metadata fields
+        _, last_day = calendar.monthrange(req_year, req_month)
+        default_start = f"{req_year:04d}-{req_month:02d}-01T00:00:00Z"
+        default_end = f"{req_year:04d}-{req_month:02d}-{last_day:02d}T23:59:59Z"
+
+        meta_coll_id = (
+            (granule_meta.get("collection_id") if granule_meta else None)
+            or COLLECTION_CONCEPT_IDS.get(dataset_id, dataset_id)
+        )
+        meta_version = (
+            (granule_meta.get("version") if granule_meta else None)
+            or COLLECTION_SHORT_NAMES.get(dataset_id, {}).get("version", "v1.0")
+        )
+        meta_granule_id = (
+            (granule_meta.get("official_granule_id") if granule_meta else None)
+            or (granule_meta.get("title") if granule_meta else None)
+            or granule_id
+        )
+        meta_metadata_url = (
+            (granule_meta.get("metadata_url") if granule_meta else None)
+            or f"https://cmr.earthdata.nasa.gov/search/concepts/{meta_coll_id}.umm_json"
+        )
+        meta_download_url = (
+            (granule_meta.get("download_url") if granule_meta else None)
+            or f"https://earthdata.nasa.gov/data/{granule_id}"
+        )
+        meta_start = (
+            (granule_meta.get("observation_start_time") or granule_meta.get("time_start") if granule_meta else None)
+            or default_start
+        )
+        meta_end = (
+            (granule_meta.get("observation_end_time") or granule_meta.get("time_end") if granule_meta else None)
+            or default_end
+        )
+
+        extra_metadata = {
+            "collection_id": meta_coll_id,
+            "version": meta_version,
+            "official_granule_id": meta_granule_id,
+            "metadata_url": meta_metadata_url,
+            "download_url": meta_download_url,
+            "observation_start_time": meta_start,
+            "observation_end_time": meta_end,
+            "extracted_variables": extracted_vars,
+            "units": units_dict,
+            "quality_flags": quality_flags_dict,
+            "checksum_sha256": checksum,
+            "ingestion_timestamp": datetime.now(timezone.utc).isoformat(),
+            "granule_id": granule_id,
+            "data_status": "observation",
+            "is_observation": True,
+            "verification_status": "verified_observation",
+            "source_type": "satellite_telemetry",
+            "feature_count": len(features),
+        }
+
+        # Persist EarthObservation catalog record with PostGIS spatial bounds
         existing_cat = session.execute(
             select(EarthObservation).filter_by(
                 dataset_id=dataset_id,
@@ -496,6 +616,7 @@ class IngestionService:
                 max_latitude=max_lat,
                 min_longitude=min_lon,
                 max_longitude=max_lon,
+                spatial_bounds=spatial_bounds,
                 mean_value=mean_val,
                 min_value=min_val,
                 max_value=max_val,
@@ -504,17 +625,14 @@ class IngestionService:
                 source_file_checksum=checksum,
                 granule_id=granule_id,
                 processing_version="v1.0",
-                extra_metadata={
-                    "granule_id": granule_id,
-                    "checksum_sha256": checksum,
-                    "data_status": "observation",
-                    "is_observation": True,
-                    "verification_status": "verified_observation",
-                    "source_type": "satellite_telemetry",
-                    "feature_count": len(features),
-                },
+                extra_metadata=extra_metadata,
             )
             session.add(cat_rec)
+        else:
+            existing_cat.spatial_bounds = spatial_bounds
+            existing_cat.extra_metadata = extra_metadata
+            existing_cat.verification_status = "verified_observation"
+            existing_cat.source_file_checksum = checksum
 
         # Persist time-series records in batch
         existing_rows = session.execute(
@@ -531,10 +649,13 @@ class IngestionService:
             props = f["properties"]
             coords = f["geometry"]["coordinates"]
             loc_label = props.get("region_name") or props.get("location_name") or f"Point ({coords[1]:+.2f}°, {coords[0]:+.2f}°)"
-            metric = (
-                props.get("primary_ocean_metric")
-                or ("NDVI" if dataset_id == "MOD13C2" else ("aod_550" if "MOD08" in dataset_id else "precipitation_accumulated"))
-            )
+            if "SWOT" in dataset_id:
+                metric = "ssha_karin"
+            else:
+                metric = (
+                    props.get("primary_ocean_metric")
+                    or ("NDVI" if dataset_id == "MOD13C2" else ("aod_550" if "MOD08" in dataset_id else "precipitation_accumulated"))
+                )
             val = (
                 props.get("ndvi")
                 if dataset_id == "MOD13C2"
@@ -548,6 +669,7 @@ class IngestionService:
                     location_name=loc_label,
                     latitude=coords[1],
                     longitude=coords[0],
+                    geom=WKTElement(f"POINT({coords[0]} {coords[1]})", srid=4326),
                     date_str=date_str,
                     metric_name=metric,
                     value=float(val),
@@ -621,8 +743,6 @@ class IngestionService:
         elif dataset_id in ["GPM_3IMERGM", "GPM"]:
             target_dataset_id = "GPM_3IMERGM"
             granule = await GpmClient.find_granule_for_month(year, month)
-            if not granule and year >= 2026:
-                granule = await GpmClient.find_granule_for_month(2025, 9)
             if granule:
                 ret = await GpmClient.retrieve_granule_file(granule)
         elif dataset_id in ["SWOT_L2_LR_SSH", "SWOT"]:
@@ -642,10 +762,30 @@ class IngestionService:
                 "message": f"No genuine granule discovered on CMR for {dataset_id} in {year}-{month:02d}.",
             }
 
+        # Strict observation date enforcement: validate that discovered granule matches requested period
+        if granule:
+            granule_start = granule.get("observation_start_time") or granule.get("time_start") or ""
+            date_str = f"{year:04d}-{month:02d}"
+            if granule_start and granule_start[:7] != date_str:
+                logger.warning(
+                    f"Discovered granule date mismatch: requested {date_str} but granule starts at {granule_start[:7]}"
+                )
+                return {
+                    "status": "not_found",
+                    "message": f"No genuine granule discovered on CMR for {dataset_id} in {year}-{month:02d}.",
+                }
+
         # Step 2: Open database session strictly during fast persistence
+        granule_meta = (ret.get("granule_meta") if ret else None) or granule
         date_str = f"{year:04d}-{month:02d}"
         with session_scope(session) as db:
-            return cls.ingest_granule_file(ret["file_path"], target_dataset_id, date_str, db)
+            return cls.ingest_granule_file(
+                granule_path=ret["file_path"],
+                dataset_id=target_dataset_id,
+                date_str=date_str,
+                session=db,
+                granule_meta=granule_meta,
+            )
 
     # =========================================================================
     # Array Decoders for Ocean & Atmosphere Granules
@@ -769,6 +909,7 @@ class IngestionService:
                         location_name=loc_name,
                         latitude=lat,
                         longitude=lon,
+                        geom=WKTElement(f"POINT({lon} {lat})", srid=4326),
                         date_str=date_str,
                         metric_name="NDVI",
                         value=ndvi_val,
@@ -852,6 +993,7 @@ class IngestionService:
                         location_name=loc_name,
                         latitude=lat,
                         longitude=lon,
+                        geom=WKTElement(f"POINT({lon} {lat})", srid=4326),
                         date_str=date_str,
                         metric_name="chlor_a",
                         value=chl_val,
@@ -931,6 +1073,7 @@ class IngestionService:
                         location_name=loc_name,
                         latitude=lat,
                         longitude=lon,
+                        geom=WKTElement(f"POINT({lon} {lat})", srid=4326),
                         date_str=date_str,
                         metric_name="aod_550",
                         value=aod_val,

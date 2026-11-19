@@ -1,10 +1,11 @@
 from typing import List
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.schemas.scientific import DatasetCatalogItem
 from app.services.dataset_service import DatasetService
 from app.integrations.nasa.earthdata_client import NasaEarthdataClient
 from app.core.database import get_sync_session, check_database_connection
 from app.models.timeseries import ObservationTimeSeriesRecord
+from app.api.v1.endpoints.ingest import require_admin_authorization
 from sqlalchemy import func, select
 
 router = APIRouter()
@@ -63,7 +64,8 @@ async def get_nasa_auth_status():
 @router.post(
     "/ingest",
     summary="Trigger NASA Satellite Granule Ingestion",
-    tags=["NASA Earthdata & Ingestion"]
+    tags=["NASA Earthdata & Ingestion"],
+    dependencies=[Depends(require_admin_authorization)],
 )
 async def trigger_granule_ingestion(
     dataset_id: str = Query("MOD13C2", description="Dataset ID (MOD13C2, SWOT_L2_LR_SSH, GPM_3IMERGM, MODISA_L3m_CHL, MOD08_M3)"),

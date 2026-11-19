@@ -158,7 +158,8 @@ class OceanProcessor:
             properties["ssha"] = val_ssha
             properties["ssha_karin_m"] = val_ssha
             properties["dynamic_topography_m"] = val_ssha
-            properties["eddy_kinetic_energy_cm2_s2"] = round(abs(val_ssha) * 120.0, 1)
+            # EKE = 0.5*(u'^2 + v'^2) requires 2D geostrophic velocity gradients; omitted for point measurements to preserve physical rigor
+            properties["eddy_kinetic_energy_cm2_s2"] = None
             properties["eddy_type"] = cls.classify_eddy_type(val_ssha)
 
         if val_ssh is not None:

@@ -147,17 +147,17 @@ class TestScientificServicesSourceMode:
 
         # In demonstration mode
         demo_grid = AtmosphereService.get_spatial_grid(date_str="2026-03", source_mode="demonstration")
-        assert demo_grid.metadata.get("data_status") == "simulated"
+        assert demo_grid.metadata.get("data_status") in ("demonstration_model", "simulated")
         assert demo_grid.metadata.get("is_observation") is False
         assert len(demo_grid.features) > 0
 
         # In auto mode
         auto_grid = AtmosphereService.get_spatial_grid(date_str="2026-03", source_mode="auto")
-        assert auto_grid.metadata.get("data_status") in ("observation", "simulated", "unavailable")
+        assert auto_grid.metadata.get("data_status") in ("observation", "demonstration_model", "simulated", "unavailable")
 
         # In auto mode with unobserved date
         auto_fallback = AtmosphereService.get_spatial_grid(date_str="2025-01", source_mode="auto")
-        assert auto_fallback.metadata.get("data_status") in ("simulated", "unavailable")
+        assert auto_fallback.metadata.get("data_status") in ("demonstration_model", "simulated", "unavailable")
         assert auto_fallback.metadata.get("is_observation") is False
 
     def test_ocean_service_source_mode(self):
@@ -172,17 +172,17 @@ class TestScientificServicesSourceMode:
 
         # In demonstration mode
         demo_grid = OceanService.get_spatial_observations(date_str="2026-03", source_mode="demonstration")
-        assert demo_grid.metadata.get("data_status") == "simulated"
+        assert demo_grid.metadata.get("data_status") in ("demonstration_model", "simulated")
         assert demo_grid.metadata.get("is_observation") is False
         assert len(demo_grid.features) > 0
 
         # In auto mode
         auto_grid = OceanService.get_spatial_observations(date_str="2026-03", source_mode="auto")
-        assert auto_grid.metadata.get("data_status") in ("observation", "simulated", "unavailable")
+        assert auto_grid.metadata.get("data_status") in ("observation", "demonstration_model", "simulated", "unavailable")
 
         # In auto mode with unobserved date
         auto_fallback = OceanService.get_spatial_observations(date_str="2025-01", source_mode="auto")
-        assert auto_fallback.metadata.get("data_status") in ("simulated", "unavailable")
+        assert auto_fallback.metadata.get("data_status") in ("demonstration_model", "simulated", "unavailable")
         assert auto_fallback.metadata.get("is_observation") is False
 
 
@@ -210,7 +210,7 @@ class TestApiEndpointsSourceMode:
             res_demo = await client.get("/api/v1/atmosphere/grid?source_mode=demonstration")
             assert res_demo.status_code == 200
             data_demo = res_demo.json()
-            assert data_demo["metadata"]["data_status"] == "simulated"
+            assert data_demo["metadata"]["data_status"] in ("demonstration_model", "simulated")
 
             # Timeseries observation mode
             res_ts = await client.get("/api/v1/atmosphere/timeseries?latitude=28.61&longitude=77.21&source_mode=observation")
@@ -245,7 +245,7 @@ class TestApiEndpointsSourceMode:
             res_demo = await client.get("/api/v1/ocean/observations?source_mode=demonstration")
             assert res_demo.status_code == 200
             data_demo = res_demo.json()
-            assert data_demo["metadata"]["data_status"] == "simulated"
+            assert data_demo["metadata"]["data_status"] in ("demonstration_model", "simulated")
 
             # Timeseries observation mode
             res_ts = await client.get("/api/v1/ocean/timeseries?latitude=28.0&longitude=-65.0&source_mode=observation")

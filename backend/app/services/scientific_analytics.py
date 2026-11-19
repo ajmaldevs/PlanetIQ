@@ -1,5 +1,5 @@
 """
-Scientific Analytics Engine for TerraLens.
+Scientific Analytics Engine for PlanetIQ.
 Provides rigorous calculations for:
 - Historical climatological baselines and anomaly detection.
 - Physical unit integrity (e.g. GPM rate mm/hr vs accumulated mm).

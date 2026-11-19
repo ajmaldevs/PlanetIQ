@@ -73,18 +73,51 @@ export interface GeoJSONFeatureCollection {
   metadata: Record<string, any>;
 }
 
+/**
+ * Safely extracts [lon, lat] center coordinates from any GeoJSON geometry (Point, Polygon, etc.).
+ * Returns null if coordinates cannot be parsed or are invalid.
+ */
+export function extractFeatureCoordinates(geometry: any): [number, number] | null {
+  if (!geometry || !geometry.coordinates) return null;
+  if (geometry.type === 'Point' && Array.isArray(geometry.coordinates)) {
+    const lon = Number(geometry.coordinates[0]);
+    const lat = Number(geometry.coordinates[1]);
+    if (!isNaN(lon) && !isNaN(lat)) return [lon, lat];
+  } else if (geometry.type === 'Polygon' && Array.isArray(geometry.coordinates)) {
+    const ring = geometry.coordinates[0];
+    if (Array.isArray(ring) && ring.length > 0) {
+      let sumLon = 0, sumLat = 0, count = 0;
+      for (const pt of ring) {
+        if (Array.isArray(pt)) {
+          const lon = Number(pt[0]);
+          const lat = Number(pt[1]);
+          if (!isNaN(lon) && !isNaN(lat)) {
+            sumLon += lon;
+            sumLat += lat;
+            count++;
+          }
+        }
+      }
+      if (count > 0) return [sumLon / count, sumLat / count];
+    }
+  }
+  return null;
+}
+
+export type DataStatus = 'observation' | 'unavailable' | 'demonstration_model';
+
 export interface AtmosphereTimeSeriesPoint {
   date: string;
-  precipitation_rate_mm_hr: number;
-  precipitation_accumulated_mm: number;
-  climatological_normal_mm: number;
-  anomaly_mm: number;
+  precipitation_rate_mm_hr?: number;
+  precipitation_accumulated_mm?: number;
+  climatological_normal_mm?: number;
+  anomaly_mm?: number;
   aod_550?: number;
   cloud_fraction?: number;
 }
 
 export interface AtmosphereTimeSeriesResponse {
-  data_status: 'observation' | 'observations' | 'simulated' | 'demonstration_model' | 'unavailable';
+  data_status: DataStatus;
   is_observation: boolean;
   dataset_id: string;
   dataset_name: string;
@@ -99,16 +132,16 @@ export interface AtmosphereTimeSeriesResponse {
 
 export interface OceanTimeSeriesPoint {
   date: string;
-  ssha_mean_m: number;
-  ssha_min_m: number;
-  ssha_max_m: number;
-  eddy_kinetic_energy_cm2_s2: number;
+  ssha_mean_m?: number;
+  ssha_min_m?: number;
+  ssha_max_m?: number;
+  eddy_kinetic_energy_cm2_s2?: number;
   chlor_a?: number;
   sst?: number;
 }
 
 export interface OceanTimeSeriesResponse {
-  data_status: 'observation' | 'observations' | 'simulated' | 'demonstration_model' | 'unavailable';
+  data_status: DataStatus;
   is_observation: boolean;
   dataset_id: string;
   dataset_name: string;
@@ -129,7 +162,7 @@ export interface LandTimeSeriesPoint {
 }
 
 export interface LandTimeSeriesResponse {
-  data_status: 'observation' | 'observations' | 'simulated' | 'demonstration_model' | 'unavailable';
+  data_status: DataStatus;
   is_observation: boolean;
   dataset_id: string;
   dataset_name: string;
@@ -150,7 +183,7 @@ export interface CrossSystemCorrelationPoint {
 }
 
 export interface CrossSystemResponse {
-  data_status: 'demonstration_model' | 'observations';
+  data_status: DataStatus;
   is_observation: boolean;
   phenomenon_name: string;
   description: string;
@@ -222,7 +255,7 @@ export interface AnomalyAlertBlock {
 
 export interface DataQualityBlock {
   type: 'data_quality';
-  data_status: string;
+  data_status: DataStatus;
   is_observation: boolean;
   sensor: string;
   limitations: string[];
@@ -241,7 +274,7 @@ export interface AssistantQueryResponse {
   scientific_grounding: ScientificCitation[];
   suggested_followups: string[];
   confidence_level: string;
-  data_status?: string;
+  data_status?: DataStatus;
   visual_blocks?: VisualBlock[];
   tool_calls_executed?: string[];
 }
@@ -555,7 +588,7 @@ export interface RegionalDiffPoint {
 }
 
 export interface PeriodComparisonResponse {
-  data_status: 'demonstration_model' | 'observations';
+  data_status: DataStatus;
   is_observation: boolean;
   module: 'atmosphere' | 'ocean' | 'land';
   period_a: string;

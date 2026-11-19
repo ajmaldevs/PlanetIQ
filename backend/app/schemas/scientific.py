@@ -1,6 +1,8 @@
 from typing import List, Optional, Dict, Any, Union, Literal
 from pydantic import BaseModel, Field
 
+DataStatus = Literal["observation", "unavailable", "demonstration_model"]
+
 
 # --- Shared Geospatial Schemas ---
 
@@ -62,16 +64,16 @@ class PrecipitationGridPoint(BaseModel):
 
 class AtmosphereTimeSeriesPoint(BaseModel):
     date: str = Field(..., description="YYYY-MM")
-    precipitation_rate_mm_hr: float
-    precipitation_accumulated_mm: float
-    climatological_normal_mm: float
-    anomaly_mm: float
+    precipitation_rate_mm_hr: Optional[float] = Field(None, description="Instantaneous precipitation rate averaged across the month (mm/hr)")
+    precipitation_accumulated_mm: Optional[float] = Field(None, description="Total accumulated precipitation for the month (mm)")
+    climatological_normal_mm: Optional[float] = Field(None, description="Historical climatological normal (mm)")
+    anomaly_mm: Optional[float] = Field(None, description="Departure from normal (mm)")
     aod_550: Optional[float] = Field(None, description="Aerosol Optical Depth at 550nm")
     cloud_fraction: Optional[float] = Field(None, description="Cloud fraction (0.0 to 1.0)")
 
 
 class AtmosphereTimeSeriesResponse(BaseModel):
-    data_status: str = "simulated"
+    data_status: DataStatus = "unavailable"
     is_observation: bool = False
     dataset_id: str = "GPM_3IMERGM"
     dataset_name: str = "GPM IMERG Final Monthly Precipitation"
@@ -99,16 +101,16 @@ class OceanObservationPoint(BaseModel):
 
 class OceanTimeSeriesPoint(BaseModel):
     date: str = Field(..., description="YYYY-MM")
-    ssha_mean_m: float
-    ssha_min_m: float = 0.0
-    ssha_max_m: float = 0.0
-    eddy_kinetic_energy_cm2_s2: float = 0.0
+    ssha_mean_m: Optional[float] = Field(None, description="Sea Surface Height Anomaly in meters")
+    ssha_min_m: Optional[float] = None
+    ssha_max_m: Optional[float] = None
+    eddy_kinetic_energy_cm2_s2: Optional[float] = None
     chlor_a: Optional[float] = Field(None, description="Chlorophyll-a concentration in mg/m³")
     sst: Optional[float] = Field(None, description="Sea Surface Temperature in °C")
 
 
 class OceanTimeSeriesResponse(BaseModel):
-    data_status: str = "simulated"
+    data_status: DataStatus = "unavailable"
     is_observation: bool = False
     dataset_id: str = "SWOT_L2_LR_SSH"
     dataset_name: str = "SWOT KaRIn Ocean Sea Surface Height (Option A)"
@@ -141,7 +143,7 @@ class LandTimeSeriesPoint(BaseModel):
 
 
 class LandTimeSeriesResponse(BaseModel):
-    data_status: str = "simulated"
+    data_status: DataStatus = "unavailable"
     is_observation: bool = False
     dataset_id: str = "MOD13C2"
     dataset_name: str = "MODIS Monthly Global Vegetation Indices"
@@ -164,7 +166,7 @@ class CrossSystemCorrelationPoint(BaseModel):
 
 
 class CrossSystemResponse(BaseModel):
-    data_status: str = "simulated"
+    data_status: DataStatus = "unavailable"
     is_observation: bool = False
     phenomenon_name: str
     description: str
@@ -260,7 +262,7 @@ class AnomalyAlertBlock(BaseModel):
 
 class DataQualityBlock(BaseModel):
     type: Literal["data_quality"] = "data_quality"
-    data_status: str = "simulated"  # "observation" | "demonstration_model"
+    data_status: DataStatus = "unavailable"
     is_observation: bool = False
     sensor: str
     limitations: List[str]
@@ -272,7 +274,7 @@ class AssistantQueryResponse(BaseModel):
     scientific_grounding: List[ScientificCitation] = Field(default_factory=list)
     suggested_followups: List[str] = Field(default_factory=list)
     confidence_level: str = "High (NASA Earth Science Grounded)"
-    data_status: str = "simulated"  # "observation" | "demonstration_model"
+    data_status: DataStatus = "unavailable"
     visual_blocks: List[Dict[str, Any]] = Field(default_factory=list)
     tool_calls_executed: List[str] = Field(default_factory=list)
 
@@ -318,7 +320,7 @@ class RegionalDiffPoint(BaseModel):
 
 
 class PeriodComparisonResponse(BaseModel):
-    data_status: str = "simulated"
+    data_status: DataStatus = "unavailable"
     is_observation: bool = False
     module: str
     period_a: str
