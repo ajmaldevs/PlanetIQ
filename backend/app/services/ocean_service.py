@@ -38,37 +38,16 @@ class OceanService:
         min_lon: Optional[float] = None,
         max_lon: Optional[float] = None,
         date_str: str = "2026-03",
-        source_mode: str = "auto",
+        source_mode: str = "observation",
     ) -> GeoJSONFeatureCollection:
         """
         Delivers SWOT KaRIn Sea Surface Height observations and swath track features.
-        - source_mode="observation": Delivers genuine satellite observations or explicit unavailable status.
-        - source_mode="demonstration": Delivers calibrated demonstration model from DemoDataService.
-        - source_mode="auto": Delivers authentic observations if available; otherwise demonstration model.
+        - source_mode="observation" (default): Delivers genuine satellite observations or explicit unavailable status.
+        - source_mode="demonstration": Delivers calibrated demonstration model only in non-production with explicit opt-in.
+        - source_mode="auto": Prefers genuine observations. Never falls back to demonstration in production.
         """
-        if source_mode == "observation":
-            real_data = ObservationRepository.get_real_swot_spatial_grid(
-                date_str=date_str,
-                min_lat=min_lat,
-                max_lat=max_lat,
-                min_lon=min_lon,
-                max_lon=max_lon,
-            )
-            features = [
-                GeoJSONFeature(
-                    type="Feature",
-                    geometry=GeoJSONGeometry(type="Point", coordinates=f["geometry"]["coordinates"]),
-                    properties=f["properties"],
-                )
-                for f in real_data.get("features", [])
-            ]
-            return GeoJSONFeatureCollection(
-                type="FeatureCollection",
-                features=features,
-                metadata=real_data.get("metadata", {}),
-            )
-
         if source_mode == "demonstration":
+            settings.assert_no_demonstration_in_production(source_mode)
             return DemoDataService.get_simulated_ocean_grid(
                 date_str=date_str,
                 min_lat=min_lat,
@@ -77,7 +56,7 @@ class OceanService:
                 max_lon=max_lon,
             )
 
-        # Auto mode: check if real observations are loaded
+        # Standard observation / auto workflow: query real observations
         real_data = ObservationRepository.get_real_swot_spatial_grid(
             date_str=date_str,
             min_lat=min_lat,
@@ -100,7 +79,7 @@ class OceanService:
                 metadata=real_data.get("metadata", {}),
             )
 
-        if settings.ALLOW_DEMO_FALLBACK:
+        if not settings.IS_PRODUCTION and settings.DEMO_FALLBACK_PERMITTED and source_mode == "auto":
             return DemoDataService.get_simulated_ocean_grid(
                 date_str=date_str,
                 min_lat=min_lat,
@@ -122,44 +101,13 @@ class OceanService:
         longitude: float,
         start_year: int = 2024,
         end_year: int = 2026,
-        source_mode: str = "auto",
+        source_mode: str = "observation",
     ) -> OceanTimeSeriesResponse:
         """
         Calculates multi-year ocean sea surface height anomaly (SSHA) timeseries and eddy kinetic energy.
         """
-        if source_mode == "observation":
-            real_data = ObservationRepository.get_real_swot_timeseries(
-                latitude=latitude,
-                longitude=longitude,
-                start_year=start_year,
-                end_year=end_year,
-            )
-            points = [
-                OceanTimeSeriesPoint(
-                    date=p["date"],
-                    ssha_mean_m=p["ssha_mean_m"],
-                    ssha_min_m=p.get("ssha_min_m", 0.0),
-                    ssha_max_m=p.get("ssha_max_m", 0.0),
-                    eddy_kinetic_energy_cm2_s2=p.get("eddy_kinetic_energy_cm2_s2", 0.0),
-                    chlor_a=p.get("chlor_a"),
-                    sst=p.get("sst"),
-                )
-                for p in real_data.get("timeseries", [])
-            ]
-            return OceanTimeSeriesResponse(
-                data_status=real_data.get("data_status", "unavailable"),
-                is_observation=real_data.get("is_observation", False),
-                dataset_id=real_data.get("dataset_id", "SWOT_L2_LR_SSH"),
-                dataset_name=real_data.get("dataset_name", "NASA/CNES SWOT KaRIn Low Rate Ocean Sea Surface Height"),
-                region_name=real_data.get("region_name", "SWOT Ocean Swath"),
-                latitude=latitude,
-                longitude=longitude,
-                unit_height="meters (m)",
-                summary_statistics=real_data.get("summary_statistics", {}),
-                timeseries=points,
-            )
-
         if source_mode == "demonstration":
+            settings.assert_no_demonstration_in_production(source_mode)
             return DemoDataService.get_simulated_ocean_timeseries(
                 latitude=latitude,
                 longitude=longitude,
@@ -167,7 +115,7 @@ class OceanService:
                 end_year=end_year,
             )
 
-        # Auto mode: try real observations first
+        # Standard observation / auto workflow: query real observations
         real_data = ObservationRepository.get_real_swot_timeseries(
             latitude=latitude,
             longitude=longitude,
@@ -200,7 +148,7 @@ class OceanService:
                 timeseries=points,
             )
 
-        if settings.ALLOW_DEMO_FALLBACK:
+        if not settings.IS_PRODUCTION and settings.DEMO_FALLBACK_PERMITTED and source_mode == "auto":
             return DemoDataService.get_simulated_ocean_timeseries(
                 latitude=latitude,
                 longitude=longitude,

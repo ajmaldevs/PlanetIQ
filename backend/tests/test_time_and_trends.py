@@ -10,7 +10,7 @@ client = TestClient(app)
 
 def test_comparison_api_endpoint_atmosphere():
     response = client.get(
-        "/api/v1/comparison/periods?module=atmosphere&period_a=2024-01&period_b=2026-03&latitude=6.5&longitude=-150.0"
+        "/api/v1/comparison/periods?module=atmosphere&period_a=2024-01&period_b=2026-03&latitude=6.5&longitude=-150.0&source_mode=demonstration"
     )
     assert response.status_code == 200
     data = response.json()
@@ -26,7 +26,7 @@ def test_comparison_api_endpoint_atmosphere():
 
 def test_comparison_api_endpoint_ocean():
     response = client.get(
-        "/api/v1/comparison/periods?module=ocean&period_a=2024-06&period_b=2025-06&latitude=36.0&longitude=-68.0"
+        "/api/v1/comparison/periods?module=ocean&period_a=2024-06&period_b=2025-06&latitude=36.0&longitude=-68.0&source_mode=demonstration"
     )
     assert response.status_code == 200
     data = response.json()
@@ -39,7 +39,7 @@ def test_comparison_api_endpoint_ocean():
 
 def test_comparison_api_endpoint_land():
     response = client.get(
-        "/api/v1/comparison/periods?module=land&period_a=2024-03&period_b=2026-03&latitude=-3.1&longitude=-60.0"
+        "/api/v1/comparison/periods?module=land&period_a=2024-03&period_b=2026-03&latitude=-3.1&longitude=-60.0&source_mode=demonstration"
     )
     assert response.status_code == 200
     data = response.json()
@@ -58,18 +58,18 @@ def test_comparison_api_endpoint_validation():
 
 def test_timeline_month_coverage_across_services():
     # Verify earliest month (2024-01) and latest month (2026-12)
-    atm_2024 = AtmosphereService.get_spatial_grid(date_str="2024-01")
-    atm_2026 = AtmosphereService.get_spatial_grid(date_str="2026-12")
+    atm_2024 = AtmosphereService.get_spatial_grid(date_str="2024-01", source_mode="demonstration")
+    atm_2026 = AtmosphereService.get_spatial_grid(date_str="2026-12", source_mode="demonstration")
     assert len(atm_2024.features) > 0
     assert len(atm_2026.features) > 0
 
-    ocn_2024 = OceanService.get_spatial_observations(date_str="2024-01")
-    ocn_2026 = OceanService.get_spatial_observations(date_str="2026-12")
+    ocn_2024 = OceanService.get_spatial_observations(date_str="2024-01", source_mode="demonstration")
+    ocn_2026 = OceanService.get_spatial_observations(date_str="2026-12", source_mode="demonstration")
     assert len(ocn_2024.features) > 0
     assert len(ocn_2026.features) > 0
 
-    lnd_2024 = LandService.get_spatial_grid(date_str="2024-01")
-    lnd_2026 = LandService.get_spatial_grid(date_str="2026-12")
+    lnd_2024 = LandService.get_spatial_grid(date_str="2024-01", source_mode="demonstration")
+    lnd_2026 = LandService.get_spatial_grid(date_str="2026-12", source_mode="demonstration")
     assert len(lnd_2024.features) > 0
     assert len(lnd_2026.features) > 0
 

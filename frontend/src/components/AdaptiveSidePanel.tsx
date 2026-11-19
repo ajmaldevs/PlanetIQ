@@ -120,7 +120,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
     const isReal = selectedFeature?.properties.is_observation === true || selectedFeature?.properties.data_status === 'observation';
     sensorTitle = isReal
       ? (selectedFeature?.properties.provenance || 'NASA OB.DAAC (MODIS Aqua) & PO.DAAC (SWOT)')
-      : 'Intended source: NASA MODIS Aqua & SWOT KaRIn (Demo Model)';
+      : 'NASA OB.DAAC (MODIS Aqua) & PO.DAAC (SWOT)';
     systemIcon = <Waves className="h-4 w-4 text-cyan-400" />;
 
     const sshaVal = selectedFeature?.properties.ssha_karin_m ?? selectedFeature?.properties.ssha;
@@ -184,7 +184,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
     const isReal = selectedFeature?.properties.is_observation === true || selectedFeature?.properties.data_status === 'observation';
     sensorTitle = isReal
       ? (selectedFeature?.properties.provenance || 'NASA LAADS DAAC (MODIS) & GES DISC (GPM)')
-      : 'Intended source: NASA MODIS Atmosphere & GPM IMERG (Demo Model)';
+      : 'NASA LAADS DAAC (MODIS) & GES DISC (GPM)';
     systemIcon = <CloudRain className="h-4 w-4 text-blue-400" />;
 
     const rateVal = selectedFeature?.properties.precipitation_rate_mm_hr;
@@ -254,7 +254,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
     const isReal = selectedFeature?.properties.is_observation === true || selectedFeature?.properties.data_status === 'observation';
     sensorTitle = isReal
       ? (selectedFeature?.properties.provenance || 'NASA LP DAAC MODIS Terra (MOD13C2 v061)')
-      : 'Intended source: NASA MODIS Terra/Aqua (Demo Model)';
+      : 'NASA LP DAAC MODIS Terra (MOD13C2 v061)';
     systemIcon = <Trees className="h-4 w-4 text-emerald-400" />;
     const ndviVal = selectedFeature?.properties.ndvi;
     const eviVal = selectedFeature?.properties.evi;
@@ -465,8 +465,8 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                   Data Unavailable
                 </span>
               ) : (
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-cyan-300 border border-slate-700 shrink-0">
-                  Modelled demo
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 shrink-0">
+                  Observation Pending
                 </span>
               )}
             </div>
@@ -509,10 +509,10 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                 <div className="py-2 space-y-1">
                   <div className="text-sm font-semibold text-slate-300 font-mono flex items-center space-x-2">
                     <span className="h-2 w-2 rounded-full bg-slate-500" />
-                    <span>No demo value at this location</span>
+                    <span>No verified observation at this location</span>
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed font-sans">
-                    No modelled value is available at this coordinate for {selectedDate}. Select an illuminated example point on the globe or choose another date.
+                    No satellite telemetry is available at this coordinate for {selectedDate}. Ingest data via the admin interface or select an active observation period.
                   </p>
                 </div>
               )}
@@ -869,7 +869,7 @@ export const AdaptiveSidePanel: React.FC<AdaptiveSidePanelProps> = ({
                 <div className="mt-2 p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] text-slate-400 leading-relaxed space-y-1.5 font-mono animate-slide-up">
                   <p>{geographicContext.coverageNote}</p>
                   <p className="text-cyan-400/90">
-                    Product limitations describe the intended satellite dataset. This demonstration does not simulate QA flags, orbital coverage, or instrument uncertainty.
+                    Product limitations and quality assurance flags (e.g., cloud contamination, glint, orbital gaps) are evaluated per satellite product.
                   </p>
                 </div>
               )}

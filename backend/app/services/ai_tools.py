@@ -206,7 +206,7 @@ def get_ocean_observations(
 
     # Single point or resolved region lookup
     if resolved_lat is not None and resolved_lon is not None:
-        ts = OceanService.get_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026)
+        ts = OceanService.get_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026, source_mode="auto")
 
         # Strict scientific integrity: do not fabricate observations when data is unavailable
         if not ts.timeseries or ts.data_status == "unavailable":
@@ -294,7 +294,7 @@ def get_ocean_observations(
     max_lon_f = _coerce_float(max_lon) or (bbox[2] if bbox else None)
 
     fc = OceanService.get_spatial_observations(
-        min_lat=min_lat_f, max_lat=max_lat_f, min_lon=min_lon_f, max_lon=max_lon_f, date_str=date
+        min_lat=min_lat_f, max_lat=max_lat_f, min_lon=min_lon_f, max_lon=max_lon_f, date_str=date, source_mode="auto"
     )
     if not fc.features:
         return {
@@ -391,7 +391,7 @@ def get_precipitation_data(
 
     # Single location timeseries lookup
     if resolved_lat is not None and resolved_lon is not None:
-        ts = AtmosphereService.get_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026)
+        ts = AtmosphereService.get_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026, source_mode="auto")
         if not ts.timeseries or ts.data_status == "unavailable":
             return {
                 "status": "unavailable",
@@ -469,7 +469,7 @@ def get_precipitation_data(
     max_lon_f = _coerce_float(max_lon) or (bbox[2] if bbox else None)
 
     fc = AtmosphereService.get_spatial_grid(
-        min_lat=min_lat_f, max_lat=max_lat_f, min_lon=min_lon_f, max_lon=max_lon_f, date_str=date
+        min_lat=min_lat_f, max_lat=max_lat_f, min_lon=min_lon_f, max_lon=max_lon_f, date_str=date, source_mode="auto"
     )
     if not fc.features:
         return {
@@ -562,7 +562,7 @@ def get_vegetation_indices(
 
     # Single point timeseries
     if resolved_lat is not None and resolved_lon is not None:
-        ts = LandService.get_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026)
+        ts = LandService.get_timeseries(resolved_lat, resolved_lon, start_year=2024, end_year=2026, source_mode="auto")
         if not ts.timeseries or ts.data_status == "unavailable":
             return {
                 "status": "unavailable",
@@ -631,7 +631,7 @@ def get_vegetation_indices(
     max_lon_f = _coerce_float(max_lon) or (bbox[2] if bbox else None)
 
     fc = LandService.get_spatial_grid(
-        min_lat=min_lat_f, max_lat=max_lat_f, min_lon=min_lon_f, max_lon=max_lon_f, date_str=date
+        min_lat=min_lat_f, max_lat=max_lat_f, min_lon=min_lon_f, max_lon=max_lon_f, date_str=date, source_mode="auto"
     )
     if not fc.features:
         return {
@@ -710,7 +710,7 @@ def get_historical_trends(
     end_year = int(_coerce_date(end_date).split("-")[0])
 
     if mod == "ocean":
-        ts = OceanService.get_timeseries(resolved_lat, resolved_lon, start_year, end_year)
+        ts = OceanService.get_timeseries(resolved_lat, resolved_lon, start_year, end_year, source_mode="auto")
         if not ts.timeseries or ts.data_status == "unavailable":
             return {
                 "status": "unavailable",
@@ -727,7 +727,7 @@ def get_historical_trends(
         unit = "meters (m)"
         metric_label = "Sea Surface Height Anomaly (SSHA)"
     elif mod == "atmosphere":
-        ts = AtmosphereService.get_timeseries(resolved_lat, resolved_lon, start_year, end_year)
+        ts = AtmosphereService.get_timeseries(resolved_lat, resolved_lon, start_year, end_year, source_mode="auto")
         if not ts.timeseries or ts.data_status == "unavailable":
             return {
                 "status": "unavailable",
@@ -744,7 +744,7 @@ def get_historical_trends(
         unit = "mm"
         metric_label = "Monthly Accumulated Precipitation"
     else:
-        ts = LandService.get_timeseries(resolved_lat, resolved_lon, start_year, end_year)
+        ts = LandService.get_timeseries(resolved_lat, resolved_lon, start_year, end_year, source_mode="auto")
         if not ts.timeseries or ts.data_status == "unavailable":
             return {
                 "status": "unavailable",
@@ -825,8 +825,8 @@ def compare_regions(
         r_lat_b, r_lon_b = 20.0, 0.0
 
     if mod == "ocean":
-        ts_a = OceanService.get_timeseries(r_lat_a, r_lon_a, 2026, 2026)
-        ts_b = OceanService.get_timeseries(r_lat_b, r_lon_b, 2026, 2026)
+        ts_a = OceanService.get_timeseries(r_lat_a, r_lon_a, 2026, 2026, source_mode="auto")
+        ts_b = OceanService.get_timeseries(r_lat_b, r_lon_b, 2026, 2026, source_mode="auto")
         if not ts_a.timeseries or ts_a.data_status == "unavailable" or not ts_b.timeseries or ts_b.data_status == "unavailable":
             return {
                 "status": "unavailable",
@@ -844,8 +844,8 @@ def compare_regions(
         unit = "meters (m)"
         metric_label = "Sea Surface Height Anomaly (SSHA)"
     elif mod == "atmosphere":
-        ts_a = AtmosphereService.get_timeseries(r_lat_a, r_lon_a, 2026, 2026)
-        ts_b = AtmosphereService.get_timeseries(r_lat_b, r_lon_b, 2026, 2026)
+        ts_a = AtmosphereService.get_timeseries(r_lat_a, r_lon_a, 2026, 2026, source_mode="auto")
+        ts_b = AtmosphereService.get_timeseries(r_lat_b, r_lon_b, 2026, 2026, source_mode="auto")
         if not ts_a.timeseries or ts_a.data_status == "unavailable" or not ts_b.timeseries or ts_b.data_status == "unavailable":
             return {
                 "status": "unavailable",
@@ -863,8 +863,8 @@ def compare_regions(
         unit = "mm"
         metric_label = "Monthly Accumulated Precipitation"
     else:
-        ts_a = LandService.get_timeseries(r_lat_a, r_lon_a, 2026, 2026)
-        ts_b = LandService.get_timeseries(r_lat_b, r_lon_b, 2026, 2026)
+        ts_a = LandService.get_timeseries(r_lat_a, r_lon_a, 2026, 2026, source_mode="auto")
+        ts_b = LandService.get_timeseries(r_lat_b, r_lon_b, 2026, 2026, source_mode="auto")
         if not ts_a.timeseries or ts_a.data_status == "unavailable" or not ts_b.timeseries or ts_b.data_status == "unavailable":
             return {
                 "status": "unavailable",

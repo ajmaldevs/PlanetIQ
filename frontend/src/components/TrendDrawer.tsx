@@ -316,7 +316,7 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
               <div className="h-56 flex flex-col items-center justify-center space-y-3 bg-slate-900/30 rounded-2xl border border-slate-800/60 p-6">
                 <div className="flex items-center space-x-2 text-xs font-mono text-cyan-400">
                   <div className="h-5 w-5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
-                  <span>Loading modelled example time series (2024–2026)...</span>
+                  <span>Loading satellite observation time series...</span>
                 </div>
                 {selectedLocationName && (
                   <span className="text-[11px] font-mono text-slate-400">
@@ -353,11 +353,11 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
               <div className="p-5 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-3">
                 <div className="flex items-center space-x-2 text-cyan-400 font-semibold text-xs sm:text-sm">
                   <HelpCircle className="h-4 w-4 shrink-0" />
-                  <span>No Example Series for Current Coordinate</span>
+                  <span>No Observation Series for Current Coordinate</span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed font-sans">
                   {selectedLocationName ? `Target location: ${selectedLocationName}. ` : ''}
-                  {selectedLocationName ? `No demonstration series is available for ${selectedLocationName}.` : 'No demonstration series is available for this location.'} Select a location on the map or globe and try another Earth system.
+                  {selectedLocationName ? `No satellite observation series is available for ${selectedLocationName}.` : 'No satellite observation series is available for this location.'} Select an active observation location or ingest new granules.
                 </p>
               </div>
             )}
@@ -412,9 +412,9 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                             <span>Real Observation</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-slate-800 text-slate-300 border border-slate-700">
                             <AlertTriangle className="h-2.5 w-2.5" />
-                            <span>Simulated Demo</span>
+                            <span>Observation Pending</span>
                           </span>
                         )}
                         <span className="font-mono text-[10px] text-slate-400">
@@ -455,9 +455,9 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                             <span>Real Observation</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-slate-800 text-slate-300 border border-slate-700">
                             <AlertTriangle className="h-2.5 w-2.5" />
-                            <span>Simulated Demo</span>
+                            <span>Observation Pending</span>
                           </span>
                         )}
                         <span className="font-mono text-[10px] text-slate-400">
@@ -500,9 +500,9 @@ export const TrendDrawer: React.FC<TrendDrawerProps> = ({
                             <span>Real Observation</span>
                           </span>
                         ) : (
-                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase bg-slate-800 text-slate-300 border border-slate-700">
                             <AlertTriangle className="h-2.5 w-2.5" />
-                            <span>Simulated Demo</span>
+                            <span>Observation Pending</span>
                           </span>
                         )}
                         <span className="font-mono text-[10px] text-slate-400">

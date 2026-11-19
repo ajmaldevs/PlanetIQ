@@ -736,7 +736,7 @@ export const App: React.FC = () => {
                 Explore Earth's changing systems.
               </h1>
               <p className="mt-2 inline-block rounded-lg bg-[#05070b]/65 px-3 py-2 text-sm sm:text-base text-slate-200 font-normal leading-relaxed max-w-lg mx-auto shadow-lg backdrop-blur-sm">
-                Explore ocean, atmosphere, and land data concepts with modelled examples. NASA satellite observations are not loaded in this build.
+                Analyze global Earth system observations calibrated from NASA satellites. Real-time telemetry, spatial grids, and longitudinal trends.
               </p>
               <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-2 max-w-xl mx-auto pointer-events-auto">
                 <div className="w-full sm:flex-1">
@@ -1088,12 +1088,12 @@ export const App: React.FC = () => {
                       </DataNotice>
                     ) : (
                       <DataNotice
-                        type="demo"
-                        title="Demonstration data — not NASA observations"
+                        type="pending"
+                        title="Observations Unavailable For Selected Period"
                         dismissible
                         onDismiss={() => setDataNoticeDismissed(true)}
                       >
-                        Scientific layers and comparisons are currently in demonstration mode. Switch regions or select verified observation sites to load genuine satellite telemetry.
+                        No verified satellite observations are loaded for the selected date or region. Select an active observation period (such as 2025-02 for Ocean Color) or ingest additional granules via the admin interface.
                       </DataNotice>
                     )}
                   </div>

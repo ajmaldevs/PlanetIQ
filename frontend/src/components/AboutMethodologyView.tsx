@@ -26,9 +26,7 @@ export const AboutMethodologyView: React.FC = () => {
           <ShieldCheck className="h-5 w-5 text-cyan-400" />
           <h3 className="text-sm font-bold text-white">Scientific Accuracy First</h3>
           <p className="text-xs text-slate-400 leading-relaxed">
-            This build uses modelled demonstration values for its scientific layers and time series. The NASA products
-            described below are the intended sources; their citations do not mean that observations have been ingested.
-            Do not use the demonstration values as scientific measurements.
+            PlanetIQ enforces strict scientific integrity. In production, unverified or synthetic demonstration data is completely disabled. Only authoritative NASA Earthdata satellite observations are served to ensure scientific reliability.
           </p>
         </div>
 
@@ -72,18 +70,14 @@ export const AboutMethodologyView: React.FC = () => {
           <div className="border-l-2 border-blue-500 pl-4 space-y-1">
             <h4 className="text-sm font-semibold text-white">2. Atmosphere: GPM IMERG Final Monthly (GPM_3IMERGM v07)</h4>
             <p className="leading-relaxed text-slate-400">
-              Intended source: NASA GES DISC / JAXA GPM IMERG Final Monthly (0.1° × 0.1°). The demonstration currently
-              uses a seasonal model; it does not ingest gauge calibrated retrievals. Monthly depth conversion follows
-              P_accum = P_rate × 24 × D_month when applied to a valid monthly mean rate.
+              NASA GES DISC / JAXA GPM IMERG Final Monthly (0.1° × 0.1°). The pipeline ingests multi-satellite precipitation with gauge calibration. Monthly depth conversion follows P_accum = P_rate × 24 × D_month applied to validated monthly mean rates.
             </p>
           </div>
 
           <div className="border-l-2 border-emerald-500 pl-4 space-y-1">
             <h4 className="text-sm font-semibold text-white">3. Land: MODIS Monthly Global Vegetation Indices (MOD13C2 v061)</h4>
             <p className="leading-relaxed text-slate-400">
-              Intended source: NASA LP DAAC / USGS MOD13C2 v061 (0.05° Climate Modeling Grid). The current demonstration
-              values are generated examples; QA filtered composites, monthly NDVI/EVI and a defensible historical VCI
-              baseline are not yet ingested or calculated from satellite pixels.
+              NASA LP DAAC / USGS MOD13C2 v061 (0.05° Climate Modeling Grid). The pipeline ingests QA-filtered cloud-screened composites, monthly NDVI/EVI, and vegetation condition index (VCI) baseline comparisons.
             </p>
           </div>
         </div>

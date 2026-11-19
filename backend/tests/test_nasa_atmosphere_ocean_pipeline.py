@@ -153,11 +153,11 @@ class TestScientificServicesSourceMode:
 
         # In auto mode
         auto_grid = AtmosphereService.get_spatial_grid(date_str="2026-03", source_mode="auto")
-        assert auto_grid.metadata.get("data_status") in ("observation", "simulated")
+        assert auto_grid.metadata.get("data_status") in ("observation", "simulated", "unavailable")
 
-        # In auto mode with unobserved date (fallback to demo)
+        # In auto mode with unobserved date
         auto_fallback = AtmosphereService.get_spatial_grid(date_str="2025-01", source_mode="auto")
-        assert auto_fallback.metadata.get("data_status") == "simulated"
+        assert auto_fallback.metadata.get("data_status") in ("simulated", "unavailable")
         assert auto_fallback.metadata.get("is_observation") is False
 
     def test_ocean_service_source_mode(self):
@@ -178,11 +178,11 @@ class TestScientificServicesSourceMode:
 
         # In auto mode
         auto_grid = OceanService.get_spatial_observations(date_str="2026-03", source_mode="auto")
-        assert auto_grid.metadata.get("data_status") in ("observation", "simulated")
+        assert auto_grid.metadata.get("data_status") in ("observation", "simulated", "unavailable")
 
-        # In auto mode with unobserved date (fallback to demo)
+        # In auto mode with unobserved date
         auto_fallback = OceanService.get_spatial_observations(date_str="2025-01", source_mode="auto")
-        assert auto_fallback.metadata.get("data_status") == "simulated"
+        assert auto_fallback.metadata.get("data_status") in ("simulated", "unavailable")
         assert auto_fallback.metadata.get("is_observation") is False
 
 

@@ -1310,8 +1310,8 @@ export const EarthGlobe: React.FC<EarthGlobeProps> = ({
                 Satellite Obs
               </span>
             ) : selectedFeature ? (
-              <span className="text-amber-400 font-semibold text-[8px] uppercase tracking-wider bg-amber-950/80 px-1.5 py-0.5 rounded border border-amber-800/50">
-                Demo Model
+              <span className="text-slate-400 font-semibold text-[8px] uppercase tracking-wider bg-slate-900/80 px-1.5 py-0.5 rounded border border-slate-700/50">
+                Obs Unavailable
               </span>
             ) : null}
 

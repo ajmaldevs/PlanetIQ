@@ -9,6 +9,7 @@ from app.api.v1.endpoints import (
     datasets,
     comparison,
     geocoding,
+    ingest,
 )
 
 api_router = APIRouter()
@@ -16,6 +17,7 @@ api_router = APIRouter()
 # System & Infrastructure
 api_router.include_router(health.router, tags=["System Health"])
 api_router.include_router(geocoding.router, prefix="/geocoding", tags=["Geographic Search & Geocoding"])
+api_router.include_router(ingest.router, prefix="/ingest", tags=["NASA Satellite Ingestion"])
 
 # Scientific Core Modules
 api_router.include_router(atmosphere.router, prefix="/atmosphere", tags=["Atmosphere (GPM IMERG)"])

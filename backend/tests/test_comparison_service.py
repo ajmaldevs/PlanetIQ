@@ -9,6 +9,7 @@ def test_atmosphere_period_comparison():
         period_b="2026-03",
         latitude=6.5,
         longitude=-150.0,
+        source_mode="demonstration",
     )
     assert res.module == "atmosphere"
     assert res.period_a == "2024-03"
@@ -20,6 +21,17 @@ def test_atmosphere_period_comparison():
     assert len(res.regional_differences) > 0
     assert "NASA GPM IMERG" in res.interpretation
 
+    # Verify observation mode raises ValueError when observations are missing
+    with pytest.raises(ValueError, match="Missing observations are not fabricated in production"):
+        ComparisonService.compare_periods(
+            module="atmosphere",
+            period_a="2024-03",
+            period_b="2026-03",
+            latitude=6.5,
+            longitude=-150.0,
+            source_mode="observation",
+        )
+
 
 def test_ocean_period_comparison():
     res = ComparisonService.compare_periods(
@@ -28,6 +40,7 @@ def test_ocean_period_comparison():
         period_b="2025-06",
         latitude=36.0,
         longitude=-68.0,
+        source_mode="demonstration",
     )
     assert res.module == "ocean"
     assert res.period_a == "2024-06"
@@ -47,6 +60,7 @@ def test_land_period_comparison():
         period_b="2026-01",
         latitude=-3.1,
         longitude=-60.0,
+        source_mode="demonstration",
     )
     assert res.module == "land"
     assert res.period_a == "2024-01"

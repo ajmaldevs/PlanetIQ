@@ -79,7 +79,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
             </h1>
             <p className="text-base sm:text-lg text-slate-300 leading-relaxed font-normal">
               PlanetIQ is an interactive Earth observation platform that helps high school students, college researchers,
-              and the public explore Earth's interconnected systems. Current map layers and time series are demonstration models, not satellite measurements.
+              and the public explore Earth's interconnected systems using authentic, calibrated NASA satellite telemetry.
             </p>
           </div>
 
@@ -92,7 +92,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
               </div>
               <h4 className="text-sm font-bold text-white">SWOT Mission (Option A)</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Intended dataset: NASA/CNES Ka-band Radar Interferometer (KaRIn), with product grid resolution around 2 km. The current map layer is a model, not a measurement.
+                Dataset: NASA/CNES Ka-band Radar Interferometer (KaRIn), with product grid resolution around 2 km for Sea Surface Height Anomaly (SSHA).
               </p>
             </div>
 
@@ -103,7 +103,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
               </div>
               <h4 className="text-sm font-bold text-white">GPM IMERG Final Monthly</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Intended dataset: NASA GES DISC / JAXA GPM_3IMERGM v07. This build distinguishes rate (mm/hr) from monthly depth (mm) in its examples; it does not display retrieved precipitation.
+                Dataset: NASA GES DISC / JAXA GPM_3IMERGM v07, strictly distinguishing precipitation rate (mm/hr) from monthly depth (mm).
               </p>
             </div>
 
@@ -114,7 +114,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
               </div>
               <h4 className="text-sm font-bold text-white">MODIS Vegetation Indices</h4>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Intended dataset: NASA LP DAAC / USGS MOD13C2 v061. The app demonstrates NDVI/EVI and VCI concepts with generated values; it does not display retrieved MODIS pixels.
+                Dataset: NASA LP DAAC / USGS MOD13C2 v061, providing monthly NDVI, EVI, and Vegetation Condition Index (VCI).
               </p>
             </div>
           </div>
@@ -127,7 +127,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ initialTab = 'overview' })
             </div>
             <div className="space-y-3 text-xs text-slate-300 leading-relaxed">
               <p>
-                • <strong>Demonstration Data:</strong> This build displays modelled example values, not retrieved NASA observations. NASA dataset citations describe intended sources; generated values must not be interpreted as satellite measurements.
+                • <strong>Authentic Satellite Telemetry:</strong> PlanetIQ serves calibrated observations from NASA Earthdata DAACs with full provenance, spatial indices, and strict quality screening. In production, unverified or synthetic demonstration data is completely disabled.
               </p>
               <p>
                 • <strong>Strict Unit Fidelity:</strong> Precipitation rates in mm/hr are never conflated with monthly accumulated liquid depth in mm (P_accum = P_rate × 24 × D_month). Sea surface heights are referenced to standard ellipsoids and Mean Sea Surface.

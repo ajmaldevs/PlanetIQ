@@ -21,24 +21,69 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
     DEBUG: bool = False
-    ENVIRONMENT: str = "development"
+    ENVIRONMENT: str = Field(
+        default_factory=lambda: (
+            "production" if (os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID") or os.getenv("RENDER_EXTERNAL_URL"))
+            else os.getenv("ENVIRONMENT", "development")
+        )
+    )
+    ADMIN_API_KEY: str = Field(
+        default_factory=lambda: os.getenv("ADMIN_API_KEY", "planetiq-admin-secret-2026")
+    )
     ALLOW_DEMO_FALLBACK: bool = Field(
         default_factory=lambda: (
-            os.getenv("ALLOW_DEMO_FALLBACK", "").strip().lower() in ("true", "1", "yes")
-            if os.getenv("ALLOW_DEMO_FALLBACK") is not None and os.getenv("ALLOW_DEMO_FALLBACK").strip() != ""
-            else (os.getenv("ENVIRONMENT", "development").strip().lower() not in ("production", "prod"))
+            False if (
+                os.getenv("ENVIRONMENT", "").strip().lower() in ("production", "prod")
+                or os.getenv("RENDER")
+                or os.getenv("RENDER_SERVICE_ID")
+                or os.getenv("RENDER_EXTERNAL_URL")
+            )
+            else (os.getenv("ALLOW_DEMO_FALLBACK", "").strip().lower() in ("true", "1", "yes"))
         )
     )
 
     @field_validator("ALLOW_DEMO_FALLBACK", mode="before")
     @classmethod
     def set_demo_fallback_default(cls, v: Any) -> bool:
+        env = os.getenv("ENVIRONMENT", "").strip().lower()
+        is_prod = env in ("production", "prod") or bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID"))
+        if is_prod:
+            # Production NEVER allows demonstration fallback under any circumstances
+            return False
         if v is not None and v != "":
             if isinstance(v, str):
                 return v.strip().lower() in ("true", "1", "yes")
             return bool(v)
-        env = os.getenv("ENVIRONMENT", "development").strip().lower()
-        return env not in ("production", "prod")
+        return False
+
+    @property
+    def IS_PRODUCTION(self) -> bool:
+        """Determines if the application is running in a production or deployed environment."""
+        env = (self.ENVIRONMENT or os.getenv("ENVIRONMENT", "")).strip().lower()
+        if env in ("production", "prod"):
+            return True
+        if os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID") or os.getenv("RENDER_EXTERNAL_URL"):
+            return True
+        return False
+
+    @property
+    def DEMO_FALLBACK_PERMITTED(self) -> bool:
+        """
+        Demonstration data fallback permission.
+        Strict rule: Production NEVER permits demonstration fallback, regardless of environment variables.
+        In development/test, requires explicit opt-in via ALLOW_DEMO_FALLBACK=true.
+        """
+        if self.IS_PRODUCTION:
+            return False
+        return bool(self.ALLOW_DEMO_FALLBACK)
+
+    def assert_no_demonstration_in_production(self, source_mode: Optional[str] = None) -> None:
+        """Raises a ValueError if demonstration data mode is requested in production."""
+        if self.IS_PRODUCTION and source_mode == "demonstration":
+            raise ValueError(
+                "Demonstration data mode is strictly prohibited in production. "
+                "PlanetIQ serves only authentic verified NASA satellite observations."
+            )
 
     # Server Configuration
     HOST: str = "0.0.0.0"

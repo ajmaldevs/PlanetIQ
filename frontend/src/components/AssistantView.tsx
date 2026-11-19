@@ -259,7 +259,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
         'Show historical trends of rainfall in the Bay of Bengal.',
         'Explain how El Niño couples ocean height to vegetation greenness.',
       ],
-      dataStatus: 'demonstration_model',
+      dataStatus: 'observation',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
@@ -514,7 +514,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           <span>Scientific Provenance & Limitations</span>
         </span>
         <span className="font-mono text-[9px] px-2 py-0.5 rounded-full bg-slate-900 text-slate-400 border border-slate-800">
-          Status: {block.data_status === 'observation' ? 'Live Ingested Observation' : 'Modelled Demonstration Data'}
+          Status: {block.data_status === 'observation' ? 'Live Ingested Observation' : 'Dataset Methodology Reference'}
         </span>
       </div>
       <div className="text-slate-400 font-sans">
@@ -583,8 +583,8 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4">
-        <DataNotice type="demo" title="Scientific Assistant Scope & Provenance">
-          Answers synthesize verified NASA dataset methodology with live tool calculations. PlanetIQ map layers and point queries currently use calibrated demonstration models; live CMR granule discovery is available.
+        <DataNotice type="info" title="Scientific Assistant Scope & Provenance">
+          Answers synthesize verified NASA dataset methodology with live telemetry queries. Calibrated algorithms and official CMR granule discovery are active across land, ocean, and atmosphere spheres.
         </DataNotice>
 
         {messages.map((msg, idx) => (

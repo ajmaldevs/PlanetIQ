@@ -8,6 +8,9 @@ class DatabaseHealth(BaseModel):
     postgis_available: bool
     version: Optional[str] = None
     message: Optional[str] = None
+    verified_observations_count: int = 0
+    verified_datasets: Dict[str, int] = Field(default_factory=dict)
+    last_ingested_at: Optional[str] = None
 
 
 class SystemHealthResponse(BaseModel):

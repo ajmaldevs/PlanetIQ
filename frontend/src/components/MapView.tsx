@@ -1018,7 +1018,7 @@ function getFeatureHexColor(feature: GeoJSONFeature, moduleName: string, metricT
           ? `<span style="background:rgba(16,185,129,0.2);color:#34d399;border:1px solid rgba(16,185,129,0.4);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;letter-spacing:0.5px;margin-left:6px;">REAL OBSERVATION</span>`
           : (isUnavailable
             ? `<span style="background:rgba(239,68,68,0.2);color:#f87171;border:1px solid rgba(239,68,68,0.4);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;letter-spacing:0.5px;margin-left:6px;">DATA UNAVAILABLE</span>`
-            : `<span style="background:rgba(245,158,11,0.2);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;letter-spacing:0.5px;margin-left:6px;">SIMULATED DEMO</span>`);
+            : `<span style="background:rgba(100,116,139,0.2);color:#94a3b8;border:1px solid rgba(100,116,139,0.4);border-radius:4px;padding:1px 4px;font-size:8px;font-weight:700;letter-spacing:0.5px;margin-left:6px;">OBSERVATION PENDING</span>`);
         const granule = props.granule_id
           ? `<div style="color:#64748b;font-size:8px;margin-top:3px;font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px;">Granule: ${props.granule_id}</div>`
           : '';

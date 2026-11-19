@@ -52,37 +52,16 @@ class AtmosphereService:
         min_lon: Optional[float] = None,
         max_lon: Optional[float] = None,
         date_str: str = "2026-03",
-        source_mode: str = "auto",
+        source_mode: str = "observation",
     ) -> GeoJSONFeatureCollection:
         """
         Delivers GPM IMERG Final monthly precipitation features.
-        - source_mode="observation": Delivers genuine satellite observations or explicit unavailable status.
-        - source_mode="demonstration": Delivers calibrated demonstration model from DemoDataService.
-        - source_mode="auto": Delivers authentic observations if available; otherwise demonstration model.
+        - source_mode="observation" (default): Delivers genuine satellite observations or explicit unavailable status.
+        - source_mode="demonstration": Delivers calibrated demonstration model only in non-production with explicit opt-in.
+        - source_mode="auto": Prefers genuine observations. Never falls back to demonstration in production.
         """
-        if source_mode == "observation":
-            real_data = ObservationRepository.get_real_gpm_spatial_grid(
-                date_str=date_str,
-                min_lat=min_lat,
-                max_lat=max_lat,
-                min_lon=min_lon,
-                max_lon=max_lon,
-            )
-            features = [
-                GeoJSONFeature(
-                    type="Feature",
-                    geometry=GeoJSONGeometry(type="Point", coordinates=f["geometry"]["coordinates"]),
-                    properties=f["properties"],
-                )
-                for f in real_data.get("features", [])
-            ]
-            return GeoJSONFeatureCollection(
-                type="FeatureCollection",
-                features=features,
-                metadata=real_data.get("metadata", {}),
-            )
-
         if source_mode == "demonstration":
+            settings.assert_no_demonstration_in_production(source_mode)
             return DemoDataService.get_simulated_atmosphere_grid(
                 date_str=date_str,
                 min_lat=min_lat,
@@ -91,7 +70,7 @@ class AtmosphereService:
                 max_lon=max_lon,
             )
 
-        # Auto mode: check if real observations are loaded
+        # Standard observation / auto workflow: query real observations
         real_data = ObservationRepository.get_real_gpm_spatial_grid(
             date_str=date_str,
             min_lat=min_lat,
@@ -114,7 +93,7 @@ class AtmosphereService:
                 metadata=real_data.get("metadata", {}),
             )
 
-        if settings.ALLOW_DEMO_FALLBACK:
+        if not settings.IS_PRODUCTION and settings.DEMO_FALLBACK_PERMITTED and source_mode == "auto":
             return DemoDataService.get_simulated_atmosphere_grid(
                 date_str=date_str,
                 min_lat=min_lat,
@@ -136,45 +115,13 @@ class AtmosphereService:
         longitude: float,
         start_year: int = 2024,
         end_year: int = 2026,
-        source_mode: str = "auto",
+        source_mode: str = "observation",
     ) -> AtmosphereTimeSeriesResponse:
         """
         Calculates multi-year monthly timeseries for a specific geographic coordinate.
         """
-        if source_mode == "observation":
-            real_data = ObservationRepository.get_real_gpm_timeseries(
-                latitude=latitude,
-                longitude=longitude,
-                start_year=start_year,
-                end_year=end_year,
-            )
-            points = [
-                AtmosphereTimeSeriesPoint(
-                    date=p["date"],
-                    precipitation_rate_mm_hr=p["precipitation_rate_mm_hr"],
-                    precipitation_accumulated_mm=p["precipitation_accumulated_mm"],
-                    climatological_normal_mm=p["climatological_normal_mm"],
-                    anomaly_mm=p["anomaly_mm"],
-                    aod_550=p.get("aod_550"),
-                    cloud_fraction=p.get("cloud_fraction"),
-                )
-                for p in real_data.get("timeseries", [])
-            ]
-            return AtmosphereTimeSeriesResponse(
-                data_status=real_data.get("data_status", "unavailable"),
-                is_observation=real_data.get("is_observation", False),
-                dataset_id=real_data.get("dataset_id", "GPM_3IMERGM"),
-                dataset_name=real_data.get("dataset_name", "NASA GPM IMERG Final Monthly Precipitation"),
-                location_name=real_data.get("location_name", "GPM Observation Site"),
-                latitude=latitude,
-                longitude=longitude,
-                unit_rate="mm/hr",
-                unit_accumulation="mm",
-                summary_statistics=real_data.get("summary_statistics", {}),
-                timeseries=points,
-            )
-
         if source_mode == "demonstration":
+            settings.assert_no_demonstration_in_production(source_mode)
             return DemoDataService.get_simulated_atmosphere_timeseries(
                 latitude=latitude,
                 longitude=longitude,
@@ -182,7 +129,7 @@ class AtmosphereService:
                 end_year=end_year,
             )
 
-        # Auto mode: try real observations first
+        # Standard observation / auto workflow: query real observations
         real_data = ObservationRepository.get_real_gpm_timeseries(
             latitude=latitude,
             longitude=longitude,
@@ -216,7 +163,7 @@ class AtmosphereService:
                 timeseries=points,
             )
 
-        if settings.ALLOW_DEMO_FALLBACK:
+        if not settings.IS_PRODUCTION and settings.DEMO_FALLBACK_PERMITTED and source_mode == "auto":
             return DemoDataService.get_simulated_atmosphere_timeseries(
                 latitude=latitude,
                 longitude=longitude,

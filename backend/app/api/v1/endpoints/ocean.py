@@ -1,5 +1,6 @@
 from typing import Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
+from app.core.config import settings
 from app.schemas.scientific import GeoJSONFeatureCollection, OceanTimeSeriesResponse
 from app.services.ocean_service import OceanService
 
@@ -22,7 +23,7 @@ def get_ocean_observations(
     min_lon: Optional[float] = Query(None, ge=-180.0, le=180.0),
     max_lon: Optional[float] = Query(None, ge=-180.0, le=180.0),
     date: str = Query("2026-03", pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Calendar month (YYYY-MM)"),
-    source_mode: str = Query("auto", pattern=r"^(auto|observation|demonstration)$", description="Data source mode ('observation', 'demonstration', or 'auto')"),
+    source_mode: str = Query("observation", pattern=r"^(auto|observation|demonstration)$", description="Data source mode ('observation', 'demonstration', or 'auto')"),
 ):
     """
     Returns SWOT KaRIn Low Rate Ocean Sea Surface Height (Option A) swath and gridded features.
@@ -33,6 +34,12 @@ def get_ocean_observations(
     - eddy_type: Meso-scale vortex classification.
     - eddy_kinetic_energy_cm2_s2: Eddy kinetic energy (cm²/s²).
     """
+    if source_mode == "demonstration" and settings.IS_PRODUCTION:
+        raise HTTPException(
+            status_code=400,
+            detail="Demonstration data mode is disabled in production. PlanetIQ serves only verified NASA satellite observations."
+        )
+
     return OceanService.get_spatial_observations(
         min_lat=min_lat,
         max_lat=max_lat,
@@ -53,11 +60,17 @@ def get_ocean_timeseries(
     longitude: float = Query(..., ge=-180.0, le=180.0),
     start_year: int = Query(2024, ge=2022, le=2026),
     end_year: int = Query(2026, ge=2022, le=2026),
-    source_mode: str = Query("auto", pattern=r"^(auto|observation|demonstration)$", description="Data source mode ('observation', 'demonstration', or 'auto')"),
+    source_mode: str = Query("observation", pattern=r"^(auto|observation|demonstration)$", description="Data source mode ('observation', 'demonstration', or 'auto')"),
 ):
     """
     Returns multi-year monthly SSHA trajectory and eddy kinetic energy trends for a given ocean coordinate.
     """
+    if source_mode == "demonstration" and settings.IS_PRODUCTION:
+        raise HTTPException(
+            status_code=400,
+            detail="Demonstration data mode is disabled in production. PlanetIQ serves only verified NASA satellite observations."
+        )
+
     return OceanService.get_timeseries(
         latitude=latitude,
         longitude=longitude,

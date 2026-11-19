@@ -45,36 +45,28 @@ def db_session():
     session.close()
 
 
-def test_seed_development_fixtures_strictly_synthetic(db_session):
-    """Verifies that development benchmarks are strictly tagged as synthetic and never labeled as observations."""
-    inserted = IngestionService.seed_initial_observations(db_session)
-    assert inserted > 0
-
-    records = db_session.execute(
-        select(ObservationTimeSeriesRecord)
-    ).scalars().all()
-    assert len(records) == inserted
-
-    for r in records:
-        assert r.verification_status == "synthetic"
-        assert r.source_file_checksum is None
-        assert "SYNTHETIC_DEV_FIXTURE" in r.granule_id
-
-    cat_entries = db_session.execute(
-        select(EarthObservation)
-    ).scalars().all()
-    assert len(cat_entries) > 0
-
-    for c in cat_entries:
-        assert c.verification_status == "synthetic"
-        assert c.extra_metadata["is_observation"] is False
-        assert c.extra_metadata["data_status"] == "synthetic_fixture"
-        assert c.extra_metadata["source_type"] == "synthetic"
+def test_fabricated_seeders_removed_from_ingestion_service():
+    """Verifies that seed_authoritative_satellite_observations and seed_initial_observations do not exist."""
+    assert not hasattr(IngestionService, "seed_authoritative_satellite_observations")
+    assert not hasattr(IngestionService, "seed_initial_observations")
 
 
 def test_observation_repository_quarantines_synthetic_fixtures(db_session):
     """Verifies that ObservationRepository rejects synthetic fixtures and returns unavailable."""
-    IngestionService.seed_initial_observations(db_session)
+    synthetic_record = ObservationTimeSeriesRecord(
+        dataset_id="MOD13C2",
+        location_name="Test Synthetic Location",
+        latitude=0.0,
+        longitude=0.0,
+        date_str="2026-03",
+        metric_name="ndvi",
+        value=0.5,
+        unit="dimensionless",
+        verification_status="synthetic",
+        granule_id="SYNTHETIC_DEV_FIXTURE_001",
+    )
+    db_session.add(synthetic_record)
+    db_session.commit()
 
     # When querying real observations, synthetic fixtures MUST NOT be returned as genuine observations
     grid = ObservationRepository.get_real_modis_spatial_grid("2026-03", session=db_session)

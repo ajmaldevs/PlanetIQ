@@ -1,5 +1,6 @@
 from typing import Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
+from app.core.config import settings
 from app.schemas.scientific import GeoJSONFeatureCollection, LandTimeSeriesResponse
 from app.services.land_service import LandService
 
@@ -18,7 +19,7 @@ def get_land_grid(
     max_lon: Optional[float] = Query(None, ge=-180.0, le=180.0),
     date: str = Query("2026-03", pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Calendar month (YYYY-MM)"),
     source_mode: str = Query(
-        "auto",
+        "observation",
         pattern=r"^(auto|observation|demonstration)$",
         description="Data provenance mode: 'observation' (real NASA satellite data), 'demonstration' (calibrated mathematical model), or 'auto'"
     ),
@@ -34,6 +35,12 @@ def get_land_grid(
     - data_status: 'observation' (genuine satellite data) or 'demonstration_model' (simulated)
     - is_observation: Boolean flag confirming genuine satellite telemetry
     """
+    if source_mode == "demonstration" and settings.IS_PRODUCTION:
+        raise HTTPException(
+            status_code=400,
+            detail="Demonstration data mode is disabled in production. PlanetIQ serves only verified NASA satellite observations."
+        )
+
     return LandService.get_spatial_grid(
         min_lat=min_lat,
         max_lat=max_lat,
@@ -55,7 +62,7 @@ def get_land_timeseries(
     start_year: int = Query(2024, ge=2000, le=2026),
     end_year: int = Query(2026, ge=2000, le=2026),
     source_mode: str = Query(
-        "auto",
+        "observation",
         pattern=r"^(auto|observation|demonstration)$",
         description="Data provenance mode: 'observation' (real satellite data) or 'demonstration' (simulated model)"
     ),
@@ -65,6 +72,12 @@ def get_land_timeseries(
     for a chosen terrestrial coordinate. Clearly distinguishes genuine satellite observations
     from demonstration models.
     """
+    if source_mode == "demonstration" and settings.IS_PRODUCTION:
+        raise HTTPException(
+            status_code=400,
+            detail="Demonstration data mode is disabled in production. PlanetIQ serves only verified NASA satellite observations."
+        )
+
     return LandService.get_timeseries(
         latitude=latitude,
         longitude=longitude,

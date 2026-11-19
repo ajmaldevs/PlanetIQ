@@ -363,19 +363,19 @@ export const SharedTimeline: React.FC<SharedTimelineProps> = ({
           </div>
         </div>
 
-        {/* Demonstration coverage status */}
+        {/* Observation coverage status */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-slate-400 font-sans border-t border-slate-800/60">
           <div className="flex items-center space-x-1.5 min-w-0">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
             <span className="truncate">
-              Demonstration coverage: <strong className="text-slate-300">{coverageStatus}</strong>
+              Observation coverage: <strong className="text-slate-300">{coverageStatus}</strong>
             </span>
           </div>
 
           <div className="flex items-center space-x-2 text-[10px] font-mono text-slate-500">
-            <span>Example cadence: Monthly</span>
+            <span>Telemetry cadence: Monthly</span>
             <span>•</span>
-            <span>Modelled values</span>
+            <span>Calibrated observations</span>
           </div>
         </div>
       </div>

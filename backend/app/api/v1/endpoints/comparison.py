@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Query, HTTPException
+from app.core.config import settings
 from app.schemas.scientific import PeriodComparisonResponse
 from app.services.comparison_service import ComparisonService
 
@@ -21,7 +22,14 @@ def compare_periods(
     period_b: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Second period in YYYY-MM format"),
     latitude: float = Query(0.0, ge=-90.0, le=90.0, description="Latitude of inspection coordinate"),
     longitude: float = Query(0.0, ge=-180.0, le=180.0, description="Longitude of inspection coordinate"),
+    source_mode: str = Query("observation", pattern=r"^(auto|observation|demonstration)$", description="Data source mode"),
 ) -> PeriodComparisonResponse:
+    if source_mode == "demonstration" and settings.IS_PRODUCTION:
+        raise HTTPException(
+            status_code=400,
+            detail="Demonstration data mode is disabled in production. PlanetIQ serves only verified NASA satellite observations."
+        )
+
     try:
         return ComparisonService.compare_periods(
             module=module,
@@ -29,6 +37,7 @@ def compare_periods(
             period_b=period_b,
             latitude=latitude,
             longitude=longitude,
+            source_mode=source_mode,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

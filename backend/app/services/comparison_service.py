@@ -26,8 +26,11 @@ class ComparisonService:
         period_b: str,
         latitude: float = 0.0,
         longitude: float = 0.0,
-        source_mode: str = "auto",
+        source_mode: str = "observation",
     ) -> PeriodComparisonResponse:
+        if source_mode == "demonstration":
+            settings.assert_no_demonstration_in_production(source_mode)
+
         mod = module.lower().strip()
         if mod == "atmosphere":
             return cls._compare_atmosphere(period_a, period_b, latitude, longitude, source_mode=source_mode)
@@ -45,11 +48,11 @@ class ComparisonService:
         period_b: str,
         lat: float,
         lon: float,
-        source_mode: str = "auto",
+        source_mode: str = "observation",
     ) -> PeriodComparisonResponse:
         ts = AtmosphereService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode=source_mode)
         if not ts.timeseries or period_a not in {p.date for p in ts.timeseries} or period_b not in {p.date for p in ts.timeseries}:
-            if source_mode == "demonstration" or (source_mode == "auto" and settings.ALLOW_DEMO_FALLBACK):
+            if source_mode == "demonstration" and not settings.IS_PRODUCTION and settings.DEMO_FALLBACK_PERMITTED:
                 ts = AtmosphereService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode="demonstration")
             else:
                 raise ValueError(
@@ -163,11 +166,11 @@ class ComparisonService:
         period_b: str,
         lat: float,
         lon: float,
-        source_mode: str = "auto",
+        source_mode: str = "observation",
     ) -> PeriodComparisonResponse:
         ts = OceanService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode=source_mode)
         if not ts.timeseries or period_a not in {p.date for p in ts.timeseries} or period_b not in {p.date for p in ts.timeseries}:
-            if source_mode == "demonstration" or (source_mode == "auto" and settings.ALLOW_DEMO_FALLBACK):
+            if source_mode == "demonstration" and not settings.IS_PRODUCTION and settings.DEMO_FALLBACK_PERMITTED:
                 ts = OceanService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode="demonstration")
             else:
                 raise ValueError(
@@ -195,7 +198,7 @@ class ComparisonService:
         for reg in OceanService.OCEAN_REGIONS[:5]:
             reg_ts = OceanService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode=source_mode)
             if not reg_ts.timeseries:
-                if source_mode == "demonstration" or (source_mode == "auto" and settings.ALLOW_DEMO_FALLBACK):
+                if source_mode == "demonstration" and not settings.IS_PRODUCTION and settings.DEMO_FALLBACK_PERMITTED:
                     reg_ts = OceanService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode="demonstration")
                 else:
                     continue
@@ -274,11 +277,11 @@ class ComparisonService:
         period_b: str,
         lat: float,
         lon: float,
-        source_mode: str = "auto",
+        source_mode: str = "observation",
     ) -> PeriodComparisonResponse:
         ts = LandService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode=source_mode)
         if not ts.timeseries or period_a not in {p.date for p in ts.timeseries} or period_b not in {p.date for p in ts.timeseries}:
-            if source_mode == "demonstration" or (source_mode == "auto" and settings.ALLOW_DEMO_FALLBACK):
+            if source_mode == "demonstration" and not settings.IS_PRODUCTION and settings.DEMO_FALLBACK_PERMITTED:
                 ts = LandService.get_timeseries(latitude=lat, longitude=lon, start_year=2024, end_year=2026, source_mode="demonstration")
             else:
                 raise ValueError(
@@ -311,7 +314,7 @@ class ComparisonService:
         for reg in LandService.LAND_REGIONS[:5]:
             reg_ts = LandService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode=source_mode)
             if not reg_ts.timeseries:
-                if source_mode == "demonstration" or (source_mode == "auto" and settings.ALLOW_DEMO_FALLBACK):
+                if source_mode == "demonstration" and not settings.IS_PRODUCTION and settings.DEMO_FALLBACK_PERMITTED:
                     reg_ts = LandService.get_timeseries(reg["lat"], reg["lon"], 2024, 2026, source_mode="demonstration")
                 else:
                     continue

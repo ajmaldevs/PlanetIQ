@@ -1,5 +1,6 @@
 from typing import Optional
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
+from app.core.config import settings
 from app.schemas.scientific import GeoJSONFeatureCollection, AtmosphereTimeSeriesResponse
 from app.services.atmosphere_service import AtmosphereService
 
@@ -17,7 +18,7 @@ def get_precipitation_grid(
     min_lon: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Minimum bounding longitude"),
     max_lon: Optional[float] = Query(None, ge=-180.0, le=180.0, description="Maximum bounding longitude"),
     date: str = Query("2026-03", pattern=r"^\d{4}-(0[1-9]|1[0-2])$", description="Target calendar month (YYYY-MM)"),
-    source_mode: str = Query("auto", pattern=r"^(auto|observation|demonstration)$", description="Data source mode ('observation', 'demonstration', or 'auto')"),
+    source_mode: str = Query("observation", pattern=r"^(auto|observation|demonstration)$", description="Data source mode ('observation', 'demonstration', or 'auto')"),
 ):
     """
     Returns spatially gridded GPM IMERG Final Monthly Precipitation (GPM_3IMERGM v07) observations.
@@ -27,6 +28,12 @@ def get_precipitation_grid(
     - climatological_normal_mm: Historical baseline in mm
     - anomaly_mm: Monthly departure in mm
     """
+    if source_mode == "demonstration" and settings.IS_PRODUCTION:
+        raise HTTPException(
+            status_code=400,
+            detail="Demonstration data mode is disabled in production. PlanetIQ serves only verified NASA satellite observations."
+        )
+
     return AtmosphereService.get_spatial_grid(
         min_lat=min_lat,
         max_lat=max_lat,
@@ -47,12 +54,18 @@ def get_precipitation_timeseries(
     longitude: float = Query(..., ge=-180.0, le=180.0, description="Target longitude"),
     start_year: int = Query(2024, ge=1998, le=2026, description="Start year"),
     end_year: int = Query(2026, ge=1998, le=2026, description="End year"),
-    source_mode: str = Query("auto", pattern=r"^(auto|observation|demonstration)$", description="Data source mode ('observation', 'demonstration', or 'auto')"),
+    source_mode: str = Query("observation", pattern=r"^(auto|observation|demonstration)$", description="Data source mode ('observation', 'demonstration', or 'auto')"),
 ):
     """
     Returns historical monthly precipitation trends and climatological normal comparisons
     for a chosen geographic coordinate.
     """
+    if source_mode == "demonstration" and settings.IS_PRODUCTION:
+        raise HTTPException(
+            status_code=400,
+            detail="Demonstration data mode is disabled in production. PlanetIQ serves only verified NASA satellite observations."
+        )
+
     return AtmosphereService.get_timeseries(
         latitude=latitude,
         longitude=longitude,

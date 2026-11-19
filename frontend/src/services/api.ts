@@ -364,15 +364,38 @@ export const fetchSystemHealth = async (signal?: AbortSignal): Promise<SystemHea
 function parseSourceModeAndSignal(
   modeOrSignal?: 'auto' | 'observation' | 'demonstration' | AbortSignal,
   explicitSignal?: AbortSignal
-): { mode?: 'auto' | 'observation' | 'demonstration'; signal?: AbortSignal } {
+): { mode: 'auto' | 'observation' | 'demonstration'; signal?: AbortSignal } {
   if (modeOrSignal instanceof AbortSignal || (modeOrSignal && typeof (modeOrSignal as any).aborted === 'boolean')) {
-    return { mode: undefined, signal: modeOrSignal as AbortSignal };
+    return { mode: 'observation', signal: modeOrSignal as AbortSignal };
   }
   return {
-    mode: modeOrSignal as 'auto' | 'observation' | 'demonstration' | undefined,
+    mode: (modeOrSignal as 'auto' | 'observation' | 'demonstration') || 'observation',
     signal: explicitSignal,
   };
 }
+
+export interface IngestionStatus {
+  status: string;
+  database: {
+    connected: boolean;
+    postgis_available: boolean;
+  };
+  nasa_earthdata: {
+    cmr_search_operational: boolean;
+    authentication_configured: boolean;
+    auth_method: string;
+  };
+  scientific_observations: {
+    verified_record_counts: Record<string, number>;
+    available_date_ranges: Record<string, { min_date: string; max_date: string }>;
+    last_successful_ingestion: string | null;
+    has_genuine_observations: boolean;
+  };
+}
+
+export const fetchIngestionStatus = async (): Promise<IngestionStatus> => {
+  return cachedFetchJson<IngestionStatus>(`${API_BASE_URL}/ingest/status`);
+};
 
 export const fetchAtmosphereGrid = async (
   date: string = '2026-03',
